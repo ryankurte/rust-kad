@@ -1,5 +1,5 @@
 [package]
-name = "rust-kad"
+name = "kad"
 version = "0.1.0"
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
 edition = "2018"
@@ -7,6 +7,14 @@ edition = "2018"
 [dependencies]
 futures = "0.1.25"
 num = "0.2.0"
+futures-timer = "0.1.1"
+rand = "0.5.5"
+dht = "0.0.6"
+syn = "0.15.20"
+quote = "0.6.10"
 #tokio = "0.1.11"
 #serde_derive = "1.0.80"
 #k-bucket = "0.1.0"
+
+[patch.crates-io]
+dht = { path = "../rust-dht" }

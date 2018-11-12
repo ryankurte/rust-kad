@@ -41,32 +41,40 @@ where
     ID: DatabaseId,
     ADDR: Clone + Debug,
 {
+    /// Create a new KBucket with the given size
     pub fn new(bucket_size: usize) -> KBucket<ID, ADDR> {
         KBucket{bucket_size, nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size)))}
     }
 
-    pub fn update(&mut self, id: &ID, addr: &ADDR) -> bool {
+    /// Update a node in the KBucket
+    pub fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
         let nodes = self.nodes.lock().unwrap();
-        if let Some(n) = nodes.iter().find(|n| n.id == *id) {
+        if let Some(_n) = nodes.iter().find(|n| n.id == node.id) {
             // If the node already exists, update it
+            self.update_position(node);
+            info!("[KBucket] Updated node {:?}", node);
             true
         } else if nodes.len() < self.bucket_size {
             // If there's space in the bucket, add it
+            self.nodes.lock().unwrap().push_back(node.clone());
+            info!("[KBucket] Added node {:?}", node);
             true
         } else {
             // If there's no space, discard it
+            info!("[KBucket] No space to add node {:?}", node);
             false
         }
     }
 
-    pub fn update_position(&mut self, id: &ID) {
+    /// Move a node to the start of the array
+    pub fn update_position(&mut self, node: &Node<ID, ADDR>) {
         let nodes = *self.nodes.lock().unwrap();
         // Find the node to update
-        if let Some(node) = nodes.iter().find(|n| n.id == *id).map(|n| n.clone()) {
+        if let Some(_existing) = nodes.iter().find(|n| n.id == node.id).map(|n| n.clone()) {
             // Update node array
-            nodes = nodes.iter().filter(|n| n.id != *id).map(|n| n.clone()).collect();
+            nodes = nodes.iter().filter(|n| n.id != node.id).map(|n| n.clone()).collect();
             // Push node to front
-            nodes.push_back(node);
+            nodes.push_back(node.clone());
         }
     }
 }

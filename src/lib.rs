@@ -13,6 +13,9 @@ use futures::{sink, Sink};
 
 extern crate dht;
 
+#[macro_use]
+extern crate log;
+
 extern crate futures_timer;
 use futures_timer::{FutureExt, Delay};
 

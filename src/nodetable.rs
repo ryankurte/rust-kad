@@ -1,4 +1,6 @@
 
+use std::cmp;
+
 use crate::id::DatabaseId;
 use crate::node::Node;
 
@@ -69,7 +71,17 @@ where
         }
     }
 
-    /// Move a node to the start of the array
+    /// Find a node in the bucket
+    pub fn find(&self, id: &ID) -> Option<Node<ID, ADDR>> {
+        self.nodes.lock().unwrap().iter().find(|n| n.id == *id).map(|n| n.clone())
+    }
+
+    /// Clone the list of nodes cuttenrly in the bucket
+    pub(crate) fn nodes(&self) -> Vec<Node<ID, ADDR>> {
+        self.nodes.lock().unwrap().iter().map(|n| n.clone()).collect()
+    }
+
+    /// Move a node to the start of the bucket
     fn update_position(nodes: &mut VecDeque<Node<ID, ADDR>>, node: &Node<ID, ADDR>) {
         // Find the node to update
         if let Some(_existing) = nodes.iter().find(|n| n.id == node.id).map(|n| n.clone()) {
@@ -83,8 +95,6 @@ where
 
 pub struct KNodeTable<ID, ADDR> {
     id: ID,
-    bucket_size: usize,
-    hash_size: usize,
     buckets: Vec<KBucket<ID, ADDR>>
 }
 
@@ -96,25 +106,40 @@ where
     /// Create a new KNodeTable with the provded bucket and hash sizes
     pub fn new(node: &Node<ID, ADDR>, bucket_size: usize, hash_size: usize) -> KNodeTable<ID, ADDR> {
         // Create a new bucket and assign own ID
-        let mut bucket = KBucket::new(bucket_size);
-        bucket.update(node);
+        let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
-        KNodeTable{id: node.id.clone(), bucket_size, hash_size, buckets: vec![bucket]}
+        KNodeTable{id: node.id.clone(), buckets: buckets}
+    }
+
+    /// Update a node in the table
+    pub fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
+        let bucket = self.bucket_mut(&node.id);
+        bucket.update(node)
+    }
+
+    /// Find a given node in the table
+    pub fn find(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
+        let bucket = self.bucket_mut(id);
+        bucket.find(id)
+    }
+
+    /// Find the nearest nodes to the provided ID
+    pub fn nearest(&mut self, id: &ID, count: usize) -> Vec<Node<ID, ADDR>> {
+        // Create a list of all nodes
+        let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes() ).collect();
+        // Sort by distance
+        all.sort_by_key(|n| { KNodeTable::<ID, ADDR>::distance(id, &n.id) } );
+        // Limit to count or total found
+        all.drain(0..cmp::min(count, all.len())).collect()
     }
 
     // Calculate the distance between two IDs.
-    pub fn distance(a: &ID, b: &ID) -> ID {
+    fn distance(a: &ID, b: &ID) -> ID {
         ID::xor(a, b)
     }
 
-    /// Update a node in the KNodeTable
-    pub fn update(&mut self, node: Node<ID, ADDR>) -> bool {
-        let bucket = self.bucket_mut(&node.id);
-        bucket.update(&node)
-    }
-
     /// Fetch a mutable reference to the bucket containing the provided ID
-    pub fn bucket_mut(&mut self, id: &ID) -> &mut KBucket<ID, ADDR> {
+    fn bucket_mut(&mut self, id: &ID) -> &mut KBucket<ID, ADDR> {
         let index = self.bucket_index(id);
         &mut self.buckets[index]
     }
@@ -133,27 +158,62 @@ mod test {
     use super::{KBucket, KNodeTable};
 
     #[test]
-    fn test_k_bucket() {
-        println!("Here");
+    fn test_k_bucket_update() {
         let mut b = KBucket::<u64, u64>::new(4);
 
+        assert_eq!(true, b.find(&0b00).is_none());
+
+        // Generate fake nodes
+        let n1 = Node{id: 0b00, address: 1};
+        let n2 = Node{id: 0b01, address: 2};
+        let n3 = Node{id: 0b10, address: 3};
+        let n4 = Node{id: 0b11, address: 4};
+
         // Fill KBucket
-        assert_eq!(true, b.update(&Node{id: 0b00, address: 1}));
-        assert_eq!(true, b.update(&Node{id: 0b01, address: 2}));
-        assert_eq!(true, b.update(&Node{id: 0b10, address: 3}));
-        assert_eq!(true, b.update(&Node{id: 0b11, address: 4}));
+        assert_eq!(true, b.update(&n1));
+        assert_eq!(n1, b.find(&n1.id).unwrap());
+        
+        assert_eq!(true, b.update(&n2));
+        assert_eq!(n2, b.find(&n2.id).unwrap());
+        
+        assert_eq!(true, b.update(&n3));
+        assert_eq!(n3, b.find(&n3.id).unwrap());
+
+        assert_eq!(true, b.update(&n4));
+        assert_eq!(n4, b.find(&n4.id).unwrap());
 
         // Attempt to add to full KBucket
         assert_eq!(false, b.update(&Node{id: 0b100, address: 5}));
 
         // Update existing item
-        assert_eq!(true, b.update(&Node{id: 0b00, address: 6}));
+        let mut n4a = n4.clone();
+        n4a.address = 5;
+        assert_eq!(true, b.update(&n4a));
+        assert_eq!(n4a, b.find(&n4.id).unwrap());
     }
 
     #[test]
     fn test_k_node_table() {
-        let mut t = KNodeTable::<u64, u64>::new(&Node{id: 0b0011, address: 1}, 2, 0);
+        let n = Node{id: 0b0100, address: 1};
 
+        let mut t = KNodeTable::<u64, u64>::new(&n, 10, 4);
 
+        let nodes = vec![
+            Node{id: 0b0000, address: 1},
+            Node{id: 0b0001, address: 2},
+            Node{id: 0b0110, address: 3},
+            Node{id: 0b1011, address: 4},
+        ];
+
+        // Add some nodes
+        for n in &nodes {
+            assert_eq!(true, t.find(&n.id).is_none());
+            assert_eq!(true, t.update(&n));
+            assert_eq!(*n, t.find(&n.id).unwrap());
+        }
+        
+        // Find closest nodes
+        assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(&n.id, 2));
+        assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&0b0010, 2));
     }
 }

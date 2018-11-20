@@ -31,6 +31,8 @@ use std::fmt::Debug;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+/// KBucket implementation
+/// This implements a single bucket for use in the KNodeTable implementation
 pub struct KBucket<ID, ADDR> {
     bucket_size: usize,
     nodes: Arc<Mutex<VecDeque<Node<ID, ADDR>>>>,
@@ -48,16 +50,17 @@ where
 
     /// Update a node in the KBucket
     pub fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
-        let nodes = self.nodes.lock().unwrap();
+        let mut nodes = self.nodes.lock().unwrap();
+
         if let Some(_n) = nodes.iter().find(|n| n.id == node.id) {
             // If the node already exists, update it
-            self.update_position(node);
-            info!("[KBucket] Updated node {:?}", node);
+            info!("[KBucket] Updating node {:?}", node);
+            KBucket::update_position(&mut nodes, node);
             true
         } else if nodes.len() < self.bucket_size {
             // If there's space in the bucket, add it
-            self.nodes.lock().unwrap().push_back(node.clone());
-            info!("[KBucket] Added node {:?}", node);
+            info!("[KBucket] Adding node {:?}", node);
+            nodes.push_back(node.clone());
             true
         } else {
             // If there's no space, discard it
@@ -67,12 +70,11 @@ where
     }
 
     /// Move a node to the start of the array
-    pub fn update_position(&mut self, node: &Node<ID, ADDR>) {
-        let nodes = *self.nodes.lock().unwrap();
+    fn update_position(nodes: &mut VecDeque<Node<ID, ADDR>>, node: &Node<ID, ADDR>) {
         // Find the node to update
         if let Some(_existing) = nodes.iter().find(|n| n.id == node.id).map(|n| n.clone()) {
             // Update node array
-            nodes = nodes.iter().filter(|n| n.id != node.id).map(|n| n.clone()).collect();
+            *nodes = nodes.iter().filter(|n| n.id != node.id).map(|n| n.clone()).collect();
             // Push node to front
             nodes.push_back(node.clone());
         }
@@ -91,39 +93,67 @@ where
     ID: DatabaseId + Clone,
     ADDR: Clone + Debug,
 {
-    pub fn new(id: ID, bucket_size: usize, hash_size: usize) -> KNodeTable<ID, ADDR> {
-        KNodeTable{id, bucket_size, hash_size, buckets: vec![KBucket::new(bucket_size)]}
+    /// Create a new KNodeTable with the provded bucket and hash sizes
+    pub fn new(node: &Node<ID, ADDR>, bucket_size: usize, hash_size: usize) -> KNodeTable<ID, ADDR> {
+        // Create a new bucket and assign own ID
+        let mut bucket = KBucket::new(bucket_size);
+        bucket.update(node);
+        // Generate KNodeTable object
+        KNodeTable{id: node.id.clone(), bucket_size, hash_size, buckets: vec![bucket]}
     }
 
+    // Calculate the distance between two IDs.
     pub fn distance(a: &ID, b: &ID) -> ID {
         ID::xor(a, b)
     }
 
-    pub fn update(id: &ID, addr: &ADDR) -> bool {
-        let bucket = self.bucket_mut(id);
+    /// Update a node in the KNodeTable
+    pub fn update(&mut self, node: Node<ID, ADDR>) -> bool {
+        let bucket = self.bucket_mut(&node.id);
+        bucket.update(&node)
     }
+
+    /// Fetch a mutable reference to the bucket containing the provided ID
+    pub fn bucket_mut(&mut self, id: &ID) -> &mut KBucket<ID, ADDR> {
+        let index = self.bucket_index(id);
+        &mut self.buckets[index]
+    }
+
 
     fn bucket_index(&self, id: &ID) -> usize {
         // Find difference
         let diff = KNodeTable::<ID, ADDR>::distance(&self.id, id);
         ID::bits(&diff) - 1
     }
-
-    //pub fn bucket_mut(&mut self, id: &ID) -> &mut KBucket<ID, ADDR> {
-        
-    //}
-
 }
 
 #[cfg(test)]
 mod test {
+    use crate::node::Node;
     use super::{KBucket, KNodeTable};
 
     #[test]
-    fn test() {
-        let mut k = KNodeTable::<u64, u64>::new(0b0010, 2, 4);
+    fn test_k_bucket() {
+        println!("Here");
+        let mut b = KBucket::<u64, u64>::new(4);
 
-        k.update()
+        // Fill KBucket
+        assert_eq!(true, b.update(&Node{id: 0b00, address: 1}));
+        assert_eq!(true, b.update(&Node{id: 0b01, address: 2}));
+        assert_eq!(true, b.update(&Node{id: 0b10, address: 3}));
+        assert_eq!(true, b.update(&Node{id: 0b11, address: 4}));
+
+        // Attempt to add to full KBucket
+        assert_eq!(false, b.update(&Node{id: 0b100, address: 5}));
+
+        // Update existing item
+        assert_eq!(true, b.update(&Node{id: 0b00, address: 6}));
+    }
+
+    #[test]
+    fn test_k_node_table() {
+        let mut t = KNodeTable::<u64, u64>::new(&Node{id: 0b0011, address: 1}, 2, 0);
+
 
     }
 }

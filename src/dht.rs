@@ -11,27 +11,31 @@ use futures_timer::{FutureExt};
 
 use crate::{Config, Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
 use crate::{Request, Response, Message};
+use crate::datastore::Datastore;
 
 #[derive(Clone, Debug)]
-pub struct Dht<ID, ADDR, DATA, NODETABLE, CONNECTION> {
+pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
     id: ID,
     addr: ADDR,
     config: Config,
-    k_bucket: Arc<Mutex<NODETABLE>>,
-    conn_mgr: CONNECTION,
+    table: Arc<Mutex<TABLE>>,
+    conn_mgr: CONN,
+    datastore: Arc<Mutex<STORE>>,
     data: PhantomData<DATA>,
 }
 
-impl <ID, ADDR, DATA, NODETABLE, CONNECTION> Dht<ID, ADDR, DATA, NODETABLE, CONNECTION> 
+
+impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> 
 where 
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
     DATA: Clone + 'static,
-    NODETABLE: NodeTable<ID, ADDR> + 'static,
-    CONNECTION: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
+    TABLE: NodeTable<ID, ADDR> + 'static,
+    STORE: Datastore<ID, DATA> + 'static,
+    CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
 {
-    pub fn new(id: ID, addr: ADDR, config: Config, k_bucket: NODETABLE, conn_mgr: CONNECTION) -> Dht<ID, ADDR, DATA, NODETABLE, CONNECTION> {
-        Dht{id, addr, config, k_bucket: Arc::new(Mutex::new(k_bucket)), conn_mgr, data: PhantomData}
+    pub fn new(id: ID, addr: ADDR, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
+        Dht{id, addr, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), data: PhantomData}
     }
 
     /// Store a value in the DHT
@@ -46,35 +50,52 @@ where
 
     /// Find a node in the node table backing the DHT
     pub fn contains(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
-        self.k_bucket.lock().unwrap().contains(id)
+        self.table.lock().unwrap().contains(id)
     }
 
-    pub fn connect(&self, target: Node<ID, ADDR>) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> {
-        let table = self.k_bucket.clone();
+    /// Connect to a known node
+    /// This is used for bootstrapping onto the DHT
+    pub fn connect(&mut self, target: Node<ID, ADDR>) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> {
+        let table = self.table.clone();
         // Launch request
         self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone())).map(move |(node, resp)| {
-            // Update responding node
-            table.lock().unwrap().update(&target);
-
-            // Handle respoonse
+            // Handle response
             match resp {
-                Response::NodesFound(_nodes) => {
-                    info!("[DHT connect] to: {:?} from: {:?} nodes found", target, node);
+                Response::NodesFound(nodes) => {
+                    println!("[DHT connect] NodesFound from: {:?}", node.id());
+
+                    // Update responding node
+                    table.lock().unwrap().update(&target);
+
+                    // Process responses
+                    for n in nodes {
+                        table.lock().unwrap().update(&n);
+                    }
                 },
-                Response::NoResult => {
-                    info!("[DHT connect] to: {:?} from: {:?} no results", target, node);
+                _ => {
+                    println!("[DHT connect] invalid response from: {:?}", node.id());
+                    //return future::err(DhtError::InvalidResponse)
                 },
-                Response::ValuesFound(_) => {
-                    info!("[DHT connect] to {:?} from: {:?} invalid response", target, node);
-                }
             }
+           
+            // Return connected node
             node
         })
     }
 
+    /// Refresh node table
+    pub fn refresh(&mut self) -> impl Future<Item=(), Error=DhtError> {
+        // TODO: send refresh to buckets that haven't been looked up recently
+
+        // TODO: evict "expired" nodes from buckets
+
+        future::err(DhtError::Unimplemented)
+    }
+
+
     fn update_node(&mut self, node: Node<ID, ADDR>) {
-        let k_bucket = self.k_bucket.clone();
-        let mut unlocked = k_bucket.lock().unwrap();
+        let table = self.table.clone();
+        let mut unlocked = table.lock().unwrap();
 
         // Update k-bucket for responder
         if !unlocked.update(&node) {
@@ -84,35 +105,50 @@ where
                 self.conn_mgr.request(&oldest, Request::Ping).timeout(self.config.ping_timeout)
                 .map(|(node, _message)| {
                     // On successful ping, ignore new node
-                    k_bucket.lock().unwrap().update(&node);
+                    table.lock().unwrap().update(&node);
                     // TODO: should the response to a ping be handled?
                 }).map_err(|_err| {
                     // On timeout, replace oldest node with new
-                    k_bucket.lock().unwrap().replace(&oldest, &node);
+                    table.lock().unwrap().replace(&oldest, &node);
                 }).wait().unwrap();
             }
         }
     }
 
-    pub fn receive(&mut self, _from: ID, m: &Message<ID, ADDR, DATA>) {
-        
-        match m {
-            Message::Request(_req) => {
+    pub fn receive(&mut self, from: &Node<ID, ADDR>, req: &Request<ID, ADDR>) -> Response<ID, ADDR, DATA> {
+        // Update record for sender
+        self.table.lock().unwrap().update(from);
 
+        // Build response
+        match req {
+            Request::Ping => {
+                Response::NoResult
             },
-            Message::Response(resp) => {
-                // Update k-bucket for responder
-                self.update_node(resp.responder.clone());
-
-
-            }
-        };
+            Request::FindNode(id) => {
+                let nodes = self.table.lock().unwrap().nearest(id, self.config.k);
+                Response::NodesFound(nodes)
+            },
+            Request::FindValue(id) => {
+                // Lockup the value
+                if let Some(values) = self.datastore.lock().unwrap().find(id) {
+                    Response::ValuesFound(values)
+                } else {
+                    let nodes = self.table.lock().unwrap().nearest(id, self.config.k);
+                    Response::NodesFound(nodes)
+                }                
+            },
+            Request::Store(id, value) => {
+                // Write value to local storage
+                
+                Response::NoResult
+            },
+        }
     }
 
 }
 
 /// Stream trait implemented to allow polling on dht object
-impl <ID, ADDR, DATA, NODETABLE, CONNECTION> Stream for Dht <ID, ADDR, DATA, NODETABLE, CONNECTION> {
+impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE, CONN, STORE> {
     type Item = ();
     type Error = DhtError;
 

@@ -1,12 +1,20 @@
 
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum Error {
     Unimplemented,
-    Io(std::io::ErrorKind),
+    InvalidResponse,
+    Timeout,
+    Io(IoErrorKind),
 }
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Error {
-        Error::Io(e.kind())
+impl From<IoError> for Error {
+    fn from(e: IoError) -> Error {
+        if e.kind() == IoErrorKind::TimedOut {
+            Error::Timeout
+        } else {
+            Error::Io(e.kind())
+        }
     }
 }

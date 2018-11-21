@@ -27,6 +27,9 @@ pub use self::id::{DatabaseId, RequestId};
 pub mod nodetable;
 pub use self::nodetable::{NodeTable, KNodeTable};
 
+pub mod datastore;
+pub use self::datastore::{Datastore};
+
 pub mod dht;
 pub use self::dht::Dht;
 
@@ -43,39 +46,53 @@ where
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Config {
+    pub k: usize,
     pub ping_timeout: Duration,
 }
 
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::clone::Clone;
+
     use super::*;
     use crate::mock::{MockTransaction, MockConnector};
 
     #[test]
     fn test_dht() {
-        let n1 = Node::new(0, 100);
-        let n2 = Node::new(1, 200);
+        let n1 = Node::new(0b0001, 100);
+        let n2 = Node::new(0b0010, 200);
+        let n3 = Node::new(0b0011, 300);
+        let n4 = Node::new(0b1000, 400);
+        let n5 = Node::new(0b1001, 500);
 
         // Build expectations
         let connector = MockConnector::from(vec![
+            // First transaction to bootstrap onto the network
             MockTransaction::<_, _, u64>::new(n2.clone(), Request::FindNode(n1.id().clone()), 
-                    n1.clone(), Response::NodesFound(vec![]), None),
+                    n1.clone(), Response::NodesFound(vec![n3.clone(), n4.clone()]), None),
+
         ]);
 
         // Create configuration
-        let config = Config{ping_timeout: Duration::from_secs(10)};
+        let config = Config{k: 2, ping_timeout: Duration::from_secs(10)};
         let knodetable = KNodeTable::new(&n1, 2, 4);
         
         // Instantiated DHT
-        let mut dht = Dht::<u64, u64, u64, _, _>::new(n1.id().clone(), n2.id().clone(), 
-                config, knodetable, connector.clone());
+        let mut store: HashMap<u64, u64> = HashMap::new();
+        let mut dht = Dht::<u64, u64, u64, _, _, _>::new(n1.id().clone(), n2.id().clone(), 
+                config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping
         dht.connect(n2.clone()).wait().unwrap();
 
-        // Find bootstrapped node
+        // Check bootstrapped node is added to db
         assert_eq!(Some(n2.clone()), dht.contains(n2.id()));
+
+        // Check Reported nodes are added
+        assert_eq!(Some(n3.clone()), dht.contains(n3.id()));
+        assert_eq!(Some(n4.clone()), dht.contains(n4.id()));
 
         // Check expectations are done
         connector.done();

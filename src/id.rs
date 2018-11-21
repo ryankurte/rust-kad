@@ -4,6 +4,7 @@ use core::hash::Hash;
 use core::fmt::Debug;
 use core::ops::BitXor;
 
+use num::Zero;
 use num::bigint::BigUint;
 
 /// Id trait must be implemented for viable id types
@@ -11,7 +12,9 @@ pub trait DatabaseId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug 
     /// Exclusive or two IDs to calculate distance
     fn xor(a: &Self, b: &Self) -> Self;
     /// Calculate number of bits to express a given ID
-    fn bits(a: &Self) -> usize;
+    fn bits(&self) -> usize;
+    /// Check if a hash is zero
+    fn is_zero(&self) -> bool;
 }
 
 /// DatabaseId implementation for u64
@@ -21,8 +24,12 @@ impl DatabaseId for u64 {
         a ^ b
     }
 
-    fn bits(a: &Self) -> usize {
-        (64 - a.leading_zeros()) as usize
+    fn bits(&self) -> usize {
+        (64 - self.leading_zeros()) as usize
+    }
+
+    fn is_zero(&self) -> bool {
+        Zero::is_zero(self)
     }
 }
 
@@ -35,9 +42,14 @@ impl DatabaseId for Vec<u8> {
         c.to_bytes_le()
     }
 
-    fn bits(a: &Self) -> usize {
-        let a = BigUint::from_bytes_le(&a);
+    fn bits(&self) -> usize {
+        let a = BigUint::from_bytes_le(self);
         a.bits()
+    }
+
+    fn is_zero(&self) -> bool {
+        let a = BigUint::from_bytes_le(self);
+        Zero::is_zero(&a)
     }
 }
 
@@ -53,9 +65,14 @@ macro_rules! database_id_slice {
                 c
             }
 
-            fn bits(a: &Self) -> usize {
-                let a = num::bigint::BigUint::from_bytes_le(a);
+            fn bits(&self) -> usize {
+                let a = num::bigint::BigUint::from_bytes_le(self);
                 a.bits()
+            }
+
+            fn is_zero(&self) -> bool {
+                let a = BigUint::from_bytes_le(self);
+                Zero::is_zero(&a)
             }
         }
     )

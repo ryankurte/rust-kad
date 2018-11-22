@@ -28,7 +28,7 @@ where
     pub fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
         let mut nodes = self.nodes.lock().unwrap();
 
-        if let Some(_n) = nodes.iter().find(|n| n.id() == node.id()) {
+        if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
             // If the node already exists, update it
             info!("[KBucket] Updating node {:?}", node);
             KBucket::update_position(&mut nodes, node);

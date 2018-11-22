@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
 pub trait Datastore<ID, DATA> {
+    fn new() -> Self;
     fn find(&self, id: &ID) -> Option<Vec<DATA>>;
     fn store(&mut self, id: &ID, data: Vec<DATA>);
 }
@@ -11,13 +12,25 @@ pub trait Updates {
     fn is_update(&self, other: &Self) -> bool;
 }
 
+#[cfg(test)]
+impl Updates for u64 {
+    fn is_update(&self, other: &Self) -> bool {
+        self > other
+    }
+}
+
 pub type HashMapStore<ID, DATA> = HashMap<ID, Vec<DATA>>;
+
 
 impl <ID, DATA> Datastore<ID, DATA> for HashMapStore<ID, DATA>
 where
     ID: Clone + Debug + std::cmp::Eq + std::hash::Hash,
     DATA: Updates + PartialEq + Clone + Debug,
 {
+    fn new() -> HashMap<ID, Vec<DATA>> {
+        HashMap::new()
+    }
+
     fn find(&self, id: &ID) -> Option<Vec<DATA>> {
         self.get(id).map(|d| d.clone() )
     }

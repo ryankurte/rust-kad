@@ -72,13 +72,15 @@ where
     }
 
     /// Find the nearest nodes to the provided ID
-    fn nearest(&mut self, id: &ID, count: usize) -> Vec<Node<ID, ADDR>> {
+    fn nearest(&mut self, id: &ID, max: usize) -> Vec<Node<ID, ADDR>> {
         // Create a list of all nodes
         let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes() ).collect();
+        let count = all.len();
         // Sort by distance
         all.sort_by_key(|n| { KNodeTable::<ID, ADDR>::distance(id, n.id()) } );
         // Limit to count or total found
-        all.drain(0..cmp::min(count, all.len())).collect()
+        let limited = all.drain(0..cmp::min(max, count)).collect();
+        limited
     }
 
     fn peek_oldest(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {

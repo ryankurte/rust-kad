@@ -2,7 +2,6 @@
 name = "kad"
 version = "0.1.0"
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
-edition = "2018"
 
 [dependencies]
 futures = "0.1.25"
@@ -15,5 +14,3 @@ rand = "0.5.5"
 version = "0.4.6"
 features = ["max_level_info"]
 
-[patch.crates-io]
-dht = { path = "../rust-dht" }

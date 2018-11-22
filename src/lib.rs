@@ -1,6 +1,3 @@
-#![feature(fn_traits)]
-#![feature(unboxed_closures)]
-#![feature(extern_crate_item_prelude)]
 
 use std::time::{Duration};
 
@@ -53,10 +50,10 @@ pub struct Config {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::clone::Clone;
 
     use super::*;
+    use crate::datastore::{HashMapStore, Datastore};
     use crate::mock::{MockTransaction, MockConnector};
 
     #[test]
@@ -80,8 +77,8 @@ mod tests {
         let knodetable = KNodeTable::new(&n1, 2, 4);
         
         // Instantiated DHT
-        let mut store: HashMap<u64, u64> = HashMap::new();
-        let mut dht = Dht::<u64, u64, u64, _, _, _>::new(n1.id().clone(), n2.id().clone(), 
+        let store: HashMapStore<u64, u64> = HashMapStore::new();
+        let mut dht = Dht::<u64, u64, _, _, _, _>::new(n1.id().clone(), n2.id().clone(), 
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping

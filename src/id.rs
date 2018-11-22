@@ -1,8 +1,8 @@
 
 
-use core::hash::Hash;
-use core::fmt::Debug;
-use core::ops::BitXor;
+use std::hash::Hash;
+use std::fmt::Debug;
+use std::ops::BitXor;
 
 use num::Zero;
 use num::bigint::BigUint;

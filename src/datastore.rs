@@ -1,3 +1,12 @@
+/**
+ * rust-kad
+ * Generic datastore definitions and implementations
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
+
+
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;

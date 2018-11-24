@@ -1,3 +1,11 @@
+/**
+ * rust-kad
+ * Kademlia node table interfaces and default implementations
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
+
 
 pub mod nodetable;
 pub use self::nodetable::NodeTable;

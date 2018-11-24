@@ -1,3 +1,10 @@
+/**
+ * rust-kad
+ * Kademlia core implementation
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
 
 
 use std::sync::{Arc, Mutex};

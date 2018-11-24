@@ -1,7 +1,10 @@
 [package]
 name = "kad"
 version = "0.1.0"
+repository = "https://github.com/ryankurte/rust-kad"
+description = "A generic / futures based implementation of the Kademlia DHT
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
+license = "MIT / Apache-2.0"
 
 [dependencies]
 futures = "0.1.25"

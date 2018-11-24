@@ -1,3 +1,10 @@
+/**
+ * rust-kad
+ * Mock interfaces to assist with testing
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
 
 
 use std::collections::VecDeque;

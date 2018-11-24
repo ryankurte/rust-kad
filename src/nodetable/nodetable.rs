@@ -1,3 +1,11 @@
+/**
+ * rust-kad
+ * Generic NodeTable definition
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
+
 
 use crate::id::DatabaseId;
 use crate::node::Node;

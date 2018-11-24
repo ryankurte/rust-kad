@@ -1,3 +1,11 @@
+/**
+ * rust-kad
+ * Kademlia Node Table Implementation
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
+
 
 use std::cmp;
 use std::fmt::Debug;

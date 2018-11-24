@@ -1,3 +1,10 @@
+/**
+ * rust-kad
+ * A Kademlia DHT implementation in Rust
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
 
 use std::time::{Duration};
 

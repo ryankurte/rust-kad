@@ -1,3 +1,10 @@
+/**
+ * rust-kad
+ * Kademlia message implementations
+ *
+ * https://github.com/ryankurte/rust-kad
+ * Copyright 2018 Ryan Kurte
+ */
 
 use crate::node::Node;
 

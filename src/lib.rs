@@ -51,6 +51,7 @@ where
 #[derive(PartialEq, Clone, Debug)]
 pub struct Config {
     pub k: usize,
+    pub concurrency: usize,
     pub ping_timeout: Duration,
 }
 
@@ -77,10 +78,17 @@ mod tests {
             MockTransaction::<_, _, u64>::new(n2.clone(), Request::FindNode(n1.id().clone()), 
                     n1.clone(), Response::NodesFound(vec![n3.clone(), n4.clone()]), None),
 
+            // TODO: bootsrap to found nodes
+            //MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n1.id().clone()), 
+            //        n1.clone(), Response::NodesFound(vec![]), None),
+            //MockTransaction::<_, _, u64>::new(n4.clone(), Request::FindNode(n1.id().clone()), 
+            //        n1.clone(), Response::NodesFound(vec![]), None),
+
+            // TODO: search for nodes for value
         ]);
 
         // Create configuration
-        let config = Config{k: 2, ping_timeout: Duration::from_secs(10)};
+        let config = Config{k: 2, concurrency: 2, ping_timeout: Duration::from_secs(10)};
         let knodetable = KNodeTable::new(&n1, 2, 4);
         
         // Instantiated DHT

@@ -10,6 +10,7 @@
 use std::sync::{Arc, Mutex};
 use std::marker::{PhantomData};
 use std::fmt::{Debug};
+use std::collections::HashMap;
 
 use futures::{future, Future};
 use futures::{Stream};
@@ -17,7 +18,9 @@ use futures::{Stream};
 use futures_timer::{FutureExt};
 
 use crate::{Config, Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
+
 use crate::{Request, Response, Message};
+
 use crate::datastore::Datastore;
 
 #[derive(Clone, Debug)]
@@ -29,6 +32,14 @@ pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
     conn_mgr: CONN,
     datastore: Arc<Mutex<STORE>>,
     data: PhantomData<DATA>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum RequestState {
+    Pending,
+    Active,
+    Timeout,
+    Complete,
 }
 
 
@@ -88,6 +99,108 @@ where
             // Return connected node
             node
         })
+    }
+
+    pub fn lookup(&mut self, addr: &ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> {
+        let known = Arc::new(Mutex::new(HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new()));
+        let table = self.table.clone();
+
+        // Fetch known nearest nodes
+        let nearest = table.lock().unwrap().nearest(addr, self.config.concurrency);
+        let mut k = known.lock().unwrap();
+        for n in nearest {
+            k.insert(n.id().clone(), (n, RequestState::Pending));
+        }
+        drop(k);
+
+        // Fetch a section of known nodes to process
+        let mut chunk: Vec<_> = known.lock().unwrap().clone().iter()
+                .filter(|(_k, (_n, s))| *s == RequestState::Pending )
+                .map(|(_k, (n, _s))| n.clone() ).collect();
+        chunk.sort_by_key(|n| ID::xor(addr, n.id()) );
+
+        let mut queries = Vec::new();
+        for target in &chunk {
+            
+            // Send a FindNodes query
+            println!("Sending FindValues to '{:?}'", target.id());
+            known.lock().unwrap().entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Pending );
+
+            let k = known.clone();
+            let t = table.clone();
+
+            let q = self.conn_mgr.clone().request(target, Request::FindValue(addr.clone()))
+                    .timeout(self.config.ping_timeout).map(move |(node, resp)| {
+
+                t.lock().unwrap().update(&node);
+                k.lock().unwrap().entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+
+                match resp {
+                    Response::NoResult => {
+                        
+                    },
+                    Response::NodesFound(nodes) => {
+                        // Add nodes to known list
+                        let mut known = k.lock().unwrap();
+                        for n in nodes {
+                            known.entry(n.id().clone()).or_insert((n, RequestState::Pending));
+                        }
+                    },
+                    Response::ValuesFound(v) => {
+
+                    }
+                }
+            }).map_err(|_e| {
+
+            });
+
+            queries.push(q);
+        }
+
+        future::err(DhtError::Unimplemented)
+    }
+
+    pub fn recurse(&mut self, req: &Request<ID, ADDR>, nodes: &[Node<ID, ADDR>]) -> Result<Response<ID, ADDR, DATA>, DhtError> {
+        let mut queries = Vec::new();
+
+        for n in nodes {
+            let q = self.conn_mgr.clone().request(n, req.clone())
+                    .timeout(self.config.ping_timeout).map(|(n, v)| {
+                        println!("Recurse: received response from {:?}", n.id());
+                        v
+                    });
+            queries.push(q);
+        }
+
+        future::join_all(queries).map(|r| {
+            // Find any value responses
+            let values: Vec<_> = r.iter().filter_map(|v| {
+                if let Response::ValuesFound(vals) = v {
+                    Some(vals)
+                } else {
+                    None
+                }
+            }).flatten().map(|v| v.clone()).collect();
+            if values.len() != 0 {
+                return Response::ValuesFound::<ID, ADDR, DATA>(values);
+            }
+
+            // Find any node responses
+            let nodes: Vec<_> = r.iter().filter_map(|v| {
+                if let Response::NodesFound(nodes) = v {
+                    Some(nodes)
+                } else {
+                    None
+                }
+            }).flatten().map(|v| v.clone()).collect();
+            if nodes.len() != 0 {
+                return Response::NodesFound::<ID, ADDR, DATA>(nodes);
+            }
+
+            Response::NoResult
+        }).map_err(|_e| {
+            DhtError::Unimplemented
+        }).wait()
     }
 
     /// Refresh node table

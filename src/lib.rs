@@ -34,6 +34,9 @@ pub use self::nodetable::{NodeTable, KNodeTable};
 pub mod datastore;
 pub use self::datastore::{Datastore};
 
+pub mod search;
+pub use self::search::{Search};
+
 pub mod dht;
 pub use self::dht::Dht;
 
@@ -69,7 +72,7 @@ mod tests {
     use crate::mock::{MockTransaction, MockConnector};
 
     #[test]
-    fn test_dht() {
+    fn test_connect() {
         let n1 = Node::new(0b0001, 100);
         let n2 = Node::new(0b0010, 200);
         let n3 = Node::new(0b0011, 300);

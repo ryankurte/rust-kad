@@ -14,6 +14,7 @@ pub enum Error {
     Unimplemented,
     InvalidResponse,
     Timeout,
+    NotFound,
     Io(IoErrorKind),
 }
 

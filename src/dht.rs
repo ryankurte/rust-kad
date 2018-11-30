@@ -42,7 +42,6 @@ enum RequestState {
     Complete,
 }
 
-
 impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> 
 where 
     ID: DatabaseId + 'static,
@@ -76,11 +75,14 @@ where
     pub fn connect(&mut self, target: Node<ID, ADDR>) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> {
         let table = self.table.clone();
         // Launch request
-        self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone())).map(move |(node, resp)| {
+        self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone()))
+                .timeout(self.config.ping_timeout)
+                .map(move |resp| {
+
             // Handle response
             match resp {
                 Response::NodesFound(nodes) => {
-                    println!("[DHT connect] NodesFound from: {:?}", node.id());
+                    println!("[DHT connect] NodesFound from: {:?}", target.id());
 
                     // Update responding node
                     table.lock().unwrap().update(&target);
@@ -91,116 +93,104 @@ where
                     }
                 },
                 _ => {
-                    println!("[DHT connect] invalid response from: {:?}", node.id());
+                    println!("[DHT connect] invalid response from: {:?}", target.id());
                     //return future::err(DhtError::InvalidResponse)
                 },
             }
            
             // Return connected node
-            node
+            target
         })
     }
 
     pub fn lookup(&mut self, addr: &ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> {
         let known = Arc::new(Mutex::new(HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new()));
         let table = self.table.clone();
+        let addr = addr.clone();
 
         // Fetch known nearest nodes
-        let nearest = table.lock().unwrap().nearest(addr, self.config.concurrency);
-        let mut k = known.lock().unwrap();
-        for n in nearest {
-            k.insert(n.id().clone(), (n, RequestState::Pending));
+        let nearest = table.lock().unwrap().nearest(&addr, self.config.concurrency);
+        {
+            let mut k = known.lock().unwrap();
+            for n in nearest {
+                k.insert(n.id().clone(), (n, RequestState::Pending));
+            }
+            drop(k);
         }
-        drop(k);
 
         // Fetch a section of known nodes to process
         let mut chunk: Vec<_> = known.lock().unwrap().clone().iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Pending )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| ID::xor(addr, n.id()) );
+        chunk.sort_by_key(|n| ID::xor(&addr, n.id()) );
 
-        let mut queries = Vec::new();
-        for target in &chunk {
-            
-            // Send a FindNodes query
-            println!("Sending FindValues to '{:?}'", target.id());
-            known.lock().unwrap().entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Pending );
-
-            let k = known.clone();
-            let t = table.clone();
-
-            let q = self.conn_mgr.clone().request(target, Request::FindValue(addr.clone()))
-                    .timeout(self.config.ping_timeout).map(move |(node, resp)| {
-
-                t.lock().unwrap().update(&node);
-                k.lock().unwrap().entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
-
-                match resp {
-                    Response::NoResult => {
-                        
-                    },
-                    Response::NodesFound(nodes) => {
-                        // Add nodes to known list
-                        let mut known = k.lock().unwrap();
-                        for n in nodes {
-                            known.entry(n.id().clone()).or_insert((n, RequestState::Pending));
-                        }
-                    },
-                    Response::ValuesFound(v) => {
-
-                    }
-                }
-            }).map_err(|_e| {
-
-            });
-
-            queries.push(q);
+        // Update nodes in the chunk to active state
+        {
+            let mut k = known.lock().unwrap();
+            for target in &chunk {
+                // Send a FindNodes query
+                println!("Sending FindNodes to '{:?}'", target.id());
+                k.entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+            }
         }
 
-        future::err(DhtError::Unimplemented)
+        // Send requests to nodes in the chunk
+        let k = known.clone();
+        self.request(&Request::FindNode(addr.clone()), &chunk)
+        .map(move |res| {
+            for (n, v) in &res {
+                // Handle received responses
+                if let Some(resp) = v {
+                    match resp {
+                        Response::NodesFound(nodes) => {
+                            // Add nodes to known list
+                            let mut known = k.lock().unwrap();
+                            for n in nodes {
+                                known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+                            }
+                        },
+                        _ => { },
+                    }
+
+                    // Update node state to completed
+                    k.lock().unwrap().entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+                } else {
+                    // Update node state to timed out
+                    k.lock().unwrap().entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                }
+            }
+        }).then(move |_| {
+            let k = known.lock().unwrap();
+            // See whether a node has been found
+            if let Some((node, _)) = k.get(&addr) {
+                Ok(node.clone())
+            } else {
+                Err(DhtError::NotFound)
+            }
+        })
     }
 
-    pub fn recurse(&mut self, req: &Request<ID, ADDR>, nodes: &[Node<ID, ADDR>]) -> Result<Response<ID, ADDR, DATA>, DhtError> {
+    pub fn request(&mut self, req: &Request<ID, ADDR>, nodes: &[Node<ID, ADDR>]) -> 
+            impl Future<Item=Vec<(Node<ID, ADDR>, Option<Response<ID, ADDR, DATA>>)>, Error=DhtError> {
         let mut queries = Vec::new();
 
         for n in nodes {
+            let n1 = n.clone();
+            let n2 = n.clone();
             let q = self.conn_mgr.clone().request(n, req.clone())
-                    .timeout(self.config.ping_timeout).map(|(n, v)| {
-                        println!("Recurse: received response from {:?}", n.id());
-                        v
-                    });
+                .timeout(self.config.ping_timeout)
+                .map(|v| (n1, Some(v)) )
+                .or_else(|e| {
+                    if e == DhtError::Timeout {
+                        Ok((n2, None))
+                    } else {
+                        Err(e)
+                    }
+                } );
             queries.push(q);
         }
 
-        future::join_all(queries).map(|r| {
-            // Find any value responses
-            let values: Vec<_> = r.iter().filter_map(|v| {
-                if let Response::ValuesFound(vals) = v {
-                    Some(vals)
-                } else {
-                    None
-                }
-            }).flatten().map(|v| v.clone()).collect();
-            if values.len() != 0 {
-                return Response::ValuesFound::<ID, ADDR, DATA>(values);
-            }
-
-            // Find any node responses
-            let nodes: Vec<_> = r.iter().filter_map(|v| {
-                if let Response::NodesFound(nodes) = v {
-                    Some(nodes)
-                } else {
-                    None
-                }
-            }).flatten().map(|v| v.clone()).collect();
-            if nodes.len() != 0 {
-                return Response::NodesFound::<ID, ADDR, DATA>(nodes);
-            }
-
-            Response::NoResult
-        }).map_err(|_e| {
-            DhtError::Unimplemented
-        }).wait()
+        future::join_all(queries)
     }
 
     /// Refresh node table
@@ -223,9 +213,9 @@ where
             if let Some(oldest) = unlocked.peek_oldest(node.id()) {
                 // Ping oldest
                 self.conn_mgr.request(&oldest, Request::Ping).timeout(self.config.ping_timeout)
-                .map(|(node, _message)| {
+                .map(|_message| {
                     // On successful ping, ignore new node
-                    table.lock().unwrap().update(&node);
+                    table.lock().unwrap().update(&oldest);
                     // TODO: should the response to a ping be handled?
                 }).map_err(|_err| {
                     // On timeout, replace oldest node with new

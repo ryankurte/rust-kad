@@ -44,8 +44,12 @@ pub trait ConnectionManager<ID, ADDR, DATA, ERR>
 where
     ERR: From<std::io::Error>,
 {
+    /// Send a request to a specified node, returns a future that contains
+    /// a Response on success and an Error if something went wrong.
+    /// 
+    /// Note that timeouts are created on top of this.
     fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
-            Box<Future<Item=(Node<ID, ADDR>, Response<ID, ADDR, DATA>), Error=ERR>>;
+            Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>>;
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -93,7 +97,7 @@ mod tests {
         
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, _, _, _>::new(n1.id().clone(), n2.id().clone(), 
+        let mut dht = Dht::<u64, u64, _, _, _, _>::new(n1.id().clone(), n1.address().clone(), 
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping
@@ -110,5 +114,41 @@ mod tests {
         connector.done();
     }
 
+   #[test]
+    fn test_lookup() {
+        let n1 = Node::new(0b0001, 100);
+        let n2 = Node::new(0b0010, 200);
+        let n3 = Node::new(0b0011, 300);
+        let n4 = Node::new(0b1000, 400);
+        let n5 = Node::new(0b1001, 500);
+
+        // Build expectations
+        let connector = MockConnector::from(vec![
+            // First transaction to bootstrap onto the network
+            MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n4.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![n3.clone()]), None),
+            MockTransaction::<_, _, u64>::new(n2.clone(), Request::FindNode(n4.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![n4.clone()]), None),
+        ]);
+
+        // Create configuration
+        let config = Config{k: 2, concurrency: 2, ping_timeout: Duration::from_secs(10)};
+        let mut knodetable = KNodeTable::new(&n1, 2, 4);
+        
+        // Inject initial nodes into the table
+        knodetable.update(&n2);
+        knodetable.update(&n3);
+
+        // Instantiated DHT
+        let store: HashMapStore<u64, u64> = HashMapStore::new();
+        let mut dht = Dht::<u64, u64, _, _, _, _>::new(n1.id().clone(), n1.address().clone(), 
+                config, knodetable, connector.clone(), store);
+
+        // Perform search
+        let res = dht.lookup(n4.id()).wait().unwrap();
+
+
+        connector.done();
+    }
 
 }

@@ -77,7 +77,7 @@ where
     ERR: From<std::io::Error> + 'static,
 {
     fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
-            Box<Future<Item=(Node<ID, ADDR>, Response<ID, ADDR, DATA>), Error=ERR>> {
+            Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>> {
         
         let transaction = self.transactions.lock().unwrap().pop_back().unwrap();
 
@@ -88,6 +88,6 @@ where
             std::thread::sleep(d);
         }
 
-        Box::new(future::ok((transaction.from, transaction.response)))
+        Box::new(future::ok(transaction.response))
     }
 }

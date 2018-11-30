@@ -145,7 +145,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform search
-        let res = dht.lookup(n4.id()).wait().unwrap();
+        let res = dht.lookup(n4.id().clone()).wait().unwrap();
 
 
         connector.done();

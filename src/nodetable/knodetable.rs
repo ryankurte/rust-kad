@@ -8,6 +8,7 @@
 
 
 use std::cmp;
+use std::ops::Range;
 use std::fmt::Debug;
 
 use crate::id::DatabaseId;
@@ -80,14 +81,21 @@ where
     }
 
     /// Find the nearest nodes to the provided ID
-    fn nearest(&mut self, id: &ID, max: usize) -> Vec<Node<ID, ADDR>> {
+    fn nearest(&mut self, id: &ID, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
+
         // Create a list of all nodes
         let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes() ).collect();
         let count = all.len();
+
         // Sort by distance
         all.sort_by_key(|n| { KNodeTable::<ID, ADDR>::distance(id, n.id()) } );
+
         // Limit to count or total found
-        let limited = all.drain(0..cmp::min(max, count)).collect();
+        let mut range = range;
+        if range.end > count {
+            range.end = count;
+        }
+        let limited = all.drain(range).collect();
         limited
     }
 
@@ -135,7 +143,7 @@ mod test {
         }
         
         // Find closest nodes
-        assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(n.id(), 2));
-        assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&0b0010, 2));
+        assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(n.id(), 0..2));
+        assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&0b0010, 0..2));
     }
 }

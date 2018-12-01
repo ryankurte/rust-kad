@@ -102,7 +102,7 @@ where
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
 
         // Fetch known nearest nodes
-        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, self.config.concurrency);
+        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
 
         // Create a search instance
         let mut search = Search::new(target.clone(), Operation::FindNode, 2, 2, &nearest, self.conn_mgr.clone());
@@ -188,7 +188,7 @@ where
                 Response::NoResult
             },
             Request::FindNode(id) => {
-                let nodes = self.table.lock().unwrap().nearest(id, self.config.k);
+                let nodes = self.table.lock().unwrap().nearest(id, 0..self.config.k);
                 Response::NodesFound(nodes)
             },
             Request::FindValue(id) => {
@@ -196,7 +196,7 @@ where
                 if let Some(values) = self.datastore.lock().unwrap().find(id) {
                     Response::ValuesFound(values)
                 } else {
-                    let nodes = self.table.lock().unwrap().nearest(id, self.config.k);
+                    let nodes = self.table.lock().unwrap().nearest(id, 0..self.config.k);
                     Response::NodesFound(nodes)
                 }                
             },

@@ -6,6 +6,7 @@
  * Copyright 2018 Ryan Kurte
  */
 
+use std::ops::Range;
 
 use crate::id::DatabaseId;
 use crate::node::Node;
@@ -18,7 +19,7 @@ pub trait NodeTable<ID: DatabaseId + Clone + 'static, ADDR: Clone + 'static> {
     fn update(&mut self, node: &Node<ID, ADDR>) -> bool;
     // Find nearest nodes
     // Returns a list of the nearest nodes to the provided id
-    fn nearest(&mut self, id: &ID, count: usize) -> Vec<Node<ID, ADDR>>;
+    fn nearest(&mut self, id: &ID, range: Range<usize>) -> Vec<Node<ID, ADDR>>;
     // Find an exact node
     // This is used to fetch a node from the node table
     fn contains(&self, id: &ID) -> Option<Node<ID, ADDR>>;

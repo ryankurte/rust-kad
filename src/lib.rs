@@ -128,10 +128,10 @@ mod tests {
         // Build expectations
         let connector = MockConnector::from(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n4.id().clone()), 
-                    n1.clone(), Response::NodesFound(vec![n3.clone()]), None),
             MockTransaction::<_, _, u64>::new(n2.clone(), Request::FindNode(n4.id().clone()), 
                     n1.clone(), Response::NodesFound(vec![n4.clone()]), None),
+            MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n4.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![n3.clone()]), None),
         ]);
 
         // Create configuration

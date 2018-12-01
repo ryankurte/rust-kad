@@ -13,8 +13,8 @@ use std::fmt::{Debug};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use futures::{future, Future};
-use futures::{Stream};
+use futures::{future, Future, Stream};
+use futures::future::{Loop, loop_fn};
 
 use futures_timer::{FutureExt};
 
@@ -23,7 +23,7 @@ use crate::{Config, Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
 use crate::{Request, Response, Message};
 
 use crate::datastore::Datastore;
-use crate::search::Search;
+use crate::search::{Search, Operation};
 
 #[derive(Clone, Debug)]
 pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
@@ -41,7 +41,7 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE
 where 
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
-    DATA: Clone + 'static,
+    DATA: Clone + Debug + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     STORE: Datastore<ID, DATA> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
@@ -98,22 +98,52 @@ where
         })
     }
 
+    /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
 
         // Fetch known nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, self.config.concurrency);
 
         // Create a search instance
-        let search = Search::new(target.clone(), 2, Request::FindNode(target), &nearest, self.conn_mgr.clone());
+        let mut search = Search::new(target.clone(), Operation::FindNode, 2, 2, &nearest, self.conn_mgr.clone());
 
         // Execute the recursive search
         future::loop_fn(search, |s| {
             s.execute().map(|s| {
-                future::Loop::Break(s)
-            })
-        });
+                // Exit if found
+                let known = s.known();
+                if let Some(n) = known.get(s.target()) {
+                    return Loop::Break(s)
+                }
+                
+                // Exit at max recursive depth
+                if s.depth() == 0 {
+                    return Loop::Break(s)
+                }
 
-        future::err(DhtError::Unimplemented)
+                // TODO: if no nodes are pending, add another set of nearest nodes
+                
+                // Continue otherwise
+                Loop::Continue(s)
+            })
+        }).then(|r| {
+            // Handle internal search errors
+            let s = match r {
+                Err(e) => return Err(e),
+                Ok(s) => s,
+            };
+
+            let known = s.known();
+
+            // TODO: update nodes that responded
+
+            // Return node if found
+            if let Some((n, _s)) = known.get(s.target()) {
+                Ok(n.clone())
+            } else {
+                Err(DhtError::NotFound)
+            }
+        })
     }
 
     /// Refresh node table

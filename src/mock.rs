@@ -79,7 +79,7 @@ where
     fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
             Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>> {
         
-        let transaction = self.transactions.lock().unwrap().pop_back().expect("no more transactions available");
+        let transaction = self.transactions.lock().unwrap().pop_front().expect("no more transactions available");
 
         assert_eq!(&transaction.to, to, "destination mismatch");
         assert_eq!(transaction.request, req, "request mismatch");

@@ -64,7 +64,6 @@ where
         assert!(!diff.is_zero(), "Distance cannot be zero");
 
         let index = diff.bits() - 1;
-        println!("bucket_index {}/{} for id '{:?}'", index, self.buckets.len(), id);
         index
     }
 }
@@ -95,6 +94,7 @@ where
         if range.end > count {
             range.end = count;
         }
+
         let limited = all.drain(range).collect();
         limited
     }

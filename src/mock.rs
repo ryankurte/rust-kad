@@ -54,7 +54,8 @@ where
     DATA: Debug + Copy + Clone + PartialEq + 'static,
 {
     pub fn done(self) {
-        assert_eq!(0, self.transactions.lock().unwrap().len());
+        let transactions = self.transactions.lock().unwrap();
+        assert_eq!(0, transactions.len(), "Mock transaction list non-empty (remaining: {:?})", *transactions);
     }
 }
 

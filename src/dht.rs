@@ -101,32 +101,11 @@ where
     /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
 
-        // Fetch known nearest nodes
-        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
-
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindNode, 2, 2, &nearest, self.conn_mgr.clone());
+        let search = Search::new(target.clone(), Operation::FindNode, 2, 2, |t, k, _| { k.get(t).is_some() }, self.table.clone(), self.conn_mgr.clone());
 
         // Execute the recursive search
-        future::loop_fn(search, |s| {
-            s.execute().map(|s| {
-                // Exit if found
-                let known = s.known();
-                if let Some(n) = known.get(s.target()) {
-                    return Loop::Break(s)
-                }
-                
-                // Exit at max recursive depth
-                if s.depth() == 0 {
-                    return Loop::Break(s)
-                }
-
-                // TODO: if no nodes are pending, add another set of nearest nodes
-                
-                // Continue otherwise
-                Loop::Continue(s)
-            })
-        }).then(|r| {
+        search.execute().then(|r| {
             // Handle internal search errors
             let s = match r {
                 Err(e) => return Err(e),

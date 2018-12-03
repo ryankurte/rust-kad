@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 pub struct KBucket<ID, ADDR> {
     bucket_size: usize,
     nodes: Arc<Mutex<VecDeque<Node<ID, ADDR>>>>,
+    pending: Option<Node<ID, ADDR>>,
 }
 
 impl <ID, ADDR> KBucket<ID, ADDR> 
@@ -29,7 +30,7 @@ where
 {
     /// Create a new KBucket with the given size
     pub fn new(bucket_size: usize) -> KBucket<ID, ADDR> {
-        KBucket{bucket_size, nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size)))}
+        KBucket{bucket_size, nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), pending: None}
     }
 
     /// Update a node in the bucket
@@ -49,6 +50,7 @@ where
         } else {
             // If there's no space, discard it
             info!("[KBucket] No space to add node {:?}", node);
+            self.pending = Some(node.clone());
             false
         }
     }

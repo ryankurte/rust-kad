@@ -10,6 +10,7 @@
 use std::cmp;
 use std::ops::Range;
 use std::fmt::Debug;
+use std::time::Instant;
 
 use crate::id::DatabaseId;
 use crate::node::Node;
@@ -76,10 +77,12 @@ where
     /// Update a node in the table
     fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
         let bucket = self.bucket_mut(node.id());
-        bucket.update(node)
+        let mut node = node.clone();
+        node.set_seen(Instant::now());
+        bucket.update(&node)
     }
 
-    /// Find the nearest nodes to the provided ID
+    /// Find the nearest nodes to the provided ID in the given range
     fn nearest(&mut self, id: &ID, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
 
         // Create a list of all nodes
@@ -99,10 +102,10 @@ where
         limited
     }
 
+    /// Peek at the oldest node in the bucket associated with a given ID
     fn peek_oldest(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
-        let _bucket = self.bucket(id);
-
-        None
+        let bucket = self.bucket(id);
+        bucket.oldest()
     }
 
     fn replace(&mut self, node: &Node<ID, ADDR>, _replacement: &Node<ID, ADDR>) {
@@ -111,6 +114,8 @@ where
 
     }
 
+    /// Check if the node table contains a given node by ID
+    /// This returns the node object if found
     fn contains(&self, id: &ID) -> Option<Node<ID, ADDR>> {
         let bucket = self.bucket(id);
         bucket.find(id)

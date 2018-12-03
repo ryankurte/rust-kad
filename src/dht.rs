@@ -112,11 +112,8 @@ where
                 Ok(s) => s,
             };
 
-            let known = s.known();
-
-            // TODO: update nodes that responded
-
             // Return node if found
+            let known = s.known();
             if let Some((n, _s)) = known.get(s.target()) {
                 Ok(n.clone())
             } else {
@@ -128,8 +125,11 @@ where
     /// Refresh node table
     pub fn refresh(&mut self) -> impl Future<Item=(), Error=DhtError> {
         // TODO: send refresh to buckets that haven't been looked up recently
+        // How to track recently looked up / contacted buckets..?
 
         // TODO: evict "expired" nodes from buckets
+        // Message oldest node, if no response evict
+        // Maybe this could be implemented as a periodic ping and timeout instead?
 
         future::err(DhtError::Unimplemented)
     }

@@ -36,7 +36,6 @@ pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
     data: PhantomData<DATA>,
 }
 
-
 impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> 
 where 
     ID: DatabaseId + 'static,
@@ -71,7 +70,7 @@ where
         let table = self.table.clone();
         // Launch request
         self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone()))
-        .timeout(self.config.ping_timeout)
+        .timeout(self.config.timeout)
         .map(move |resp| {
 
             // Handle response
@@ -144,7 +143,7 @@ where
             // If the bucket is full and does not contain the node to be updated
             if let Some(oldest) = unlocked.peek_oldest(node.id()) {
                 // Ping oldest
-                self.conn_mgr.request(&oldest, Request::Ping).timeout(self.config.ping_timeout)
+                self.conn_mgr.request(&oldest, Request::Ping).timeout(self.config.timeout)
                 .map(|_message| {
                     // On successful ping, ignore new node
                     table.lock().unwrap().update(&oldest);
@@ -200,5 +199,60 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE,
 }
 
 
+#[cfg(test)]
+mod tests {
+    use std::clone::Clone;
+
+    use super::*;
+    use crate::datastore::{HashMapStore, Datastore};
+    use crate::nodetable::{NodeTable, KNodeTable};
+    use crate::mock::{MockTransaction, MockConnector};
+
+    #[test]
+    fn test_replies() {
+        let root = Node::new(0, 001);
+        let friend = Node::new(1, 100);
+        let other = Node::new(2, 200);
+
+        // Build expectations
+        let connector = MockConnector::from(vec![]);
+
+        // Create configuration
+        let mut config = Config::default();
+        config.concurrency = 2;
+
+        let mut knodetable = KNodeTable::new(&root, 2, 4);
+        knodetable.update(&other);
+        
+        
+        let mut store: HashMapStore<u64, u64> = HashMapStore::new();
+        store.store(&201, vec![1337]);
+
+        // Instantiate DHT
+        let mut dht = Dht::<u64, u64, _, _, _, _>::new(root.id().clone(), root.address().clone(), 
+                config, knodetable, connector.clone(), store);
+    
+        // Ping
+        assert_eq!(
+            Response::NoResult,
+            dht.receive(&friend, &Request::Ping)
+        );
+
+        // FindNodes
+        assert_eq!(
+            Response::NodesFound(vec![other.clone(), friend.clone()]), 
+            dht.receive(&friend, &Request::FindNode(other.id().clone()))
+        );
+        
+        // FindValues
+        assert_eq!(
+            Response::ValuesFound(vec![1337]), 
+            dht.receive(&friend, &Request::FindValue(201))
+        );
+
+        // Check expectations are done
+        connector.done();
+    }
 
 
+}

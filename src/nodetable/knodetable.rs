@@ -76,6 +76,10 @@ where
 {
     /// Update a node in the table
     fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
+        if node.id() == &self.id {
+            return false
+        }
+
         let bucket = self.bucket_mut(node.id());
         let mut node = node.clone();
         node.set_seen(Instant::now());

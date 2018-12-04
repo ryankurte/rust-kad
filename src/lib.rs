@@ -49,7 +49,10 @@ where
 {
     /// Send a request to a specified node, returns a future that contains
     /// a Response on success and an Error if something went wrong.
-    /// 
+    ///
+    /// This interface is responsible for pairing requests/responses and
+    /// any underlying validation (ie. crypto) required.
+    /// s
     /// Note that timeouts are created on top of this.
     fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
             Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>>;
@@ -57,9 +60,22 @@ where
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Config {
+    /// Size of buckets in KNodeTable
+    pub bucket_size: usize,
+    /// Length of the hash used (in bits) 
+    pub hash_size: usize,
+    /// Number of nearby nodes to consider when searching
     pub k: usize,
+    /// Number of concurrent operations to be performed at once
     pub concurrency: usize,
-    pub ping_timeout: Duration,
+    /// Timeout period for network operations 
+    pub timeout: Duration,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+            Config{bucket_size: 16, hash_size: 512, k: 16, concurrency: 16, timeout: Duration::from_secs(3)}
+    }
 }
 
 
@@ -95,7 +111,9 @@ mod tests {
         ]);
 
         // Create configuration
-        let config = Config{k: 2, concurrency: 2, ping_timeout: Duration::from_secs(10)};
+        let mut config = Config::default();
+        config.concurrency = 2;
+
         let knodetable = KNodeTable::new(&n1, 2, 4);
         
         // Instantiated DHT
@@ -135,7 +153,9 @@ mod tests {
         ]);
 
         // Create configuration
-        let config = Config{k: 2, concurrency: 2, ping_timeout: Duration::from_secs(10)};
+        let mut config = Config::default();
+        config.concurrency = 2;
+
         let mut knodetable = KNodeTable::new(&n1, 2, 4);
         
         // Inject initial nodes into the table

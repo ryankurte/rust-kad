@@ -18,7 +18,7 @@ use crate::id::DatabaseId;
 use crate::ConnectionManager;
 use crate::{Node, Request, Response};
 
-
+/// Mock transaction for test use
 #[derive(PartialEq, Clone, Debug)]
 pub struct MockTransaction<ID, ADDR, DATA> {
     to: Node<ID, ADDR>,
@@ -36,7 +36,8 @@ impl <ID, ADDR, DATA> MockTransaction <ID, ADDR, DATA> {
     }
 }
 
-
+/// Mock Connector models a set of transactions expected to be executed
+/// for testing use
 pub struct MockConnector<ID, ADDR, DATA> {
     transactions: Arc<Mutex<VecDeque<MockTransaction<ID, ADDR, DATA>>>>,
 }

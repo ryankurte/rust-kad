@@ -16,9 +16,12 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
 ### Components
 
 - [ ] Receive message
-  - [ ] Update appropriate k-bucket
-  - [ ] Add node if bucket not full
-  - [ ] Store pending if bucket full
+  - [x] Update appropriate k-bucket
+    - [x] Add node if bucket not full
+    - [ ] Store pending if bucket full and ping oldest (if > seen time)
+  - [x] Respond to Ping with NoResult
+  - [x] Respond to FindNodes with NodesFound
+  - [x] Respond to FindValues with NodesFound or ValuesFound
   - [ ] For new node, Send STORE RPC if own ID is closer to key than known nearby nodes
 
 - [ ] Search - common to most operations
@@ -53,5 +56,11 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
   - [ ] Re-publish values
     - [ ] STORE RPC to K nodes at defined period (hourly)
     - [ ] Unless a STORE RPC has been received in the same period
+
+### Questions
+
+- How is FindValues usually handled where there can be more than one value per ID?
+- Is there a case when STORE is valid when the origin ID is closer to the requester ID than the local ID?
+  - This seems like it could be ignored
 
 

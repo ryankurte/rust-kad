@@ -51,6 +51,10 @@ where
         self.address = address.clone();
     }
 
+    pub fn seen(&self) -> Option<Instant> {
+        self.seen
+    }
+
     pub fn set_seen(&mut self, seen: Instant) {
         self.seen = Some(seen);
     }

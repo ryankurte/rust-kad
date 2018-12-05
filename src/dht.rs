@@ -10,18 +10,14 @@
 use std::sync::{Arc, Mutex};
 use std::marker::{PhantomData};
 use std::fmt::{Debug};
-use std::collections::HashMap;
-use std::time::Duration;
+
 
 use futures::{future, Future, Stream};
-use futures::future::{Loop, loop_fn};
 
 use futures_timer::{FutureExt};
 
 use crate::{Config, Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
-
-use crate::{Request, Response, Message};
-
+use crate::{Request, Response};
 use crate::datastore::Datastore;
 use crate::search::{Search, Operation};
 
@@ -59,10 +55,6 @@ where
         future::err(DhtError::Unimplemented)
     }
 
-    /// Find a node in the node table backing the DHT
-    pub fn contains(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
-        self.table.lock().unwrap().contains(id)
-    }
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
@@ -121,6 +113,7 @@ where
         })
     }
 
+
     /// Refresh node table
     pub fn refresh(&mut self) -> impl Future<Item=(), Error=DhtError> {
         // TODO: send refresh to buckets that haven't been looked up recently
@@ -156,12 +149,9 @@ where
         }
     }
 
-    pub fn receive(&mut self, from: &Node<ID, ADDR>, req: &Request<ID, ADDR>) -> Response<ID, ADDR, DATA> {
-        // Update record for sender
-        self.table.lock().unwrap().update(from);
-
+    pub fn receive(&mut self, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> Response<ID, ADDR, DATA> {
         // Build response
-        match req {
+        let resp = match req {
             Request::Ping => {
                 Response::NoResult
             },
@@ -180,13 +170,24 @@ where
             },
             Request::Store(id, value) => {
                 // Write value to local storage
-                
+                self.datastore.lock().unwrap().store(id, value);
+                // Reply to confirm write was completed
                 Response::NoResult
             },
-        }
+        };
+
+        // Update record for sender
+        self.table.lock().unwrap().update(from);
+
+        resp
     }
 
+    #[cfg(test)]
+    pub fn contains(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
+        self.table.lock().unwrap().contains(id)
+    }
 }
+
 
 /// Stream trait implemented to allow polling on dht object
 impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE, CONN, STORE> {
@@ -198,6 +199,21 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE,
     }
 }
 
+#[cfg(test)]
+macro_rules! mock_dht {
+    ($connector: ident, $root: ident, $dht:ident) => {
+        let mut config = Config::default();
+        config.concurrency = 2;
+
+        let table = KNodeTable::new(&$root, config.k, config.hash_size);
+        
+        let store: HashMapStore<u64, u64> = HashMapStore::new();
+        
+        let mut $dht = Dht::<u64, u64, _, _, _, _>::new($root.id().clone(), $root.address().clone(), 
+                config, table, $connector.clone(), store);
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -206,53 +222,137 @@ mod tests {
     use super::*;
     use crate::datastore::{HashMapStore, Datastore};
     use crate::nodetable::{NodeTable, KNodeTable};
-    use crate::mock::{MockTransaction, MockConnector};
+    use crate::mock::{MockConnector};
 
-    #[test]
-    fn test_replies() {
+     #[test]
+    fn test_receive_common() {
+
         let root = Node::new(0, 001);
-        let friend = Node::new(1, 100);
-        let other = Node::new(2, 200);
+        let friend = Node::new(1, 002);
 
-        // Build expectations
         let connector = MockConnector::from(vec![]);
+        mock_dht!(connector, root, dht);
 
-        // Create configuration
-        let mut config = Config::default();
-        config.concurrency = 2;
+        // Check node is unknown
+        assert!(dht.table.lock().unwrap().find(friend.id()).is_none());
 
-        let mut knodetable = KNodeTable::new(&root, 2, 4);
-        knodetable.update(&other);
-        
-        
-        let mut store: HashMapStore<u64, u64> = HashMapStore::new();
-        store.store(&201, vec![1337]);
-
-        // Instantiate DHT
-        let mut dht = Dht::<u64, u64, _, _, _, _>::new(root.id().clone(), root.address().clone(), 
-                config, knodetable, connector.clone(), store);
-    
         // Ping
         assert_eq!(
+            dht.receive(&friend, &Request::Ping),
             Response::NoResult,
-            dht.receive(&friend, &Request::Ping)
         );
 
-        // FindNodes
+        // Adds node to appropriate k bucket
+        let friend1 = dht.table.lock().unwrap().find(friend.id()).unwrap();
+
+        // Second ping
         assert_eq!(
-            Response::NodesFound(vec![other.clone(), friend.clone()]), 
-            dht.receive(&friend, &Request::FindNode(other.id().clone()))
+            dht.receive(&friend, &Request::Ping),
+            Response::NoResult,
         );
-        
-        // FindValues
+
+        // Updates node in appropriate k bucket
+        let friend2 = dht.table.lock().unwrap().find(friend.id()).unwrap();
+        assert_ne!(friend1.seen(), friend2.seen());
+
+        // Check expectations are done
+        connector.done();
+    }
+
+    #[test]
+    fn test_receive_ping() {
+
+        let root = Node::new(0, 001);
+        let friend = Node::new(1, 002);
+
+        let connector = MockConnector::from(vec![]);
+        mock_dht!(connector, root, dht);
+
+        // Ping
         assert_eq!(
-            Response::ValuesFound(vec![1337]), 
-            dht.receive(&friend, &Request::FindValue(201))
+            dht.receive(&friend, &Request::Ping),
+            Response::NoResult,
         );
 
         // Check expectations are done
         connector.done();
     }
 
+    #[test]
+    fn test_receive_find_nodes() {
+
+        let root = Node::new(0, 001);
+        let friend = Node::new(1, 002);
+        let other = Node::new(2, 003);
+
+        let connector = MockConnector::from(vec![]);
+        mock_dht!(connector, root, dht);
+
+        // Add friend to known table
+        dht.table.lock().unwrap().update(&friend);
+
+        // FindNodes
+        assert_eq!(
+            dht.receive(&friend, &Request::FindNode(other.id().clone())),
+            Response::NodesFound(vec![friend.clone()]), 
+        );
+
+        // Check expectations are done
+        connector.done();
+    }
+
+        #[test]
+    fn test_receive_find_values() {
+
+        let root = Node::new(0, 001);
+        let friend = Node::new(1, 002);
+        let other = Node::new(2, 003);
+
+        let connector = MockConnector::from(vec![]);
+        mock_dht!(connector, root, dht);
+
+        // Add friend to known table
+        dht.table.lock().unwrap().update(&friend);
+
+        // FindValues (unknown, returns NodesFound)
+        assert_eq!(
+            dht.receive(&other, &Request::FindValue(201)),
+            Response::NodesFound(vec![friend.clone()]), 
+        );
+
+        // Add value to store
+        dht.datastore.lock().unwrap().insert(201, vec![1337]);
+        
+        // FindValues
+        assert_eq!(
+            dht.receive(&other, &Request::FindValue(201)),
+            Response::ValuesFound(vec![1337]), 
+        );
+
+        // Check expectations are done
+        connector.done();
+    }
+
+    #[test]
+    fn test_receive_store() {
+
+        let root = Node::new(0, 001);
+        let friend = Node::new(1, 002);
+
+        let connector = MockConnector::from(vec![]);
+        mock_dht!(connector, root, dht);
+
+        // Store
+        assert_eq!(
+            dht.receive(&friend, &Request::Store(2, vec![1234])),
+            Response::NoResult,
+        );
+
+        let v = dht.datastore.lock().unwrap().find(&2).expect("missing value");
+        assert_eq!(v, vec![1234]);
+
+        // Check expectations are done
+        connector.done();
+    }
 
 }

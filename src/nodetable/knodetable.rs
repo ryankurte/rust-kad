@@ -7,7 +7,6 @@
  */
 
 
-use std::cmp;
 use std::ops::Range;
 use std::fmt::Debug;
 use std::time::Instant;

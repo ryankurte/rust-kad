@@ -11,9 +11,9 @@ use crate::node::Node;
 #[derive(PartialEq, Clone, Debug)]
 pub enum Request<ID, VALUE> {
     Ping,
-    Store(ID, VALUE),
     FindNode(ID),
     FindValue(ID),
+    Store(ID, Vec<VALUE>),
 }
 
 #[derive(PartialEq, Clone, Debug)]

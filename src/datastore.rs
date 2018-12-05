@@ -14,7 +14,7 @@ use std::fmt::Debug;
 pub trait Datastore<ID, DATA> {
     fn new() -> Self;
     fn find(&self, id: &ID) -> Option<Vec<DATA>>;
-    fn store(&mut self, id: &ID, data: Vec<DATA>);
+    fn store(&mut self, id: &ID, data: &Vec<DATA>);
 }
 
 pub trait Updates {
@@ -44,7 +44,7 @@ where
         self.get(id).map(|d| d.clone() )
     }
 
-    fn store(&mut self, id: &ID, new: Vec<DATA>) {
+    fn store(&mut self, id: &ID, new: &Vec<DATA>) {
         match self.entry(id.clone()) {
             Entry::Vacant(v) => {
                 v.insert(new.clone()); 

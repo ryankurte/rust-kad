@@ -14,12 +14,12 @@ use std::sync::{Arc, Mutex};
 
 use futures::prelude::*;
 use futures::future;
-use futures::future::{FutureResult, Loop};
+use futures::future::{Loop};
 
 use futures_timer::{FutureExt};
 
-use crate::{Config, Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
-use crate::{Request, Response, Message};
+use crate::{Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
+use crate::{Request, Response};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -234,7 +234,6 @@ mod tests {
 
     use super::*;
     use crate::nodetable::{NodeTable, KNodeTable};
-    use crate::datastore::{HashMapStore, Datastore};
     use crate::mock::{MockTransaction, MockConnector};
 
     #[test]

@@ -64,7 +64,7 @@ pub struct Config {
     pub bucket_size: usize,
     /// Length of the hash used (in bits) 
     pub hash_size: usize,
-    /// Number of nearby nodes to consider when searching
+    /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
     /// Number of concurrent operations to be performed at once
     pub concurrency: usize,
@@ -74,7 +74,7 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Config {
-            Config{bucket_size: 16, hash_size: 512, k: 16, concurrency: 16, timeout: Duration::from_secs(3)}
+            Config{bucket_size: 16, hash_size: 512, k: 16, concurrency: 3, timeout: Duration::from_secs(3)}
     }
 }
 

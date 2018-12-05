@@ -16,10 +16,11 @@ use futures::future;
 
 use futures_timer::{FutureExt};
 
-use crate::{Config, Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
+use crate::{Config, Node, DatabaseId, NodeTable, DhtError};
 use crate::{Request, Response};
 use crate::datastore::Datastore;
 use crate::search::{Search, Operation};
+use crate::connection::{ConnectionManager, request_all};
 
 #[derive(Clone, Debug)]
 pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
@@ -43,16 +44,6 @@ where
 {
     pub fn new(id: ID, addr: ADDR, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
         Dht{id, addr, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), data: PhantomData}
-    }
-
-    /// Store a value in the DHT
-    pub fn store(&mut self, _id: ID, _data: DATA) -> impl Future<Item=(), Error=DhtError> {
-        future::err(DhtError::Unimplemented)
-    }
-
-    /// Find a value from the DHT
-    pub fn find(&mut self, _id: ID) -> impl Future<Item=DATA, Error=DhtError> {
-        future::err(DhtError::Unimplemented)
     }
 
 
@@ -99,7 +90,6 @@ where
 
     /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
-
         // Create a search instance
         let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
 
@@ -123,6 +113,51 @@ where
                 Err(DhtError::NotFound)
             }
         })
+    }
+
+
+    /// Find a value from the DHT
+    pub fn find(&mut self, target: ID) -> impl Future<Item=Vec<DATA>, Error=DhtError> {
+        // Create a search instance
+        let mut search = Search::new(target.clone(), Operation::FindValue, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
+
+        // Execute across K nearest nodes
+        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
+        search.seed(&nearest);
+
+        // Execute the recursive search
+        search.execute()
+            .then(|r| {
+                // Handle internal search errors
+                let s = match r {
+                    Err(e) => return Err(e),
+                    Ok(s) => s,
+                };
+
+                // Return data if found
+                let data = s.data();
+                if data.len() == 0 {
+                    return Err(DhtError::NotFound)
+                }
+
+                Err(DhtError::Unimplemented)
+        })
+    }
+
+
+        /// Store a value in the DHT
+    pub fn store(&mut self, target: ID, data: DATA) -> impl Future<Item=(), Error=DhtError> {
+        // Create a search instance
+        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
+
+        // Execute across K nearest nodes
+        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
+        search.seed(&nearest);
+
+        let conn = self.conn_mgr.clone();
+        let k = self.config.k;
+
+        future::err(DhtError::Unimplemented)
     }
 
 

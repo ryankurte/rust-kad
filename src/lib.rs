@@ -40,23 +40,12 @@ pub use self::search::{Search};
 pub mod dht;
 pub use self::dht::Dht;
 
+pub mod connection;
+pub use connection::ConnectionManager;
+
 #[cfg(test)]
 pub mod mock;
 
-pub trait ConnectionManager<ID, ADDR, DATA, ERR> 
-where
-    ERR: From<std::io::Error>,
-{
-    /// Send a request to a specified node, returns a future that contains
-    /// a Response on success and an Error if something went wrong.
-    ///
-    /// This interface is responsible for pairing requests/responses and
-    /// any underlying validation (ie. crypto) required.
-    /// s
-    /// Note that timeouts are created on top of this.
-    fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
-            Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>>;
-}
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Config {

@@ -18,8 +18,9 @@ use futures::future::{Loop};
 
 use futures_timer::{FutureExt};
 
-use crate::{Node, DatabaseId, NodeTable, ConnectionManager, DhtError};
+use crate::{Node, DatabaseId, NodeTable, DhtError};
 use crate::{Request, Response};
+use crate::connection::{ConnectionManager, request_all};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -104,7 +105,7 @@ where
                         .collect();
                 known.sort_by_key(|(key, _status)| ID::xor(s.target(), key) );
                 let pending = &known[0..usize::min(known.len(), k)].iter()
-                        .find(|(_key, status)| *status == RequestState::Pending);
+                        .find(|(_key, status)| *status == RequestState::Pending );
                 if pending.is_none() {
                     println!("[search] break, found k closest nodes");
                     return Loop::Break(s);
@@ -124,10 +125,19 @@ where
         })
     }
 
-    /// Fetch pending nodes that're known.
+    /// Fetch pending known nodes ordered by distance
     fn pending(&self) -> Vec<Node<ID, ADDR>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Pending )
+                .map(|(_k, (n, _s))| n.clone() ).collect();
+        chunk.sort_by_key(|n| ID::xor(&self.target, n.id()) );
+        chunk
+    }
+
+    /// Fetch completed known nodes ordered by distance
+    fn completed(&self) -> Vec<Node<ID, ADDR>> {
+        let mut chunk: Vec<_> = self.known.iter()
+                .filter(|(_k, (_n, s))| *s == RequestState::Complete )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
         chunk.sort_by_key(|n| ID::xor(&self.target, n.id()) );
         chunk
@@ -157,7 +167,7 @@ where
         };
 
         // Send requests and handle responses
-        self.request(&req, chunk)
+        request_all(self.conn.clone(), &req, chunk)
         .map(move |res| {
             for (n, v) in &res {
                 // Handle received responses
@@ -199,34 +209,6 @@ where
         for n in known {
             self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
         }
-    }
-
-    /// Send a request to a slice of nodes and collect the responses
-    fn request(&self, req: &Request<ID, ADDR>, nodes: &[Node<ID, ADDR>]) -> 
-            impl Future<Item=Vec<(Node<ID, ADDR>, Option<Response<ID, ADDR, DATA>>)>, Error=DhtError> {
-        let mut queries = Vec::new();
-
-        for n in nodes {
-            println!("Sending request: '{:?}' to: '{:?}'", req, n.id());
-            let n1 = n.clone();
-            let n2 = n.clone();
-            let q = self.conn.clone().request(n, req.clone())
-                .timeout(Duration::from_secs(1))
-                .map(|v| {
-                    println!("Response: '{:?}' from: '{:?}'", v, n1.id());
-                    (n1, Some(v)) 
-                })
-                .or_else(|e| {
-                    if e == DhtError::Timeout {
-                        Ok((n2, None))
-                    } else {
-                        Err(e)
-                    }
-                } );
-            queries.push(q);
-        }
-
-        future::join_all(queries)
     }
 }
 

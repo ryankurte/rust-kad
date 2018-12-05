@@ -25,20 +25,20 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
   - [ ] For new node, Send STORE RPC if own ID is closer to key than known nearby nodes
 
 - [ ] Search - common to most operations
-  - [ ] Select alpha closest nodes
-  - [ ] Send RPCs to selected subset of nodes
+  - [x] Select alpha closest nodes
+  - [x] Send RPCs to selected subset of nodes
   - [ ] If no suitable responses, expand to k closest nodes
-  - [ ] Recurse until responses received from k closest nodes
+  - [x] Recurse until responses received from k closest nodes
 
 - [ ] Find Node
-  - [ ] Search using FIND_NODE RPC
+  - [x] Search using FIND_NODE RPC
 
 - [ ] Find Value
-  - [ ] Search using FIND_VALUE RPC
+  - [x] Search using FIND_VALUE RPC
   - [ ] Once values returned, store (k, v) pair at the closest node observed that did not return the value
 
 - [ ] Store Value
-  - [ ] Search using FIND_NODE RPC
+  - [x] Search using FIND_NODE RPC
   - [ ] Send STORE RPC to k closest nodes
 
 - [ ] Connect

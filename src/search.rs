@@ -41,6 +41,7 @@ pub enum RequestState {
 pub struct Search <ID, ADDR, DATA, TABLE, CONN, DONE> {
     target: ID,
     op: Operation,
+    k: usize,
     concurrency: usize,
     depth: usize,
     done: DONE,
@@ -62,12 +63,12 @@ where
     TABLE: NodeTable<ID, ADDR> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
 {
-    pub fn new(target: ID, op: Operation, depth: usize, concurrency: usize, table: Arc<Mutex<TABLE>>, conn: CONN, done: DONE) 
+    pub fn new(target: ID, op: Operation, k: usize, depth: usize, concurrency: usize, table: Arc<Mutex<TABLE>>, conn: CONN, done: DONE) 
         -> Search<ID, ADDR, DATA, TABLE, CONN, DONE> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
-        Search{target, op, depth, concurrency, known, done, table, data, conn}
+        Search{target, op, k, depth, concurrency, known, done, table, data, conn}
     }
 
     /// Fetch a pointer to the search target ID
@@ -90,20 +91,36 @@ where
         // Execute recursive search
         future::loop_fn(self, |s1| {
             s1.recurse().map(|mut s| {
+                let concurrency = s.concurrency;
+                let k = s.k;
+
                 // Exit if search is complete
                 if (s.done)(&s.target, &s.known, &s.data) {
-                    println!("Search done!");
+                    println!("[search] break, done");
                     return Loop::Break(s);
                 }
                 
                 // Exit at max recursive depth
                 if s.depth == 0 {
+                    println!("[search] break, reached max recursive depth");
+                    return Loop::Break(s);
+                }
+
+                // Exit once we've got no more pending in the first k closest known nodes
+                let mut known: Vec<_> = s.known.iter()
+                        .map(|(key, (_node, status))| (key.clone(), status.clone()) )
+                        .collect();
+                known.sort_by_key(|(key, _status)| ID::xor(s.target(), key) );
+                let pending = &known[0..usize::min(known.len(), k)].iter()
+                        .find(|(_key, status)| *status == RequestState::Pending);
+                if pending.is_none() {
+                    println!("[search] break, found k closest nodes");
                     return Loop::Break(s);
                 }
 
                 // If no nodes are pending, add another set of nearest nodes
                 let pending = s.pending().len();
-                let concurrency = s.concurrency;
+                
                 if pending == 0 {
                     let nearest: Vec<_> = s.table.lock().unwrap().nearest(s.target(), concurrency..concurrency*2);
                     s.seed(&nearest);
@@ -261,7 +278,7 @@ mod tests {
 
         // Create search object
         let table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
-        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, table.clone(), connector.clone(), |t, k, _| { k.get(t).is_some() });
+        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, 2, table.clone(), connector.clone(), |t, k, _| { k.get(t).is_some() });
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

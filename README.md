@@ -41,9 +41,9 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
   - [ ] Search using FIND_NODE RPC
   - [ ] Send STORE RPC to k closest nodes
 
-- [ ] Join
-  - [ ] Insert known node into appropriate k-bucket
-  - [ ] Perform Find Node lookup on own ID
+- [ ] Connect
+  - [x] Insert known node into appropriate k-bucket
+  - [x] Perform Find Node lookup on own ID
   - [ ] Refresh all k-buckets further than the closest neighbor
 
 - [ ] Maintanence

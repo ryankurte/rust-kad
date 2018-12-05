@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::marker::{PhantomData};
 use std::fmt::{Debug};
 
-
-use futures::{future, Future, Stream};
+use futures::prelude::*;
+use futures::future;
 
 use futures_timer::{FutureExt};
 
@@ -58,42 +58,55 @@ where
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
-    pub fn connect(&mut self, target: Node<ID, ADDR>) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> {
+    pub fn connect(&mut self, target: Node<ID, ADDR>) -> impl Future<Item=(), Error=DhtError> + '_ {
         let table = self.table.clone();
+        let conn_mgr = self.conn_mgr.clone();
+        let id = self.id.clone();
+
         // Launch request
         self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone()))
-        .timeout(self.config.timeout)
-        .map(move |resp| {
+            .timeout(self.config.timeout)
+            .and_then(move |resp| {
+                // Check for correct response
+                match resp {
+                    Response::NodesFound(nodes) => future::ok((target, nodes)),
+                    _ => {
+                        println!("[DHT connect] invalid response from: {:?}", target.id());
+                        future::err(DhtError::InvalidResponse)
+                    },
+                }
+            }).and_then(move |(target, found)| {
+                // Add responding target to table
+                // This only occurs after a response as there's no point adding a non-responding
+                // node to the DHT
+                table.lock().unwrap().update(&target);
 
-            // Handle response
-            match resp {
-                Response::NodesFound(nodes) => {
-                    println!("[DHT connect] NodesFound from: {:?}", target.id());
+                // Perform FIND_NODE on own id with responded nodes to register self
+                // TODO: how many levels of recursion should be used?
+                let mut search = Search::new(id, Operation::FindNode, self.config.max_recursion, self.config.concurrency, table, conn_mgr, |_i, _t, _k| { true });
+                search.seed(&found);
 
-                    // Update responding node
-                    table.lock().unwrap().update(&target);
+                search.execute()
+            }).and_then(|_s| {
+                // We don't care about the search result here
+                // Generally it should be that discovered nodes > 0, however not for the first bootstrapping...
 
-                    // Process responses
-                    for n in nodes {
-                        table.lock().unwrap().update(&n);
-                    }
-                },
-                _ => {
-                    println!("[DHT connect] invalid response from: {:?}", target.id());
-                    //return future::err(DhtError::InvalidResponse)
-                },
-            }
-           
-            // Return connected node
-            target
-        })
+                // TODO: Refresh all k-buckets further away than our nearest neighbor
+
+                future::ok(())
+            })
     }
+
 
     /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
 
         // Create a search instance
-        let search = Search::new(target.clone(), Operation::FindNode, 2, 2, |t, k, _| { k.get(t).is_some() }, self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone(), |t, k, _| { k.get(t).is_some() });
+
+        // Execute across K nearest nodes
+        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
+        search.seed(&nearest);
 
         // Execute the recursive search
         search.execute().then(|r| {
@@ -126,29 +139,7 @@ where
         future::err(DhtError::Unimplemented)
     }
 
-
-    fn update_node(&mut self, node: Node<ID, ADDR>) {
-        let table = self.table.clone();
-        let mut unlocked = table.lock().unwrap();
-
-        // Update k-bucket for responder
-        if !unlocked.update(&node) {
-            // If the bucket is full and does not contain the node to be updated
-            if let Some(oldest) = unlocked.peek_oldest(node.id()) {
-                // Ping oldest
-                self.conn_mgr.request(&oldest, Request::Ping).timeout(self.config.timeout)
-                .map(|_message| {
-                    // On successful ping, ignore new node
-                    table.lock().unwrap().update(&oldest);
-                    // TODO: should the response to a ping be handled?
-                }).map_err(|_err| {
-                    // On timeout, replace oldest node with new
-                    table.lock().unwrap().replace(&oldest, &node);
-                }).wait().unwrap();
-            }
-        }
-    }
-
+    /// Receive and reply to requests
     pub fn receive(&mut self, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> Response<ID, ADDR, DATA> {
         // Build response
         let resp = match req {
@@ -199,21 +190,23 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE,
     }
 }
 
-#[cfg(test)]
-macro_rules! mock_dht {
+/// Helper macro to setup DHT instances for testing
+#[cfg(test)] #[macro_export]
+#[cfg(test)] macro_rules! mock_dht {
     ($connector: ident, $root: ident, $dht:ident) => {
         let mut config = Config::default();
         config.concurrency = 2;
-
-        let table = KNodeTable::new(&$root, config.k, config.hash_size);
+        mock_dht!($connector, $root, $dht, config);
+    };
+    ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
+        let table = KNodeTable::new(&$root, $config.k, $config.hash_size);
         
         let store: HashMapStore<u64, u64> = HashMapStore::new();
         
         let mut $dht = Dht::<u64, u64, _, _, _, _>::new($root.id().clone(), $root.address().clone(), 
-                config, table, $connector.clone(), store);
+                $config, table, $connector.clone(), store);
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -222,9 +215,11 @@ mod tests {
     use super::*;
     use crate::datastore::{HashMapStore, Datastore};
     use crate::nodetable::{NodeTable, KNodeTable};
-    use crate::mock::{MockConnector};
 
-     #[test]
+    #[macro_use]
+    use crate::mock::*;
+
+    #[test]
     fn test_receive_common() {
 
         let root = Node::new(0, 001);

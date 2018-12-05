@@ -38,7 +38,7 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <ID, ADDR, DATA, DONE, TABLE, CONN> {
+pub struct Search <ID, ADDR, DATA, TABLE, CONN, DONE> {
     target: ID,
     op: Operation,
     concurrency: usize,
@@ -53,7 +53,7 @@ pub struct Search <ID, ADDR, DATA, DONE, TABLE, CONN> {
 pub type KnownMap<ID, ADDR> = HashMap<ID, (Node<ID, ADDR>, RequestState)>;
 pub type ValueMap<ID, DATA> = HashMap<ID, Vec<DATA>>;
 
-impl <ID, ADDR, DATA, DONE, TABLE, CONN> Search <ID, ADDR, DATA, DONE, TABLE, CONN> 
+impl <ID, ADDR, DATA, TABLE, CONN, DONE> Search <ID, ADDR, DATA, TABLE, CONN, DONE> 
 where
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
@@ -62,8 +62,8 @@ where
     TABLE: NodeTable<ID, ADDR> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
 {
-    pub fn new(target: ID, op: Operation, depth: usize, concurrency: usize, done: DONE, table: Arc<Mutex<TABLE>>, conn: CONN) 
-        -> Search<ID, ADDR, DATA, DONE, TABLE, CONN> {
+    pub fn new(target: ID, op: Operation, depth: usize, concurrency: usize, table: Arc<Mutex<TABLE>>, conn: CONN, done: DONE) 
+        -> Search<ID, ADDR, DATA, TABLE, CONN, DONE> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
@@ -85,14 +85,8 @@ where
         self.data.clone()
     }
 
-    pub fn execute(mut self) -> impl Future<Item=Self, Error=DhtError> 
+    pub fn execute(self) -> impl Future<Item=Self, Error=DhtError> 
     {
-        // Find nearest nodes
-        let nearest: Vec<_> = self.table.lock().unwrap().nearest(&self.target, 0..self.concurrency);
-        self.seed(&nearest);
-
-        println!("Executing search for ID: '{:?}' over nodes: {:?}", self.target, nearest);
-
         // Execute recursive search
         future::loop_fn(self, |s1| {
             s1.recurse().map(|mut s| {
@@ -192,7 +186,7 @@ where
 
 
     /// Seed the search with nearest nodes
-    fn seed(&mut self, known: &[Node<ID, ADDR>]) {
+    pub fn seed(&mut self, known: &[Node<ID, ADDR>]) {
         for n in known {
             self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
         }
@@ -266,8 +260,8 @@ mod tests {
         ]);
 
         // Create search object
-        let mut table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
-        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, |t, k, _| { k.get(t).is_some() }, table.clone(), connector.clone());
+        let table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
+        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, table.clone(), connector.clone(), |t, k, _| { k.get(t).is_some() });
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

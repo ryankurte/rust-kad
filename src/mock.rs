@@ -18,6 +18,7 @@ use crate::id::DatabaseId;
 use crate::ConnectionManager;
 use crate::{Node, Request, Response};
 
+
 /// Mock transaction for test use
 #[derive(PartialEq, Clone, Debug)]
 pub struct MockTransaction<ID, ADDR, DATA> {

@@ -60,21 +60,27 @@ where
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Config {
-    /// Size of buckets in KNodeTable
-    pub bucket_size: usize,
     /// Length of the hash used (in bits) 
     pub hash_size: usize,
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
-    /// Number of concurrent operations to be performed at once
+    /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
+    /// Maximum recursion depth for searches
+    pub max_recursion: usize,
     /// Timeout period for network operations 
     pub timeout: Duration,
 }
 
 impl Default for Config {
     fn default() -> Config {
-            Config{bucket_size: 16, hash_size: 512, k: 16, concurrency: 3, timeout: Duration::from_secs(3)}
+            Config {
+                hash_size: 512, 
+                k: 20, 
+                concurrency: 3,
+                max_recursion: 10,
+                timeout: Duration::from_secs(3)
+            }
     }
 }
 
@@ -84,7 +90,7 @@ mod tests {
     use std::clone::Clone;
 
     use super::*;
-    use crate::datastore::{HashMapStore, Datastore};
+    use crate::datastore::{HashMapStore};
     use crate::mock::{MockTransaction, MockConnector};
 
     #[test]
@@ -93,7 +99,6 @@ mod tests {
         let n2 = Node::new(0b0010, 200);
         let n3 = Node::new(0b0011, 300);
         let n4 = Node::new(0b1000, 400);
-        let n5 = Node::new(0b1001, 500);
 
         // Build expectations
         let connector = MockConnector::from(vec![
@@ -101,13 +106,11 @@ mod tests {
             MockTransaction::<_, _, u64>::new(n2.clone(), Request::FindNode(n1.id().clone()), 
                     n1.clone(), Response::NodesFound(vec![n3.clone(), n4.clone()]), None),
 
-            // TODO: bootsrap to found nodes
-            //MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n1.id().clone()), 
-            //        n1.clone(), Response::NodesFound(vec![]), None),
-            //MockTransaction::<_, _, u64>::new(n4.clone(), Request::FindNode(n1.id().clone()), 
-            //        n1.clone(), Response::NodesFound(vec![]), None),
-
-            // TODO: search for nodes for value
+            //bootsrap to found nodes
+            MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n1.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![]), None),
+            MockTransaction::<_, _, u64>::new(n4.clone(), Request::FindNode(n1.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![]), None),
         ]);
 
         // Create configuration
@@ -141,7 +144,6 @@ mod tests {
         let n2 = Node::new(0b0010, 200);
         let n3 = Node::new(0b0011, 300);
         let n4 = Node::new(0b1000, 400);
-        let n5 = Node::new(0b1001, 500);
 
         // Build expectations
         let connector = MockConnector::from(vec![
@@ -168,8 +170,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform search
-        let res = dht.lookup(n4.id().clone()).wait().unwrap();
-
+        dht.lookup(n4.id().clone()).wait().expect("lookup failed");
 
         connector.done();
     }

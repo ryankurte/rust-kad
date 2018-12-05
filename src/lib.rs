@@ -140,10 +140,11 @@ mod tests {
 
    #[test]
     fn test_lookup() {
-        let n1 = Node::new(0b0001, 100);
-        let n2 = Node::new(0b0010, 200);
-        let n3 = Node::new(0b0011, 300);
-        let n4 = Node::new(0b1000, 400);
+        let n1 = Node::new(0b1000, 100);
+        let n2 = Node::new(0b0011, 200);
+        let n3 = Node::new(0b0010, 300);
+        let n4 = Node::new(0b1001, 400);
+        let n5 = Node::new(0b1010, 400);
 
         // Build expectations
         let connector = MockConnector::from(vec![
@@ -151,7 +152,13 @@ mod tests {
             MockTransaction::<_, _, u64>::new(n2.clone(), Request::FindNode(n4.id().clone()), 
                     n1.clone(), Response::NodesFound(vec![n4.clone()]), None),
             MockTransaction::<_, _, u64>::new(n3.clone(), Request::FindNode(n4.id().clone()), 
-                    n1.clone(), Response::NodesFound(vec![n3.clone()]), None),
+                    n1.clone(), Response::NodesFound(vec![n5.clone()]), None),
+
+            // Second iteration
+            MockTransaction::<_, _, u64>::new(n4.clone(), Request::FindNode(n4.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![]), None),
+            MockTransaction::<_, _, u64>::new(n5.clone(), Request::FindNode(n4.id().clone()), 
+                    n1.clone(), Response::NodesFound(vec![]), None),
         ]);
 
         // Create configuration

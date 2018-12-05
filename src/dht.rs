@@ -82,8 +82,7 @@ where
                 table.lock().unwrap().update(&target);
 
                 // Perform FIND_NODE on own id with responded nodes to register self
-                // TODO: how many levels of recursion should be used?
-                let mut search = Search::new(id, Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, table, conn_mgr, |_i, _t, _k| { true });
+                let mut search = Search::new(id, Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, table, conn_mgr);
                 search.seed(&found);
 
                 search.execute()
@@ -102,7 +101,7 @@ where
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
 
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone(), |t, k, _| { k.get(t).is_some() });
+        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);

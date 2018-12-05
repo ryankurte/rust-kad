@@ -38,13 +38,12 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <ID, ADDR, DATA, TABLE, CONN, DONE> {
+pub struct Search <ID, ADDR, DATA, TABLE, CONN> {
     target: ID,
     op: Operation,
     k: usize,
     concurrency: usize,
     depth: usize,
-    done: DONE,
     table: Arc<Mutex<TABLE>>,
     known: HashMap<ID, (Node<ID, ADDR>, RequestState)>,
     data: HashMap<ID, Vec<DATA>>,
@@ -54,21 +53,20 @@ pub struct Search <ID, ADDR, DATA, TABLE, CONN, DONE> {
 pub type KnownMap<ID, ADDR> = HashMap<ID, (Node<ID, ADDR>, RequestState)>;
 pub type ValueMap<ID, DATA> = HashMap<ID, Vec<DATA>>;
 
-impl <ID, ADDR, DATA, TABLE, CONN, DONE> Search <ID, ADDR, DATA, TABLE, CONN, DONE> 
+impl <ID, ADDR, DATA, TABLE, CONN> Search <ID, ADDR, DATA, TABLE, CONN> 
 where
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
     DATA: Clone + Debug + 'static,
-    DONE: Fn(&ID, &KnownMap<ID, ADDR>, &ValueMap<ID, DATA>) -> bool + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
 {
-    pub fn new(target: ID, op: Operation, k: usize, depth: usize, concurrency: usize, table: Arc<Mutex<TABLE>>, conn: CONN, done: DONE) 
-        -> Search<ID, ADDR, DATA, TABLE, CONN, DONE> {
+    pub fn new(target: ID, op: Operation, k: usize, depth: usize, concurrency: usize, table: Arc<Mutex<TABLE>>, conn: CONN) 
+        -> Search<ID, ADDR, DATA, TABLE, CONN> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
-        Search{target, op, k, depth, concurrency, known, done, table, data, conn}
+        Search{target, op, k, depth, concurrency, known, table, data, conn}
     }
 
     /// Fetch a pointer to the search target ID
@@ -93,12 +91,6 @@ where
             s1.recurse().map(|mut s| {
                 let concurrency = s.concurrency;
                 let k = s.k;
-
-                // Exit if search is complete
-                if (s.done)(&s.target, &s.known, &s.data) {
-                    println!("[search] break, done");
-                    return Loop::Break(s);
-                }
                 
                 // Exit at max recursive depth
                 if s.depth == 0 {
@@ -272,13 +264,12 @@ mod tests {
             MockTransaction::<_, _, u64>::new(nodes[2].clone(), Request::FindNode(target.id().clone()), 
                     root.clone(), Response::NodesFound(vec![target.clone()]), None),
             MockTransaction::<_, _, u64>::new(nodes[3].clone(), Request::FindNode(target.id().clone()), 
-                    root.clone(), Response::NodesFound(vec![nodes[4].clone()]), None),
-            
+                    root.clone(), Response::NodesFound(vec![nodes[4].clone()]), None),        
         ]);
 
         // Create search object
         let table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
-        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, 2, table.clone(), connector.clone(), |t, k, _| { k.get(t).is_some() });
+        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, 2, table.clone(), connector.clone());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

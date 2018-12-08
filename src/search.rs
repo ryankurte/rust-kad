@@ -9,17 +9,16 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::time::Duration;
+use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use futures::prelude::*;
 use futures::future;
 use futures::future::{Loop};
 
-use futures_timer::{FutureExt};
-
 use crate::{Node, DatabaseId, NodeTable, DhtError};
-use crate::{Request, Response};
+use crate::Config;
+use crate::message::{Request, Response};
 use crate::connection::{ConnectionManager, request_all};
 
 /// Search describes DHT search operations
@@ -42,8 +41,7 @@ pub enum RequestState {
 pub struct Search <ID, ADDR, DATA, TABLE, CONN> {
     target: ID,
     op: Operation,
-    k: usize,
-    concurrency: usize,
+    config: Config,
     depth: usize,
     table: Arc<Mutex<TABLE>>,
     known: HashMap<ID, (Node<ID, ADDR>, RequestState)>,
@@ -62,12 +60,14 @@ where
     TABLE: NodeTable<ID, ADDR> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
 {
-    pub fn new(target: ID, op: Operation, k: usize, depth: usize, concurrency: usize, table: Arc<Mutex<TABLE>>, conn: CONN) 
+    pub fn new(target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN) 
         -> Search<ID, ADDR, DATA, TABLE, CONN> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
-        Search{target, op, k, depth, concurrency, known, table, data, conn}
+        let depth = config.max_recursion;
+
+        Search{target, op, config, depth, known, table, data, conn}
     }
 
     /// Fetch a pointer to the search target ID
@@ -90,8 +90,8 @@ where
         // Execute recursive search
         future::loop_fn(self, |s1| {
             s1.recurse().map(|mut s| {
-                let concurrency = s.concurrency;
-                let k = s.k;
+                let concurrency = s.config.concurrency;
+                let k = s.config.k;
                 
                 // Exit at max recursive depth
                 if s.depth == 0 {
@@ -135,12 +135,18 @@ where
     }
 
     /// Fetch completed known nodes ordered by distance
-    fn completed(&self) -> Vec<Node<ID, ADDR>> {
+    pub fn completed(&self, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Complete )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
         chunk.sort_by_key(|n| ID::xor(&self.target, n.id()) );
-        chunk
+        
+        // Limit to count or total found
+        let mut range = range;
+        range.end = usize::min(chunk.len(), range.end);
+
+        let filtered = chunk.drain(range).collect();
+        filtered
     }
 
     /// Execute a single search round.
@@ -152,9 +158,10 @@ where
 
         // Fetch a section of known nodes to process
         let pending = self.pending();
-        let chunk = &pending[0..usize::min(self.concurrency, pending.len())];
+        let chunk = &pending[0..usize::min(self.config.concurrency, pending.len())];
 
-        println!("Executing search iteration {:?} over: {:?}", self.depth, chunk);
+        println!("[search] iteration {:?}/{:?} over: {:?}", 
+            self.config.max_recursion - self.depth, self.config.max_recursion, chunk);
 
         // Update nodes in the chunk to active state
         for target in chunk {
@@ -167,7 +174,7 @@ where
         };
 
         // Send requests and handle responses
-        request_all(self.conn.clone(), &req, chunk)
+        request_all(self.conn.clone(), &req, chunk, self.config.timeout)
         .map(move |res| {
             for (n, v) in &res {
                 // Handle received responses
@@ -250,8 +257,11 @@ mod tests {
         ]);
 
         // Create search object
+        let mut config = Config::default();
+        config.k = 2;
+
         let table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
-        let mut s = Search::new(target.id().clone(), Operation::FindNode, 2, 2, 2, table.clone(), connector.clone());
+        let mut s = Search::new(target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

@@ -97,9 +97,7 @@ where
 
         // Limit to count or total found
         let mut range = range;
-        if range.end > count {
-            range.end = count;
-        }
+        range.end = usize::min(count, range.end);
 
         let limited = all.drain(range).collect();
         limited

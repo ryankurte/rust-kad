@@ -74,7 +74,7 @@ where
                 table.lock().unwrap().update(&target);
 
                 // Perform FIND_NODE on own id with responded nodes to register self
-                let mut search = Search::new(id, Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, table, conn_mgr);
+                let mut search = Search::new(id, Operation::FindNode, self.config.clone(), table, conn_mgr);
                 search.seed(&found);
 
                 search.execute()
@@ -92,7 +92,7 @@ where
     /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
@@ -120,7 +120,7 @@ where
     /// Find a value from the DHT
     pub fn find(&mut self, target: ID) -> impl Future<Item=HashMap<ID, Vec<DATA>>, Error=DhtError> {
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindValue, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
@@ -128,34 +128,34 @@ where
 
         // Execute the recursive search
         search.execute()
-            .then(|r| {
-                // Handle internal search errors
-                let s = match r {
-                    Err(e) => return Err(e),
-                    Ok(s) => s,
-                };
+        .then(|r| {
+            // Handle internal search errors
+            let s = match r {
+                Err(e) => return Err(e),
+                Ok(s) => s,
+            };
 
-                // Return data if found
-                let data = s.data();
-                if data.len() == 0 {
-                    return Err(DhtError::NotFound)
-                }
+            // Return data if found
+            let data = s.data();
+            if data.len() == 0 {
+                return Err(DhtError::NotFound)
+            }
 
-                // TODO: MapReduce data? Should that happen externally?
+            // TODO: MapReduce data? Should that happen externally?
 
-                // TODO: Send updates to any peers that returned replaced data?
+            // TODO: Send updates to any peers that returned replaced data?
 
-                // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
+            // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
 
-                Ok(data)
+            Ok(data)
         })
     }
 
 
     /// Store a value in the DHT
-    pub fn store(&mut self, target: ID, data: DATA) -> impl Future<Item=(), Error=DhtError> {
+    pub fn store(&mut self, target: ID, data: Vec<DATA>) -> impl Future<Item=(), Error=DhtError> {
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
@@ -163,10 +163,17 @@ where
 
         let conn = self.conn_mgr.clone();
         let k = self.config.k;
+        let timeout = self.config.timeout;
 
+        // Search for K closest nodes to value
         search.execute()
-            .then(|r| {
-
+        .and_then(move |r| {
+            // Send store request to found nodes
+            let known = r.completed(0..k);
+            println!("sending store to: {:?}", known);
+            request_all(conn, &Request::Store(target, data), &known, timeout)
+        }).and_then(|_| {
+            // TODO: should we process success here?
             Ok(())
         })
     }
@@ -261,7 +268,6 @@ mod tests {
     use crate::datastore::{HashMapStore, Datastore};
     use crate::nodetable::{NodeTable, KNodeTable};
 
-    #[macro_use]
     use crate::mock::*;
 
     #[test]
@@ -361,7 +367,7 @@ mod tests {
         );
 
         // Add value to store
-        dht.datastore.lock().unwrap().insert(201, vec![1337]);
+        dht.datastore.lock().unwrap().store(&201, &vec![1337]);
         
         // FindValues
         assert_eq!(

@@ -1,51 +1,37 @@
-/**
- * rust-kad
- * Generic datastore definitions and implementations
- *
- * https://github.com/ryankurte/rust-kad
- * Copyright 2018 Ryan Kurte
- */
-
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
-pub trait Datastore<ID, DATA> {
-    fn new() -> Self;
-    fn find(&self, id: &ID) -> Option<Vec<DATA>>;
-    fn store(&mut self, id: &ID, data: &Vec<DATA>);
+use crate::id::DatabaseId;
+use crate::datastore::{Datastore, Updates};
+
+pub struct HashMapStore<ID, DATA> {
+    data: HashMap<ID, Vec<DATA>>   
 }
 
-pub trait Updates {
-    fn is_update(&self, other: &Self) -> bool;
-}
-
-#[cfg(test)]
-impl Updates for u64 {
-    fn is_update(&self, other: &Self) -> bool {
-        self > other
+impl <ID, DATA> HashMapStore<ID, DATA>
+where
+    ID: DatabaseId + Clone + Debug + std::cmp::Eq + std::hash::Hash,
+    DATA: Updates + PartialEq + Clone + Debug,
+{
+    pub fn new() -> HashMapStore<ID, DATA> {
+        HashMapStore{ data: HashMap::new() }
     }
 }
-
-pub type HashMapStore<ID, DATA> = HashMap<ID, Vec<DATA>>;
-
 
 impl <ID, DATA> Datastore<ID, DATA> for HashMapStore<ID, DATA>
 where
-    ID: Clone + Debug + std::cmp::Eq + std::hash::Hash,
+    ID: DatabaseId + Clone + Debug + std::cmp::Eq + std::hash::Hash,
     DATA: Updates + PartialEq + Clone + Debug,
 {
-    fn new() -> HashMap<ID, Vec<DATA>> {
-        HashMap::new()
-    }
-
+    
     fn find(&self, id: &ID) -> Option<Vec<DATA>> {
-        self.get(id).map(|d| d.clone() )
+        self.data.get(id).map(|d| d.clone() )
     }
 
     fn store(&mut self, id: &ID, new: &Vec<DATA>) {
-        match self.entry(id.clone()) {
+        match self.data.entry(id.clone()) {
             Entry::Vacant(v) => {
                 v.insert(new.clone()); 
             },
@@ -56,6 +42,7 @@ where
         };
     }
 }
+
 
 fn merge<DATA>(original: &Vec<DATA>, new: &Vec<DATA>) -> Vec<DATA> 
 where

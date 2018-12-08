@@ -23,14 +23,14 @@ use crate::{Node, Request, Response};
 #[derive(PartialEq, Clone, Debug)]
 pub struct MockTransaction<ID, ADDR, DATA> {
     to: Node<ID, ADDR>,
-    request: Request<ID, ADDR>,
+    request: Request<ID, DATA>,
     from: Node<ID, ADDR>,
     response: Response<ID, ADDR, DATA>,
     delay: Option<Duration>,
 }
 
 impl <ID, ADDR, DATA> MockTransaction <ID, ADDR, DATA> {
-    pub fn new(to: Node<ID, ADDR>, request: Request<ID, ADDR>, from: Node<ID, ADDR>, 
+    pub fn new(to: Node<ID, ADDR>, request: Request<ID, DATA>, from: Node<ID, ADDR>, 
                 response: Response<ID, ADDR, DATA>, delay: Option<Duration>)
                     -> MockTransaction<ID, ADDR, DATA> {
         MockTransaction{to, request, from, response, delay}
@@ -79,7 +79,7 @@ where
     DATA: Debug + Copy + Clone + PartialEq + 'static,
     ERR: From<std::io::Error> + 'static,
 {
-    fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
+    fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, DATA>) -> 
             Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>> {
         
         let transaction = self.transactions.lock().unwrap().pop_front().expect("no more transactions available");

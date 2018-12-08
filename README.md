@@ -32,14 +32,16 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
 
 - [ ] Find Node
   - [x] Search using FIND_NODE RPC
+  - [x] Return node
 
 - [ ] Find Value
   - [x] Search using FIND_VALUE RPC
+  - [x] Collect values
   - [ ] Once values returned, store (k, v) pair at the closest node observed that did not return the value
 
 - [ ] Store Value
   - [x] Search using FIND_NODE RPC
-  - [ ] Send STORE RPC to k closest nodes
+  - [x] Send STORE RPC to k closest nodes
 
 - [ ] Connect
   - [x] Insert known node into appropriate k-bucket

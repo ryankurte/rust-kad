@@ -7,6 +7,11 @@ use futures::future;
 
 use futures_timer::{FutureExt};
 
+
+#[cfg(tokio)]
+pub mod tokio;
+
+
 use crate::{DatabaseId, DhtError};
 use crate::node::Node;
 use crate::message::{Request, Response};
@@ -22,7 +27,7 @@ where
     /// any underlying validation (ie. crypto) required.
     /// s
     /// Note that timeouts are created on top of this.
-    fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, ADDR>) -> 
+    fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, DATA>) -> 
             Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>>;
 }
 
@@ -30,7 +35,7 @@ where
 /// Send a request to a slice of nodes and collect the responses.
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
-pub fn request_all<ID, ADDR, DATA, CONN>(conn: CONN, req: &Request<ID, ADDR>, nodes: &[Node<ID, ADDR>]) -> 
+pub fn request_all<ID, ADDR, DATA, CONN>(conn: CONN, req: &Request<ID, DATA>, nodes: &[Node<ID, ADDR>], timeout: Duration) -> 
         impl Future<Item=Vec<(Node<ID, ADDR>, Option<Response<ID, ADDR, DATA>>)>, Error=DhtError> 
 where
     ID: DatabaseId + Clone + Debug + 'static,
@@ -46,7 +51,7 @@ where
         let n2 = n.clone();
         let mut c = conn.clone();
         let q = c.request(n, req.clone())
-            .timeout(Duration::from_secs(1))
+            .timeout(timeout)
             .map(|v| {
                 println!("Response: '{:?}' from: '{:?}'", v, n1.id());
                 (n1, Some(v)) 

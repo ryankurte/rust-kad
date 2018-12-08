@@ -10,6 +10,7 @@
 use std::sync::{Arc, Mutex};
 use std::marker::{PhantomData};
 use std::fmt::{Debug};
+use std::collections::HashMap;
 
 use futures::prelude::*;
 use futures::future;
@@ -117,7 +118,7 @@ where
 
 
     /// Find a value from the DHT
-    pub fn find(&mut self, target: ID) -> impl Future<Item=Vec<DATA>, Error=DhtError> {
+    pub fn find(&mut self, target: ID) -> impl Future<Item=HashMap<ID, Vec<DATA>>, Error=DhtError> {
         // Create a search instance
         let mut search = Search::new(target.clone(), Operation::FindValue, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
 
@@ -140,12 +141,18 @@ where
                     return Err(DhtError::NotFound)
                 }
 
-                Err(DhtError::Unimplemented)
+                // TODO: MapReduce data? Should that happen externally?
+
+                // TODO: Send updates to any peers that returned replaced data?
+
+                // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
+
+                Ok(data)
         })
     }
 
 
-        /// Store a value in the DHT
+    /// Store a value in the DHT
     pub fn store(&mut self, target: ID, data: DATA) -> impl Future<Item=(), Error=DhtError> {
         // Create a search instance
         let mut search = Search::new(target.clone(), Operation::FindNode, self.config.k, self.config.max_recursion, self.config.concurrency, self.table.clone(), self.conn_mgr.clone());
@@ -157,7 +164,11 @@ where
         let conn = self.conn_mgr.clone();
         let k = self.config.k;
 
-        future::err(DhtError::Unimplemented)
+        search.execute()
+            .then(|r| {
+
+            Ok(())
+        })
     }
 
 

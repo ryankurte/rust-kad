@@ -21,39 +21,51 @@ use futures::prelude::*;
 use futures::future;
 use futures::{sync::oneshot, sync::mpsc};
 
-struct MockNetwork <ID, ADDR, DATA> {
-    connectors: Arc<Mutex<HashMap<ID, mpsc::Sender<Transaction<ID, ADDR, DATA>>>>>, 
+struct MockNetwork <'a, ID: 'static, ADDR: 'static, DATA: 'static> {
+    peers: HashMap<ID, Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>, MockConnector<'a, ID, ADDR, DATA>>>, 
 }
 
 type Transaction<ID, ADDR, DATA> = (Request<ID, DATA>, oneshot::Sender<Response<ID, ADDR, DATA>>);
 
-impl <ID, ADDR, DATA> MockNetwork  <ID, ADDR, DATA> 
+impl <'a, ID, ADDR, DATA> MockNetwork  <'a, ID, ADDR, DATA> 
 where
     ID: DatabaseId + 'static,
     ADDR: Debug + Copy + Clone + PartialEq + 'static,
-    DATA: Debug + Copy + Clone + PartialEq + 'static,
+    DATA: Updates + Debug + Copy + Clone + PartialEq + 'static,
+    
 {
-    pub fn new() -> Self {
-        MockNetwork{ connectors: Arc::new(Mutex::new(HashMap::new())) }
+    pub fn new(config: Config, nodes: &[Node<ID, ADDR>]) -> MockNetwork<ID, ADDR, DATA> {
+        let mut peers = Vec::new();
+        let mut m = MockNetwork{ peers: HashMap::new() };
+
+        //peers: Arc::new(Mutex::new(HashMap::new()));
+        for n in nodes {
+            let config = config.clone();
+
+            let table = KNodeTable::<ID, ADDR>::new(n, config.k, config.hash_size);
+            let store = HashMapStore::<ID, DATA>::new();
+
+            let conn = m.connector(n.id().clone(), n.address().clone());
+            
+            let dht = Dht::new(n.id().clone(), n.address().clone(), config, table, conn, store);
+
+            m.peers.insert(n.id().clone(), dht);
+        }
+
+        m
     }
 
-    pub fn connector(&mut self, id: ID, _addr: ADDR) -> MockConnector<ID, ADDR, DATA> {
-
-        let (p, c) = mpsc::channel::<Transaction<ID, ADDR, DATA>>(0);
-
-        self.connectors.lock().unwrap().insert(id.clone(), p);
-
-        MockConnector{ recv: Arc::new(Mutex::new(c)), connectors: self.connectors.clone() }
+    pub fn connector(&'a self, id: ID, _addr: ADDR) -> MockConnector<'a, ID, ADDR, DATA> {
+        MockConnector{ parent: self }
     }
 }
 
 #[derive(Clone)]
-struct MockConnector<ID, ADDR, DATA> {
-    recv: Arc<Mutex<mpsc::Receiver<Transaction<ID, ADDR, DATA>>>>,
-    connectors: Arc<Mutex<HashMap<ID, mpsc::Sender<Transaction<ID, ADDR, DATA>>>>>,
+struct MockConnector<'a, ID: 'static, ADDR: 'static, DATA: 'static> {
+    parent: &'a MockNetwork<'a, ID, ADDR, DATA>,
 }
 
-impl <'a, ID, ADDR, DATA> ConnectionManager <ID, ADDR, DATA, DhtError> for MockConnector <ID, ADDR, DATA>
+impl <'a, ID, ADDR, DATA> ConnectionManager <ID, ADDR, DATA, DhtError> for MockConnector <'a, ID, ADDR, DATA>
 where
     ID: DatabaseId + 'static,
     ADDR: Debug + Copy + Clone + PartialEq + 'static,
@@ -66,37 +78,12 @@ where
         let (p, c) = oneshot::channel::<Response<ID, ADDR, DATA>>();
 
         // Fetch peer connection
-        let conn = self.connectors.lock().unwrap();
-        let peer = match conn.get(to.id()) {
+        let peer = match self.parent.peers.get(to.id()) {
             Some(v) => v,
             _ => { return Box::new(future::err(DhtError::Unimplemented)) },
         };
 
-        // Send message to peer then poll on result, all in chained futures
-        return Box::new(peer.clone().send((req, p))
-        .then(|_| {
-            c
-        })
-        .then(|r| {
-            match r {
-                Ok(v) => future::ok(v),
-                _ => future::err(DhtError::Cancelled),
-            }
-        }))
-    }
-}
-
-impl <ID, ADDR, DATA> Stream for MockConnector <ID, ADDR, DATA>
-where
-    ID: DatabaseId + 'static,
-    ADDR: Debug + Copy + Clone + PartialEq + 'static,
-    DATA: Debug + Copy + Clone + PartialEq + 'static,
-{
-    type Item = Transaction<ID, ADDR, DATA>;
-    type Error = ();
-
-    fn poll(&mut self) ->  Result<futures::Async<Option<Self::Item>>, Self::Error> {
-        self.recv.lock().unwrap().poll()
+        Box::new(future::err(DhtError::Unimplemented))
     }
 }
 
@@ -108,11 +95,12 @@ use kad::datastore::{HashMapStore, Datastore, Updates};
 fn integration() {
     // TODO
 
-    let mut peers = Vec::new();
-    let mut mgr = MockNetwork::<u64, (), u64>::new();
+    
     let mut config = Config::default();
     config.k = 2;
     config.hash_size = 8;
+
+    let mut mgr = MockNetwork::<u64, (), u64>::new(16, config);
 
     println!("Creating nodes");
     for i in 0..16 {
@@ -125,7 +113,6 @@ fn integration() {
         
         let dht = Dht::new(i, (), config, table, conn, store);
 
-        peers.push((node, dht))
     }
 
     println!("Bootstrapping Network");

@@ -12,7 +12,7 @@ pub struct HashMapStore<ID, DATA> {
 
 impl <ID, DATA> HashMapStore<ID, DATA>
 where
-    ID: DatabaseId + Clone + Debug + std::cmp::Eq + std::hash::Hash,
+    ID: DatabaseId,
     DATA: Updates + PartialEq + Clone + Debug,
 {
     pub fn new() -> HashMapStore<ID, DATA> {
@@ -22,7 +22,7 @@ where
 
 impl <ID, DATA> Datastore<ID, DATA> for HashMapStore<ID, DATA>
 where
-    ID: DatabaseId + Clone + Debug + std::cmp::Eq + std::hash::Hash,
+    ID: DatabaseId,
     DATA: Updates + PartialEq + Clone + Debug,
 {
     
@@ -46,7 +46,7 @@ where
 
 fn merge<DATA>(original: &Vec<DATA>, new: &Vec<DATA>) -> Vec<DATA> 
 where
-    DATA: Updates + PartialEq + Clone,
+    DATA: Updates + PartialEq + Clone + Debug,
 {
     let mut merged: Vec<DATA> = vec![];
 

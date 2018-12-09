@@ -19,7 +19,7 @@ use futures_timer::{FutureExt};
 
 use crate::{Config, Node, DatabaseId, NodeTable, DhtError};
 use crate::{Request, Response};
-use crate::datastore::Datastore;
+use crate::datastore::{Datastore, Updates};
 use crate::search::{Search, Operation};
 use crate::connection::{ConnectionManager, request_all};
 
@@ -38,7 +38,7 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE
 where 
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
-    DATA: Clone + Debug + 'static,
+    DATA: PartialEq + Clone + Debug + Updates + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     STORE: Datastore<ID, DATA> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
@@ -54,6 +54,8 @@ where
         let table = self.table.clone();
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
+
+        println!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
 
         // Launch request
         self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone()))
@@ -73,8 +75,10 @@ where
                 // node to the DHT
                 table.lock().unwrap().update(&target);
 
+                println!("[DHT connect] response recieved, searching {} nodes", found.len());
+
                 // Perform FIND_NODE on own id with responded nodes to register self
-                let mut search = Search::new(id, Operation::FindNode, self.config.clone(), table, conn_mgr);
+                let mut search = Search::new(self.id.clone(), id, Operation::FindNode, self.config.clone(), table, conn_mgr);
                 search.seed(&found);
 
                 search.execute()
@@ -92,7 +96,7 @@ where
     /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
@@ -120,7 +124,7 @@ where
     /// Find a value from the DHT
     pub fn find(&mut self, target: ID) -> impl Future<Item=HashMap<ID, Vec<DATA>>, Error=DhtError> {
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);
@@ -155,7 +159,7 @@ where
     /// Store a value in the DHT
     pub fn store(&mut self, target: ID, data: Vec<DATA>) -> impl Future<Item=(), Error=DhtError> {
         // Create a search instance
-        let mut search = Search::new(target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
+        let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.lock().unwrap().nearest(&target, 0..self.config.concurrency);

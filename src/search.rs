@@ -39,6 +39,7 @@ pub enum RequestState {
 
 /// Search object provides the basis for executing searches on the DHT
 pub struct Search <ID, ADDR, DATA, TABLE, CONN> {
+    origin: ID,
     target: ID,
     op: Operation,
     config: Config,
@@ -60,14 +61,14 @@ where
     TABLE: NodeTable<ID, ADDR> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
 {
-    pub fn new(target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN) 
+    pub fn new(origin: ID, target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN) 
         -> Search<ID, ADDR, DATA, TABLE, CONN> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
         let depth = config.max_recursion;
 
-        Search{target, op, config, depth, known, table, data, conn}
+        Search{origin, target, op, config, depth, known, table, data, conn}
     }
 
     /// Fetch a pointer to the search target ID
@@ -183,7 +184,9 @@ where
                         Response::NodesFound(nodes) => {
                             // Add nodes to known list
                             for n in nodes {
-                                self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+                                if n.id() != &self.origin {
+                                    self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+                                }
                             }
                         },
                         Response::ValuesFound(values) => {
@@ -261,7 +264,7 @@ mod tests {
         config.k = 2;
 
         let table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
-        let mut s = Search::new(target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
+        let mut s = Search::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

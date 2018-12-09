@@ -7,12 +7,19 @@
  */
 
 
+use std::fmt::Debug;
+
+use crate::id::DatabaseId;
 
 pub mod hashmapstore;
 pub use self::hashmapstore::HashMapStore;
 
 /// Datastore trait for data storage implementations
-pub trait Datastore<ID, DATA> {
+pub trait Datastore<ID, DATA> 
+where
+    ID: DatabaseId,
+    DATA: PartialEq + Clone + Debug,
+{
     // Find data by ID
     fn find(&self, id: &ID) -> Option<Vec<DATA>>;
 

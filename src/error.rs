@@ -16,6 +16,7 @@ pub enum Error {
     Timeout,
     NotFound,
     Io(IoErrorKind),
+    Cancelled,
 }
 
 impl From<IoError> for Error {

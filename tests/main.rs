@@ -111,21 +111,56 @@ fn integration() {
     for i in 0..16 {
         nodes.push(Node::new(i * 16, i));
     }
-    let n1 = &nodes[0];
+    let n0 = &nodes[0];
 
     // Create mock network
     let mgr = MockNetwork::<u64, u64, u64>::new(config, &nodes);
 
     println!("Bootstrapping Network");
-    {
-        for n in nodes.iter().skip(1) {
-            let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
+    for n in nodes.iter().skip(1) {
+        let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-            peer.connect(n1.clone()).wait().expect("Error connecting to network");
+        peer.connect(n0.clone()).wait().expect("Error connecting to network");
 
-            mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
-        }
+        mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
     }
     
+    println!("Testing locate across all nodes");
+    for n1 in &nodes {
+        for n2 in &nodes {
 
+            if n1 == n2 {
+                continue;
+            }
+            
+            let mut peer = { mgr.peers.lock().unwrap().remove(n1.id()).unwrap() };
+
+            let _node = peer.lookup(n2.id().clone()).wait().expect("Error finding node in network");
+
+            mgr.peers.lock().unwrap().insert(n1.id().clone(), peer);
+        }
+    }
+
+    println!("Testing store");
+    let addr = 132;
+    let val = vec![112];
+    {
+        let mut peer = { mgr.peers.lock().unwrap().remove(n0.id()).unwrap() };
+
+        let _res = peer.store(addr, val).wait().expect("Error storing value");
+
+        mgr.peers.lock().unwrap().insert(n0.id().clone(), peer);
+    }
+
+
+    println!("Testing find values for each node");
+    for n in &nodes {
+            
+        let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
+
+        let val = peer.find(addr).wait().expect("Error finding values");
+        assert!(val.len() > 0);
+
+        mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
+    }
 }

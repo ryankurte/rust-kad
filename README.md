@@ -6,8 +6,8 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
 
 ### Configuration
 
-- k - bucket size / system wide replication parameter
-- alpha - system wide concurrency parameter
+- k - system wide replication parameter, defines bucket sizes and search breadth
+- concurrency - system wide concurrency parameter, number of parallel operations to run at once
 
 ## Status
 
@@ -24,13 +24,13 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
   - [x] Respond to FindValues with NodesFound or ValuesFound
   - [ ] For new node, Send STORE RPC if own ID is closer to key than known nearby nodes
 
-- [ ] Search - common to most operations
+- [x] Search - common to most operations
   - [x] Select alpha closest nodes
   - [x] Send RPCs to selected subset of nodes
   - [ ] If no suitable responses, expand to k closest nodes
   - [x] Recurse until responses received from k closest nodes
 
-- [ ] Find Node
+- [x] Find Node
   - [x] Search using FIND_NODE RPC
   - [x] Return node
 
@@ -39,7 +39,7 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
   - [x] Collect values
   - [ ] Once values returned, store (k, v) pair at the closest node observed that did not return the value
 
-- [ ] Store Value
+- [x] Store Value
   - [x] Search using FIND_NODE RPC
   - [x] Send STORE RPC to k closest nodes
 

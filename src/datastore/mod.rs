@@ -27,7 +27,6 @@ pub trait Updates {
     fn is_update(&self, other: &Self) -> bool;
 }
 
-#[cfg(test)]
 impl Updates for u64 {
     fn is_update(&self, other: &Self) -> bool {
         self > other

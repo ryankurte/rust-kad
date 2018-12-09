@@ -37,7 +37,7 @@ where
         MockNetwork{ connectors: Arc::new(Mutex::new(HashMap::new())) }
     }
 
-    pub fn connector(&mut self, id: ID, addr: ADDR) -> MockConnector<ID, ADDR, DATA> {
+    pub fn connector(&mut self, id: ID, _addr: ADDR) -> MockConnector<ID, ADDR, DATA> {
 
         let (p, c) = mpsc::channel::<Transaction<ID, ADDR, DATA>>(0);
 
@@ -101,9 +101,36 @@ where
 }
 
 
+use kad::{Config, KNodeTable, Dht};
+use kad::datastore::{HashMapStore, Datastore, Updates};
 
 #[test]
-#[ignore]
 fn integration() {
-    // TODO 
+    // TODO
+
+    let mut peers = Vec::new();
+    let mut mgr = MockNetwork::<u64, (), u64>::new();
+    let mut config = Config::default();
+    config.k = 2;
+    config.hash_size = 8;
+
+    println!("Creating nodes");
+    for i in 0..16 {
+        let node = Node::new(i * 16, ());
+        let config = config.clone();
+
+        let table = KNodeTable::new(&node, config.k, config.hash_size);
+        let store = HashMapStore::new();
+        let conn = mgr.connector(i, ());
+        
+        let dht = Dht::new(i, (), config, table, conn, store);
+
+        peers.push((node, dht))
+    }
+
+    println!("Bootstrapping Network");
+    for i in 1..16 {
+        peers[i].1.connect(Node::new(0, ())).wait().expect("Node connect failed");
+    }
+
 }

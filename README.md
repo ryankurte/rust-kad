@@ -11,6 +11,14 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
 
 ## Status
 
+[![GitHub tag](https://img.shields.io/github/tag/ryankurte/rust-kad.svg)](https://github.com/ryankurte/rust-kad)
+[![Build Status](https://travis-ci.com/ryankurte/rust-kad.svg?branch=master)](https://travis-ci.com/ryankurte/rust-kad)
+[![Crates.io](https://img.shields.io/crates/v/kad.svg)](https://crates.io/crates/kad)
+[![Docs.rs](https://docs.rs/kad/badge.svg)](https://docs.rs/kad)
+
+[Open Issues](https://github.com/ryankurte/rust-kad/issues)
+
+
 ***Work In Progress***
 
 ### Components

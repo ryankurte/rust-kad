@@ -284,7 +284,7 @@ mod tests {
         mock_dht!(connector, root, dht);
 
         // Check node is unknown
-        assert!(dht.table.lock().unwrap().find(friend.id()).is_none());
+        assert!(dht.table.lock().unwrap().contains(friend.id()).is_none());
 
         // Ping
         assert_eq!(
@@ -293,7 +293,7 @@ mod tests {
         );
 
         // Adds node to appropriate k bucket
-        let friend1 = dht.table.lock().unwrap().find(friend.id()).unwrap();
+        let friend1 = dht.table.lock().unwrap().contains(friend.id()).unwrap();
 
         // Second ping
         assert_eq!(
@@ -302,7 +302,7 @@ mod tests {
         );
 
         // Updates node in appropriate k bucket
-        let friend2 = dht.table.lock().unwrap().find(friend.id()).unwrap();
+        let friend2 = dht.table.lock().unwrap().contains(friend.id()).unwrap();
         assert_ne!(friend1.seen(), friend2.seen());
 
         // Check expectations are done

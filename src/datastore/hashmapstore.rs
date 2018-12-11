@@ -10,6 +10,11 @@ pub struct HashMapStore<ID, DATA> {
     data: HashMap<ID, Vec<DATA>>   
 }
 
+pub struct DataEntry<DATA, META> {
+    value: DATA,
+    meta: META,
+}
+
 impl <ID, DATA> HashMapStore<ID, DATA>
 where
     ID: DatabaseId,

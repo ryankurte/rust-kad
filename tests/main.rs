@@ -20,7 +20,6 @@ use kad::datastore::{HashMapStore, Updates};
 extern crate futures;
 use futures::prelude::*;
 use futures::future;
-use futures::{sync::oneshot};
 
 type MockPeer<ID, ADDR, DATA> = Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, MockConnector<ID, ADDR, DATA>, HashMapStore<ID, DATA>>;
 
@@ -99,7 +98,7 @@ where
 
 #[test]
 fn integration() {
-    // TODO
+    // TODO: split into separate tests, add benchmarks
 
     // Setup config
     let mut config = Config::default();

@@ -13,7 +13,7 @@ use crate::node::Node;
 use std::fmt::Debug;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-
+use std::time::Instant;
 
 /// KBucket implementation
 /// This implements a single bucket for use in the KNodeTable implementation
@@ -21,6 +21,7 @@ pub struct KBucket<ID, ADDR> {
     bucket_size: usize,
     nodes: Arc<Mutex<VecDeque<Node<ID, ADDR>>>>,
     pending: Option<Node<ID, ADDR>>,
+    updated: Option<Instant>,
 }
 
 impl <ID, ADDR> KBucket<ID, ADDR> 
@@ -30,14 +31,17 @@ where
 {
     /// Create a new KBucket with the given size
     pub fn new(bucket_size: usize) -> KBucket<ID, ADDR> {
-        KBucket{bucket_size, nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), pending: None}
+        KBucket{bucket_size, 
+            nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), 
+            pending: None, 
+            updated: None}
     }
 
     /// Update a node in the bucket
     pub fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
         let mut nodes = self.nodes.lock().unwrap();
 
-        if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
+        let res = if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
             // If the node already exists, update it
             info!("[KBucket] Updating node {:?}", node);
             KBucket::update_position(&mut nodes, node);
@@ -52,7 +56,13 @@ where
             info!("[KBucket] No space to add node {:?}", node);
             self.pending = Some(node.clone());
             false
+        };
+
+        if res {
+            self.updated = Some(Instant::now());
         }
+
+        res
     }
 
     /// Find a node in the bucket

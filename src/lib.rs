@@ -11,8 +11,9 @@ use std::fmt::Debug;
 
 extern crate futures;
 
-#[macro_use]
-extern crate log;
+#[macro_use] extern crate log;
+
+#[macro_use] extern crate structopt;
 
 extern crate futures_timer;
 
@@ -48,18 +49,20 @@ pub use connection::ConnectionManager;
 pub mod mock;
 
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, StructOpt)]
 pub struct Config {
     /// Length of the hash used (in bits) 
     pub hash_size: usize,
+
+    #[structopt(long = "dht-k")]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
+    #[structopt(long = "dht-concurrency")]
     /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
+    #[structopt(long = "dht-recursion-limit")]
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
-    /// Timeout period for network operations 
-    pub timeout: Duration,
 }
 
 impl Default for Config {
@@ -69,14 +72,13 @@ impl Default for Config {
                 k: 20, 
                 concurrency: 3,
                 max_recursion: 10,
-                timeout: Duration::from_secs(3)
             }
     }
 }
 
 pub type StandardDht<ID, ADDR, DATA, CONN> = Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, CONN, HashMapStore<ID, DATA>>;
 
-impl <ID, ADDR, DATA, CONN> Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, CONN, HashMapStore<ID, DATA>> 
+impl <ID, ADDR, DATA, CONN> StandardDht<ID, ADDR, DATA, CONN> 
 where 
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,

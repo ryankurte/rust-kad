@@ -58,7 +58,6 @@ where
 
         // Launch request
         self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone()))
-            .timeout(self.config.timeout)
             .and_then(move |resp| {
                 // Check for correct response
                 match resp {
@@ -168,7 +167,6 @@ where
 
         let conn = self.conn_mgr.clone();
         let k = self.config.k;
-        let timeout = self.config.timeout;
 
         // Search for K closest nodes to value
         search.execute()
@@ -176,7 +174,7 @@ where
             // Send store request to found nodes
             let known = r.completed(0..k);
             println!("sending store to: {:?}", known);
-            request_all(conn, &Request::Store(target, data), &known, timeout)
+            request_all(conn, &Request::Store(target, data), &known)
         }).and_then(|_| {
             // TODO: should we process success here?
             Ok(())

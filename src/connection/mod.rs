@@ -35,7 +35,7 @@ where
 /// Send a request to a slice of nodes and collect the responses.
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
-pub fn request_all<ID, ADDR, DATA, CONN>(conn: CONN, req: &Request<ID, DATA>, nodes: &[Node<ID, ADDR>], timeout: Duration) -> 
+pub fn request_all<ID, ADDR, DATA, CONN>(conn: CONN, req: &Request<ID, DATA>, nodes: &[Node<ID, ADDR>]) -> 
         impl Future<Item=Vec<(Node<ID, ADDR>, Option<Response<ID, ADDR, DATA>>)>, Error=DhtError> 
 where
     ID: DatabaseId + Clone + Debug + 'static,
@@ -51,7 +51,6 @@ where
         let n2 = n.clone();
         let mut c = conn.clone();
         let q = c.request(n, req.clone())
-            .timeout(timeout)
             .map(|v| {
                 println!("Response: '{:?}' from: '{:?}'", v, n1.id());
                 (n1, Some(v)) 

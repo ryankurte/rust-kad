@@ -175,7 +175,7 @@ where
         };
 
         // Send requests and handle responses
-        request_all(self.conn.clone(), &req, chunk, self.config.timeout)
+        request_all(self.conn.clone(), &req, chunk)
         .map(move |res| {
             for (n, v) in &res {
                 // Handle received responses

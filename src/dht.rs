@@ -19,7 +19,7 @@ use futures_timer::{FutureExt};
 
 use crate::{Config, Node, DatabaseId, NodeTable, DhtError};
 use crate::{Request, Response};
-use crate::datastore::{Datastore, Updates};
+use crate::datastore::{Datastore, Reducer};
 use crate::search::{Search, Operation};
 use crate::connection::{ConnectionManager, request_all};
 
@@ -38,7 +38,7 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE
 where 
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
-    DATA: PartialEq + Clone + Debug + Updates + 'static,
+    DATA: Reducer<Item=DATA> + PartialEq + Clone + Debug + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     STORE: Datastore<ID, DATA> + 'static,
     CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
@@ -46,7 +46,6 @@ where
     pub fn new(id: ID, addr: ADDR, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
         Dht{id, addr, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), data: PhantomData}
     }
-
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
@@ -122,7 +121,7 @@ where
 
 
     /// Find a value from the DHT
-    pub fn find(&mut self, target: ID) -> impl Future<Item=HashMap<ID, Vec<DATA>>, Error=DhtError> {
+    pub fn find(&mut self, target: ID) -> impl Future<Item=Vec<DATA>, Error=DhtError> {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
 
@@ -145,13 +144,15 @@ where
                 return Err(DhtError::NotFound)
             }
 
-            // TODO: MapReduce data? Should that happen externally?
+            // Reduce data before returning
+            let mut flat_data: Vec<DATA> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
+            DATA::reduce(&mut flat_data);
 
-            // TODO: Send updates to any peers that returned replaced data?
+            // TODO: Send updates to any peers that returned outdated data?
 
             // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
 
-            Ok(data)
+            Ok(flat_data)
         })
     }
 
@@ -235,14 +236,14 @@ where
     }
 }
 
-
 /// Stream trait implemented to allow polling on dht object
-impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE, CONN, STORE> {
+impl <ID, ADDR, DATA, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, TABLE, CONN, STORE> {
     type Item = ();
-    type Error = DhtError;
+    type Error = !;
 
-    fn poll(&mut self) -> Result<futures::Async<Option<Self::Item>>, Self::Error> {
-        Err(DhtError::Unimplemented)
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        // TODO: poll / update internal state
+        Ok(Async::NotReady)
     }
 }
 
@@ -255,7 +256,7 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Stream for Dht <ID, ADDR, DATA, TABLE,
         mock_dht!($connector, $root, $dht, config);
     };
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
-        let table = KNodeTable::new(&$root, $config.k, $config.hash_size);
+        let table = KNodeTable::new($root.id().clone(), $config.k, $config.hash_size);
         
         let store: HashMapStore<u64, u64> = HashMapStore::new();
         

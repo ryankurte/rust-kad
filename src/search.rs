@@ -263,7 +263,7 @@ mod tests {
         let mut config = Config::default();
         config.k = 2;
 
-        let table = Arc::new(Mutex::new(KNodeTable::new(&root, 2, 8)));
+        let table = Arc::new(Mutex::new(KNodeTable::new(root.id().clone(), 2, 8)));
         let mut s = Search::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
 
         // Seed search with known nearest nodes

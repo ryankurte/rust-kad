@@ -28,11 +28,11 @@ where
     ADDR: Clone + Debug + 'static,
 {
     /// Create a new KNodeTable with the provded bucket and hash sizes
-    pub fn new(node: &Node<ID, ADDR>, bucket_size: usize, hash_size: usize) -> KNodeTable<ID, ADDR> {
+    pub fn new(id: ID, bucket_size: usize, hash_size: usize) -> KNodeTable<ID, ADDR> {
         // Create a new bucket and assign own ID
         let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
-        KNodeTable{id: node.id().clone(), buckets: buckets}
+        KNodeTable{id, buckets: buckets}
     }
 
     /// Find a given node in the table
@@ -134,7 +134,7 @@ mod test {
     fn test_k_node_table() {
         let n = Node::new(0b0100, 1);
 
-        let mut t = KNodeTable::<u64, u64>::new(&n, 10, 4);
+        let mut t = KNodeTable::<u64, u64>::new(n.id().clone(), 10, 4);
 
         let nodes = vec![
             Node::new(0b0000, 1),

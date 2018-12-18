@@ -1,12 +1,13 @@
-/**
- * rust-kad
- * A Kademlia DHT implementation in Rust
- *
- * https://github.com/ryankurte/rust-kad
- * Copyright 2018 Ryan Kurte
- */
+//! rust-kad
+//! A Kademlia DHT implementation in Rust
+//!
+//! https://github.com/ryankurte/rust-kad
+//! Copyright 2018 Ryan Kurte
 
-use std::time::{Duration};
+#![feature(never_type)]
+
+use std::time::Duration;
+use std::fmt::Debug;
 
 extern crate futures;
 
@@ -32,7 +33,7 @@ pub mod nodetable;
 pub use self::nodetable::{NodeTable, KNodeTable};
 
 pub mod datastore;
-pub use self::datastore::{Datastore};
+pub use self::datastore::{Datastore, HashMapStore, Reducer};
 
 pub mod search;
 pub use self::search::{Search};
@@ -73,6 +74,22 @@ impl Default for Config {
     }
 }
 
+pub type StandardDht<ID, ADDR, DATA, CONN> = Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, CONN, HashMapStore<ID, DATA>>;
+
+impl <ID, ADDR, DATA, CONN> Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, CONN, HashMapStore<ID, DATA>> 
+where 
+    ID: DatabaseId + 'static,
+    ADDR: Clone + Debug + 'static,
+    DATA: Reducer<Item=DATA> + PartialEq + Clone + Debug + 'static,
+    CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
+{
+    /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
+    pub fn standard(id: ID, addr: ADDR, config: Config, conn: CONN) -> StandardDht<ID, ADDR, DATA, CONN> {
+        let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
+        let store = HashMapStore::new();
+        Dht::new(id, addr, config, table, conn, store)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -107,7 +124,7 @@ mod tests {
         let mut config = Config::default();
         config.concurrency = 2;
 
-        let knodetable = KNodeTable::new(&n1, 2, 4);
+        let knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
@@ -156,7 +173,7 @@ mod tests {
         config.concurrency = 2;
         config.k = 2;
 
-        let mut knodetable = KNodeTable::new(&n1, 2, 4);
+        let mut knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Inject initial nodes into the table
         knodetable.update(&n2);
@@ -210,7 +227,7 @@ mod tests {
         config.concurrency = 2;
         config.k = 2;
 
-        let mut knodetable = KNodeTable::new(&n1, 2, 4);
+        let mut knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Inject initial nodes into the table
         knodetable.update(&n2);
@@ -259,7 +276,7 @@ mod tests {
         config.concurrency = 2;
         config.k = 2;
 
-        let mut knodetable = KNodeTable::new(&n1, 2, 4);
+        let mut knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Inject initial nodes into the table
         knodetable.update(&n2);

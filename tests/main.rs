@@ -15,12 +15,11 @@ extern crate kad;
 use kad::{Config, KNodeTable, Dht};
 use kad::{Node, DatabaseId, ConnectionManager, DhtError};
 use kad::message::{Request, Response};
-use kad::datastore::{HashMapStore, Updates};
+use kad::datastore::{HashMapStore, Reducer};
 
 extern crate futures;
 use futures::prelude::*;
 use futures::future;
-use futures::{sync::oneshot};
 
 type MockPeer<ID, ADDR, DATA> = Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, MockConnector<ID, ADDR, DATA>, HashMapStore<ID, DATA>>;
 
@@ -34,7 +33,7 @@ impl <ID, ADDR, DATA> MockNetwork < ID, ADDR, DATA>
 where
     ID: DatabaseId + 'static,
     ADDR: Debug + Clone + PartialEq + 'static,
-    DATA: Updates + Debug + Clone + PartialEq + 'static,
+    DATA: Reducer<Item=DATA> + Debug + Clone + PartialEq + 'static,
     
 {
     pub fn new(config: Config, nodes: &[Node<ID, ADDR>]) -> MockNetwork<ID, ADDR, DATA> {
@@ -43,7 +42,7 @@ where
         for n in nodes {
             let config = config.clone();
 
-            let table = KNodeTable::<ID, ADDR>::new(n, config.k, config.hash_size);
+            let table = KNodeTable::<ID, ADDR>::new(n.id().clone(), config.k, config.hash_size);
             let store = HashMapStore::<ID, DATA>::new();
 
             let conn = MockConnector::new(n.id().clone(), n.address().clone(), m.peers.clone());
@@ -68,7 +67,7 @@ impl <ID, ADDR, DATA> MockConnector < ID, ADDR, DATA>
 where
     ID: DatabaseId + 'static,
     ADDR: Debug + Clone + PartialEq + 'static,
-    DATA: Updates + Debug + Clone + PartialEq + 'static,
+    DATA: Reducer<Item=DATA> + Debug + Clone + PartialEq + 'static,
     
 {
     pub fn new( id: ID, addr: ADDR, peers: Arc<Mutex<PeerMap<ID, ADDR, DATA>>>) -> MockConnector<ID, ADDR, DATA> {
@@ -80,7 +79,7 @@ impl <ID, ADDR, DATA> ConnectionManager <ID, ADDR, DATA, DhtError> for MockConne
 where
     ID: DatabaseId + 'static,
     ADDR: Debug + Clone + PartialEq + 'static,
-    DATA: Updates + Debug + Clone + PartialEq + 'static,
+    DATA: Reducer<Item=DATA> + Debug + Clone + PartialEq + 'static,
 {
     fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, DATA>) -> 
             Box<Future<Item=Response<ID, ADDR, DATA>, Error=DhtError>> {

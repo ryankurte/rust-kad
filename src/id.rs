@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use std::ops::BitXor;
 
 use num::Zero;
-use num::bigint::BigUint;
+use num::bigint::{BigUint, RandomBits};
 
 /// Id trait must be implemented for viable id types
 pub trait DatabaseId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
@@ -59,6 +59,7 @@ impl DatabaseId for Vec<u8> {
         Zero::is_zero(&a)
     }
 }
+
 
 /// helper macro to generate DatabaseId impl over [u8; N] types
 macro_rules! database_id_slice {

@@ -98,7 +98,7 @@ where
 
 #[test]
 fn integration() {
-    // TODO
+    // TODO: split into separate tests, add benchmarks
 
     // Setup config
     let mut config = Config::default();

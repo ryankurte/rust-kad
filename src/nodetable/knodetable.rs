@@ -17,6 +17,9 @@ use crate::node::Node;
 use super::nodetable::NodeTable;
 use super::kbucket::KBucket;
 
+/// KNodeTable Implementation
+/// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local ID
+/// as a simplification of the allocation based branching approach introduced in the paper.
 pub struct KNodeTable<ID, ADDR> {
     id: ID,
     buckets: Vec<KBucket<ID, ADDR>>
@@ -33,12 +36,6 @@ where
         let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
         KNodeTable{id, buckets: buckets}
-    }
-
-    /// Find a given node in the table
-    pub fn find(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
-        let bucket = self.bucket_mut(id);
-        bucket.find(id)
     }
 
     // Calculate the distance between two IDs.
@@ -58,6 +55,8 @@ where
         &self.buckets[index]
     }
 
+    /// Fetch the bucket index for a given ID
+    /// This is basically just the number of bits in the distance between the local and target IDs
     fn bucket_index(&self, id: &ID) -> usize {
         // Find difference
         let diff = KNodeTable::<ID, ADDR>::distance(&self.id, id);
@@ -145,9 +144,9 @@ mod test {
 
         // Add some nodes
         for n in &nodes {
-            assert_eq!(true, t.find(n.id()).is_none());
+            assert_eq!(true, t.contains(n.id()).is_none());
             assert_eq!(true, t.update(&n));
-            assert_eq!(*n, t.find(n.id()).unwrap());
+            assert_eq!(*n, t.contains(n.id()).unwrap());
         }
         
         // Find closest nodes

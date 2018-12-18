@@ -67,6 +67,11 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
     - [ ] STORE RPC to K nodes at defined period (hourly)
     - [ ] Unless a STORE RPC has been received in the same period
 
+- [ ] Buckets
+  - [ ] Implement bucket splitting (if it can be done more efficiently than existing?)
+    - Useful for maintanence / don't need to message unused buckets
+  - [ ] Reverse / generate random IDs in bucket for maintanence purposes
+
 ### Questions
 
 - How is FindValues usually handled where there can be more than one value per ID?

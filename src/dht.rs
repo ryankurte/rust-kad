@@ -10,15 +10,16 @@
 use std::sync::{Arc, Mutex};
 use std::marker::{PhantomData};
 use std::fmt::{Debug};
-use std::collections::HashMap;
 
 use futures::prelude::*;
 use futures::future;
 
-use futures_timer::{FutureExt};
-
-use crate::{Config, Node, DatabaseId, NodeTable, DhtError};
-use crate::{Request, Response};
+use crate::{Config};
+use crate::node::Node;
+use crate::id::DatabaseId;
+use crate::error::Error as DhtError;
+use crate::nodetable::NodeTable;
+use crate::message::{Request, Response};
 use crate::datastore::{Datastore, Reducer};
 use crate::search::{Search, Operation};
 use crate::connection::{ConnectionManager, request_all};
@@ -237,7 +238,7 @@ where
 /// Stream trait implemented to allow polling on dht object
 impl <ID, ADDR, DATA, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, TABLE, CONN, STORE> {
     type Item = ();
-    type Error = !;
+    type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         // TODO: poll / update internal state

@@ -4,9 +4,6 @@
 //! https://github.com/ryankurte/rust-kad
 //! Copyright 2018 Ryan Kurte
 
-#![feature(never_type)]
-
-use std::time::Duration;
 use std::fmt::Debug;
 
 extern crate futures;
@@ -21,29 +18,29 @@ extern crate num;
 extern crate rand;
 
 pub mod error;
-pub use self::error::Error as DhtError;
-pub mod message;
-pub use self::message::{Message, Request, Response};
-pub mod node;
-pub use self::node::Node;
+use error::Error as DhtError;
 
 pub mod id;
-pub use self::id::{DatabaseId, RequestId};
+use id::DatabaseId;
+
+pub mod message;
+pub mod node;
 
 pub mod nodetable;
-pub use self::nodetable::{NodeTable, KNodeTable};
+use nodetable::{KNodeTable};
 
 pub mod datastore;
-pub use self::datastore::{Datastore, HashMapStore, Reducer};
+use datastore::{HashMapStore, Reducer};
 
 pub mod search;
-pub use self::search::{Search};
 
 pub mod dht;
-pub use self::dht::Dht;
+use dht::Dht;
 
 pub mod connection;
-pub use connection::ConnectionManager;
+use connection::ConnectionManager;
+
+pub mod prelude;
 
 #[cfg(test)]
 pub mod mock;
@@ -99,7 +96,8 @@ mod tests {
     use futures::{Future};
 
     use super::*;
-    use crate::datastore::{HashMapStore};
+    use crate::prelude::*;
+    
     use crate::mock::{MockTransaction, MockConnector};
 
     #[test]

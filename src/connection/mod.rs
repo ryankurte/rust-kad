@@ -1,18 +1,14 @@
 
-use std::time::Duration;
 use std::fmt::Debug;
 
 use futures::prelude::*;
 use futures::future;
 
-use futures_timer::{FutureExt};
-
-
 #[cfg(tokio)]
 pub mod tokio;
 
-
-use crate::{DatabaseId, DhtError};
+use crate::id::DatabaseId;
+use crate::error::Error as DhtError;
 use crate::node::Node;
 use crate::message::{Request, Response};
 

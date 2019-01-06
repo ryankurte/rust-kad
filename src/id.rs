@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use std::ops::BitXor;
 
 use num::Zero;
-use num::bigint::{BigUint, RandomBits};
+use num::bigint::{BigUint};
 
 /// Id trait must be implemented for viable id types
 pub trait DatabaseId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {

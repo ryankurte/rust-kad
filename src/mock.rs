@@ -15,8 +15,9 @@ use futures::{future, Future};
 
 
 use crate::id::DatabaseId;
-use crate::ConnectionManager;
-use crate::{Node, Request, Response};
+use crate::node::Node;
+use crate::connection::ConnectionManager;
+use crate::message::{Request, Response};
 
 
 /// Mock transaction for test use

@@ -16,8 +16,11 @@ use futures::prelude::*;
 use futures::future;
 use futures::future::{Loop};
 
-use crate::{Node, DatabaseId, NodeTable, DhtError};
 use crate::Config;
+use crate::node::Node;
+use crate::id::DatabaseId;
+use crate::error::Error as DhtError;
+use crate::nodetable::{NodeTable};
 use crate::message::{Request, Response};
 use crate::connection::{ConnectionManager, request_all};
 

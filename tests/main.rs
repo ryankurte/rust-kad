@@ -12,8 +12,13 @@ use std::sync::{Arc, Mutex};
 
 extern crate kad;
 
-use kad::{Config, KNodeTable, Dht};
-use kad::{Node, DatabaseId, ConnectionManager, DhtError};
+use kad::Config;
+use kad::dht::Dht;
+use kad::nodetable::KNodeTable;
+use kad::node::Node;
+use kad::id::DatabaseId;
+use kad::connection::ConnectionManager;
+use kad::error::Error as DhtError;
 use kad::message::{Request, Response};
 use kad::datastore::{HashMapStore, Reducer};
 

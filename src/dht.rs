@@ -14,18 +14,21 @@ use std::fmt::{Debug};
 use futures::prelude::*;
 use futures::future;
 
+use rr_mux::{Mux, Connector, Muxed};
+
 use crate::{Config};
 use crate::node::Node;
-use crate::id::DatabaseId;
+use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
 use crate::nodetable::NodeTable;
-use crate::message::{Request, Response};
+use crate::message::{Message, Request, Response};
 use crate::datastore::{Datastore, Reducer};
 use crate::search::{Search, Operation};
-use crate::connection::{ConnectionManager, request_all};
+
+use crate::connection::{request_all};
 
 #[derive(Clone, Debug)]
-pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
+pub struct Dht<ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> {
     id: ID,
     addr: ADDR,
     config: Config,
@@ -33,19 +36,22 @@ pub struct Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
     conn_mgr: CONN,
     datastore: Arc<Mutex<STORE>>,
     data: PhantomData<DATA>,
+    req_id: PhantomData<REQ_ID>,
 }
 
-impl <ID, ADDR, DATA, TABLE, CONN, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> 
+
+impl <ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> 
 where 
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
     DATA: Reducer<Item=DATA> + PartialEq + Clone + Debug + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     STORE: Datastore<ID, DATA> + 'static,
-    CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
+    REQ_ID: RequestId + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,
 {
-    pub fn new(id: ID, addr: ADDR, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, TABLE, CONN, STORE> {
-        Dht{id, addr, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), data: PhantomData}
+    pub fn new(id: ID, addr: ADDR, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> {
+        Dht{id, addr, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), data: PhantomData, req_id: PhantomData}
     }
 
     /// Connect to a known node
@@ -58,7 +64,7 @@ where
         println!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
 
         // Launch request
-        self.conn_mgr.clone().request(&target, Request::FindNode(self.id.clone()))
+        self.conn_mgr.clone().request((), REQ_ID::generate(), target.clone(), Request::FindNode(self.id.clone()))
             .and_then(move |resp| {
                 // Check for correct response
                 match resp {
@@ -236,7 +242,7 @@ where
 }
 
 /// Stream trait implemented to allow polling on dht object
-impl <ID, ADDR, DATA, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, TABLE, CONN, STORE> {
+impl <ID, ADDR, DATA, TABLE, CONN, STORE, REQ_ID> Future for Dht <ID, ADDR, DATA, TABLE, CONN, STORE, REQ_ID> {
     type Item = ();
     type Error = ();
 
@@ -259,7 +265,7 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, TABLE,
         
         let store: HashMapStore<u64, u64> = HashMapStore::new();
         
-        let mut $dht = Dht::<u64, u64, _, _, _, _>::new($root.id().clone(), $root.address().clone(), 
+        let mut $dht = Dht::<u64, u64, _, _, _, u64, _>::new($root.id().clone(), $root.address().clone(), 
                 $config, table, $connector.clone(), store);
     }
 }
@@ -272,7 +278,7 @@ mod tests {
     use crate::datastore::{HashMapStore, Datastore};
     use crate::nodetable::{NodeTable, KNodeTable};
 
-    use crate::mock::*;
+    use rr_mux::mock::{MockConnector, MockTransaction, MockRequest};
 
     #[test]
     fn test_receive_common() {
@@ -280,7 +286,7 @@ mod tests {
         let root = Node::new(0, 001);
         let friend = Node::new(1, 002);
 
-        let connector = MockConnector::from(vec![]);
+        let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Check node is unknown
@@ -306,7 +312,7 @@ mod tests {
         assert_ne!(friend1.seen(), friend2.seen());
 
         // Check expectations are done
-        connector.done();
+        connector.finalise();
     }
 
     #[test]
@@ -315,7 +321,7 @@ mod tests {
         let root = Node::new(0, 001);
         let friend = Node::new(1, 002);
 
-        let connector = MockConnector::from(vec![]);
+        let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Ping
@@ -325,7 +331,7 @@ mod tests {
         );
 
         // Check expectations are done
-        connector.done();
+        connector.finalise();
     }
 
     #[test]
@@ -335,7 +341,7 @@ mod tests {
         let friend = Node::new(1, 002);
         let other = Node::new(2, 003);
 
-        let connector = MockConnector::from(vec![]);
+        let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Add friend to known table
@@ -348,7 +354,7 @@ mod tests {
         );
 
         // Check expectations are done
-        connector.done();
+        connector.finalise();
     }
 
         #[test]
@@ -358,7 +364,7 @@ mod tests {
         let friend = Node::new(1, 002);
         let other = Node::new(2, 003);
 
-        let connector = MockConnector::from(vec![]);
+        let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Add friend to known table
@@ -380,7 +386,7 @@ mod tests {
         );
 
         // Check expectations are done
-        connector.done();
+        connector.finalise();
     }
 
     #[test]
@@ -389,7 +395,7 @@ mod tests {
         let root = Node::new(0, 001);
         let friend = Node::new(1, 002);
 
-        let connector = MockConnector::from(vec![]);
+        let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Store
@@ -402,7 +408,7 @@ mod tests {
         assert_eq!(v, vec![1234]);
 
         // Check expectations are done
-        connector.done();
+        connector.finalise();
     }
 
 }

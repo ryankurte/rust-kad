@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
+use std::marker::PhantomData;
 
 use futures::prelude::*;
 use futures::future;
@@ -18,11 +19,14 @@ use futures::future::{Loop};
 
 use crate::Config;
 use crate::node::Node;
-use crate::id::DatabaseId;
+use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
 use crate::nodetable::{NodeTable};
 use crate::message::{Request, Response};
-use crate::connection::{ConnectionManager, request_all};
+
+
+use rr_mux::{Connector};
+use crate::connection::{request_all};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -41,7 +45,7 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <ID, ADDR, DATA, TABLE, CONN> {
+pub struct Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID> {
     origin: ID,
     target: ID,
     op: Operation,
@@ -51,27 +55,29 @@ pub struct Search <ID, ADDR, DATA, TABLE, CONN> {
     known: HashMap<ID, (Node<ID, ADDR>, RequestState)>,
     data: HashMap<ID, Vec<DATA>>,
     conn: CONN,
+    _req_id: PhantomData<REQ_ID>,
 }
 
 pub type KnownMap<ID, ADDR> = HashMap<ID, (Node<ID, ADDR>, RequestState)>;
 pub type ValueMap<ID, DATA> = HashMap<ID, Vec<DATA>>;
 
-impl <ID, ADDR, DATA, TABLE, CONN> Search <ID, ADDR, DATA, TABLE, CONN> 
+impl <ID, ADDR, DATA, TABLE, CONN, REQ_ID> Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID> 
 where
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
     DATA: Clone + Debug + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
-    CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,
+    REQ_ID: RequestId + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,
 {
     pub fn new(origin: ID, target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN) 
-        -> Search<ID, ADDR, DATA, TABLE, CONN> {
+        -> Search<ID, ADDR, DATA, TABLE, CONN, REQ_ID> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
         let depth = config.max_recursion;
 
-        Search{origin, target, op, config, depth, known, table, data, conn}
+        Search{origin, target, op, config, depth, known, table, data, conn, _req_id: PhantomData}
     }
 
     /// Fetch a pointer to the search target ID
@@ -232,7 +238,8 @@ mod tests {
 
     use super::*;
     use crate::nodetable::{NodeTable, KNodeTable};
-    use crate::mock::{MockTransaction, MockConnector};
+
+    use rr_mux::mock::{MockTransaction, MockConnector};
 
     #[test]
     fn test_search_nodes() {
@@ -248,18 +255,14 @@ mod tests {
         ];
 
         // Build expectations
-        let connector = MockConnector::from(vec![
+        let mut connector = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::<_, _, u64>::new(nodes[1].clone(), Request::FindNode(target.id().clone()), 
-                    root.clone(), Response::NodesFound(vec![nodes[3].clone()]), None),
-            MockTransaction::<_, _, u64>::new(nodes[0].clone(), Request::FindNode(target.id().clone()), 
-                    root.clone(), Response::NodesFound(vec![nodes[2].clone()]), None),
+            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), Response::NodesFound(vec![nodes[3].clone()])),
+            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), Response::NodesFound(vec![nodes[2].clone()])),
             
             // Second execution
-            MockTransaction::<_, _, u64>::new(nodes[2].clone(), Request::FindNode(target.id().clone()), 
-                    root.clone(), Response::NodesFound(vec![target.clone()]), None),
-            MockTransaction::<_, _, u64>::new(nodes[3].clone(), Request::FindNode(target.id().clone()), 
-                    root.clone(), Response::NodesFound(vec![nodes[4].clone()]), None),        
+            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), Response::NodesFound(vec![target.clone()])),
+            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), Response::NodesFound(vec![nodes[4].clone()])),        
         ]);
 
         // Create search object
@@ -267,7 +270,7 @@ mod tests {
         config.k = 2;
 
         let table = Arc::new(Mutex::new(KNodeTable::new(root.id().clone(), 2, 8)));
-        let mut s = Search::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
+        let mut s = Search::<_, _, u64, _, _, u64>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);
@@ -305,6 +308,6 @@ mod tests {
             assert!(s.known.get(target.id()).is_some());
         }
 
-        connector.done();
+        connector.finalise();
     }
 }

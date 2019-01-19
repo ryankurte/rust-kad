@@ -12,8 +12,10 @@ futures-timer = "0.1.1"
 num = { version = "0.2.0", features = ["rand"]}
 structopt = "0.2.14"
 rand = "0.5.5"
+rr-mux = "0.3.0"
 
 [dependencies.log]
 version = "0.4.6"
 features = ["max_level_info"]
+
 

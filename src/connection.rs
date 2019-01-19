@@ -7,37 +7,25 @@ use futures::future;
 #[cfg(tokio)]
 pub mod tokio;
 
-use crate::id::DatabaseId;
+use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
 use crate::node::Node;
 use crate::message::{Request, Response};
 
-pub trait ConnectionManager<ID, ADDR, DATA, ERR>
-where
-    ERR: From<std::io::Error>,
-{
-    /// Send a request to a specified node, returns a future that contains
-    /// a Response on success and an Error if something went wrong.
-    ///
-    /// This interface is responsible for pairing requests/responses and
-    /// any underlying validation (ie. crypto) required.
-    /// s
-    /// Note that timeouts are created on top of this.
-    fn request(&mut self, to: &Node<ID, ADDR>, req: Request<ID, DATA>) -> 
-            Box<Future<Item=Response<ID, ADDR, DATA>, Error=ERR>>;
-}
+use rr_mux::{Connector};
 
 
 /// Send a request to a slice of nodes and collect the responses.
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
-pub fn request_all<ID, ADDR, DATA, CONN>(conn: CONN, req: &Request<ID, DATA>, nodes: &[Node<ID, ADDR>]) -> 
+pub fn request_all<ID, ADDR, DATA, CONN, REQ_ID>(conn: CONN, req: &Request<ID, DATA>, nodes: &[Node<ID, ADDR>]) -> 
         impl Future<Item=Vec<(Node<ID, ADDR>, Option<Response<ID, ADDR, DATA>>)>, Error=DhtError> 
 where
     ID: DatabaseId + Clone + Debug + 'static,
     ADDR: Clone + Debug + 'static,
     DATA: Clone + Debug + 'static,
-    CONN: ConnectionManager<ID, ADDR, DATA, DhtError> + Clone + 'static,        
+    REQ_ID: RequestId + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,       
 {
     let mut queries = Vec::new();
 
@@ -46,7 +34,7 @@ where
         let n1 = n.clone();
         let n2 = n.clone();
         let mut c = conn.clone();
-        let q = c.request(n, req.clone())
+        let q = c.request((), REQ_ID::generate(), n.clone(), req.clone())
             .map(|v| {
                 println!("Response: '{:?}' from: '{:?}'", v, n1.id());
                 (n1, Some(v)) 

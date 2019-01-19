@@ -92,7 +92,14 @@ database_id_slice!(64 / 8);
 database_id_slice!(128 / 8);
 database_id_slice!(256 / 8);
 
-pub trait RequestId: Hash + BitXor + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
+use rand::distributions::{Standard, Distribution};
 
+pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
+    fn generate() -> Self;
 }
 
+impl RequestId for u64 {
+    fn generate()-> Self {
+        rand::random()
+    }
+}

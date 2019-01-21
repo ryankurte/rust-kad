@@ -60,3 +60,22 @@ where
     }
 }
 
+impl <ID, ADDR> From<(ID, ADDR)> for Node<ID, ADDR> 
+where 
+    ID: DatabaseId + Clone + Debug + 'static,
+    ADDR: Clone + Debug + 'static,
+{
+    fn from(d: (ID, ADDR)) -> Node<ID, ADDR> {
+        Node::new(d.0, d.1)
+    }
+}
+
+impl <ID, ADDR> Into<(ID, ADDR)> for Node<ID, ADDR> 
+where 
+    ID: DatabaseId + Clone + Debug + 'static,
+    ADDR: Clone + Debug + 'static,
+{
+    fn into(self) -> (ID, ADDR) {
+        (self.id, self.address)
+    }
+}

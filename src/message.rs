@@ -24,15 +24,27 @@ pub enum Response<ID, ADDR, VALUE> {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct RequestMessage<ID, ADDR> {
+pub struct RequestMessage<ID, ADDR, VALUE> {
     pub request_id: ID,
     pub caller: Node<ID, ADDR>,
-    pub request: Request<ID, ADDR>,
+    pub request: Request<ID, VALUE>,
 }
 
-impl <ID, ADDR> RequestMessage<ID, ADDR> {
-    pub fn ping(request_id: ID, caller: Node<ID, ADDR>) -> RequestMessage<ID, ADDR> {
+impl <ID, ADDR, VALUE> RequestMessage<ID, ADDR, VALUE> {
+    pub fn ping(request_id: ID, caller: Node<ID, ADDR>) -> RequestMessage<ID, ADDR, VALUE> {
         RequestMessage{request_id, caller, request: Request::Ping}
+    }
+
+    pub fn find_node(request_id: ID, caller: Node<ID, ADDR>, id: ID) -> RequestMessage<ID, ADDR, VALUE> {
+        RequestMessage{request_id, caller, request: Request::FindNode(id)}
+    }
+
+    pub fn find_values(request_id: ID, caller: Node<ID, ADDR>, id: ID) -> RequestMessage<ID, ADDR, VALUE> {
+        RequestMessage{request_id, caller, request: Request::FindValue(id)}
+    }
+
+    pub fn store(request_id: ID, caller: Node<ID, ADDR>, id: ID, value: Vec<VALUE>) -> RequestMessage<ID, ADDR, VALUE> {
+        RequestMessage{request_id, caller, request: Request::Store(id, value)}
     }
 }
 
@@ -45,7 +57,7 @@ pub struct ResponseMessage<ID, ADDR, VALUE> {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Message<ID, ADDR, VALUE> {
-    Request(RequestMessage<ID, ADDR>),
+    Request(RequestMessage<ID, ADDR, VALUE>),
     Response(ResponseMessage<ID, ADDR, VALUE>),
 }
 

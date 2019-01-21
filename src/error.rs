@@ -17,6 +17,7 @@ pub enum Error {
     NotFound,
     Io(IoErrorKind),
     Cancelled,
+    Connector,
 }
 
 impl From<IoError> for Error {

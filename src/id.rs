@@ -103,3 +103,11 @@ impl RequestId for u64 {
         rand::random()
     }
 }
+
+
+impl RequestId for [u8; 8] {
+    fn generate()-> Self {
+        rand::random()
+    }
+}
+

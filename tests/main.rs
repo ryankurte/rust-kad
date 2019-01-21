@@ -30,7 +30,7 @@ use futures::future;
 extern crate rr_mux;
 use rr_mux::Connector;
 
-type MockPeer<ID, ADDR, DATA> = Dht<ID, ADDR, DATA, KNodeTable<ID, ADDR>, MockConnector<ID, ADDR, DATA, u64>, u64, HashMapStore<ID, DATA>>;
+type MockPeer<ID, ADDR, DATA> = Dht<ID, ADDR, DATA, u64, MockConnector<ID, ADDR, DATA, u64>, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
 
 type PeerMap<ID, ADDR, DATA> = HashMap<ID, MockPeer<ID, ADDR, DATA>>;
 
@@ -56,7 +56,7 @@ where
 
             let conn = MockConnector::new(n.id().clone(), n.address().clone(), m.peers.clone());
             
-            let dht = Dht::new(n.id().clone(), n.address().clone(), config, table, conn, store);
+            let dht = Dht::new(n.id().clone(), config, table, conn, store);
 
             m.peers.lock().unwrap().insert(n.id().clone(), dht);
         }

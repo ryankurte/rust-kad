@@ -28,30 +28,32 @@ use crate::search::{Search, Operation};
 use crate::connection::{request_all};
 
 #[derive(Clone, Debug)]
-pub struct Dht<ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> {
+pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
     id: ID,
-    addr: ADDR,
+    
     config: Config,
     table: Arc<Mutex<TABLE>>,
     conn_mgr: CONN,
     datastore: Arc<Mutex<STORE>>,
+
+    addr: PhantomData<ADDR>,
     data: PhantomData<DATA>,
     req_id: PhantomData<REQ_ID>,
 }
 
 
-impl <ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> Dht<ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> 
+impl <ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> 
 where 
-    ID: DatabaseId + 'static,
-    ADDR: Clone + Debug + 'static,
-    DATA: Reducer<Item=DATA> + PartialEq + Clone + Debug + 'static,
-    TABLE: NodeTable<ID, ADDR> + 'static,
-    STORE: Datastore<ID, DATA> + 'static,
-    REQ_ID: RequestId + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,
+    ID: DatabaseId + Send + 'static,
+    ADDR: Clone + Debug + Send + 'static,
+    DATA: Reducer<Item=DATA> + Send + PartialEq + Clone + Debug + 'static,
+    TABLE: NodeTable<ID, ADDR> + Send + 'static,
+    STORE: Datastore<ID, DATA> + Send + 'static,
+    REQ_ID: RequestId + Send + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + Send + 'static,
 {
-    pub fn new(id: ID, addr: ADDR, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, TABLE, CONN, REQ_ID, STORE> {
-        Dht{id, addr, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), data: PhantomData, req_id: PhantomData}
+    pub fn new(id: ID, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
+        Dht{id, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), addr: PhantomData, data: PhantomData, req_id: PhantomData}
     }
 
     /// Connect to a known node
@@ -242,7 +244,7 @@ where
 }
 
 /// Stream trait implemented to allow polling on dht object
-impl <ID, ADDR, DATA, TABLE, CONN, STORE, REQ_ID> Future for Dht <ID, ADDR, DATA, TABLE, CONN, STORE, REQ_ID> {
+impl <ID, ADDR, DATA, REQ_ID, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, REQ_ID, TABLE, CONN, STORE> {
     type Item = ();
     type Error = ();
 
@@ -265,7 +267,7 @@ impl <ID, ADDR, DATA, TABLE, CONN, STORE, REQ_ID> Future for Dht <ID, ADDR, DATA
         
         let store: HashMapStore<u64, u64> = HashMapStore::new();
         
-        let mut $dht = Dht::<u64, u64, _, _, _, u64, _>::new($root.id().clone(), $root.address().clone(), 
+        let mut $dht = Dht::<u64, u64, _, u64, _, _, _>::new($root.id().clone(), 
                 $config, table, $connector.clone(), store);
     }
 }

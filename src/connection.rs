@@ -25,7 +25,7 @@ where
     ADDR: Clone + Debug + 'static,
     DATA: Clone + Debug + 'static,
     REQ_ID: RequestId + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,       
+    CONN: FnMut(REQ_ID, Node<ID, ADDR>, Request<ID, DATA>) -> Box<Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> + Send + 'static> + Clone + Send + 'static,
 {
     let mut queries = Vec::new();
 
@@ -34,7 +34,7 @@ where
         let n1 = n.clone();
         let n2 = n.clone();
         let mut c = conn.clone();
-        let q = c.request((), REQ_ID::generate(), n.clone(), req.clone())
+        let q = (conn)(REQ_ID::generate(), n.clone(), req.clone())
             .map(|v| {
                 println!("Response: '{:?}' from: '{:?}'", v, n1.id());
                 (n1, Some(v)) 

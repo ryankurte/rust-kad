@@ -68,7 +68,7 @@ where
     DATA: Clone + Debug + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     REQ_ID: RequestId + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,
+    CONN: FnMut(REQ_ID, Node<ID, ADDR>, Request<ID, DATA>) -> Box<Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> + Send + 'static> + Clone + Send + 'static,
 {
     pub fn new(origin: ID, target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN) 
         -> Search<ID, ADDR, DATA, TABLE, CONN, REQ_ID> {
@@ -270,7 +270,7 @@ mod tests {
         config.k = 2;
 
         let table = Arc::new(Mutex::new(KNodeTable::new(root.id().clone(), 2, 8)));
-        let mut s = Search::<_, _, u64, _, _, u64>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
+        let mut s = Search::<_, _, u64, _, _, u64>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), |id, addr, req| connector.request((), id, addr, req) );
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

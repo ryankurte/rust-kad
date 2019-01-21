@@ -7,6 +7,7 @@
 use std::fmt::Debug;
 
 extern crate futures;
+use futures::Future;
 
 #[macro_use] extern crate log;
 
@@ -18,7 +19,7 @@ extern crate num;
 extern crate rand;
 
 extern crate rr_mux;
-use rr_mux::{Connector};
+use rr_mux::{Requester};
 
 pub mod error;
 use error::Error as DhtError;
@@ -76,18 +77,20 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<ID, ADDR, DATA, REQ_ID, CONN> = Dht<ID, ADDR, DATA, REQ_ID, CONN, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
+pub type StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> = Dht<ID, ADDR, DATA, REQ_ID, CTX, CONN, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
 
-impl <ID, ADDR, DATA, REQ_ID, CONN> StandardDht<ID, ADDR, DATA, REQ_ID, CONN> 
+impl <ID, ADDR, DATA, REQ_ID, CONN, CTX> StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> 
 where 
     ID: DatabaseId + Send + 'static,
     ADDR: Clone + Debug + Send + 'static,
     DATA: Reducer<Item=DATA> + PartialEq + Send + Clone + Debug + 'static,
     REQ_ID: RequestId + Send + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Send + Clone + 'static,
+    CTX: Clone + Debug + Send + 'static,
+    CONN: FnMut(REQ_ID, Node<ID, ADDR>, Request<ID, DATA>) -> Box<Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> + Send + 'static> + Clone + Send + 'static,
+
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
-    pub fn standard(id: ID, config: Config, conn: CONN) -> StandardDht<ID, ADDR, DATA, REQ_ID, CONN> {
+    pub fn standard(id: ID, config: Config, conn: CONN) -> StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> {
         let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
         let store = HashMapStore::new();
         Dht::new(id, config, table, conn, store)
@@ -124,7 +127,7 @@ mod tests {
 
         // Bind it to the DHT instance
         let n1 = Node::new(0b0001, 100);
-        let dht = Dht::<NodeId, Addr, Data, RequestId, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
+        let dht = Dht::<NodeId, Addr, Data, RequestId, (), _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]
@@ -152,8 +155,8 @@ mod tests {
         
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
-                config, knodetable, connector.clone(), store);
+        let mut dht = Dht::<u64, u64, _, u64, (), _, _, _>::new(n1.id().clone(), 
+                config, knodetable, |id, addr, req| connector.clone().request((), id, addr, req), store);
     
         // Attempt initial bootstrapping
         dht.connect(n2.clone()).wait().unwrap();
@@ -201,8 +204,8 @@ mod tests {
 
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
-                config, knodetable, connector.clone(), store);
+        let mut dht = Dht::<u64, u64, _, u64, (), _, _, _>::new(n1.id().clone(), 
+                config, knodetable, |id, addr, req| connector.clone().request((), id, addr, req), store);
 
         // Perform search
         dht.lookup(n4.id().clone()).wait().expect("lookup failed");
@@ -249,8 +252,8 @@ mod tests {
 
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
-                config, knodetable, connector.clone(), store);
+        let mut dht = Dht::<u64, u64, _, u64, (), _, _, _>::new(n1.id().clone(), 
+                config, knodetable, |id, addr, req| connector.clone().request((), id, addr, req), store);
 
         // Perform store
         dht.store(id, val).wait().expect("store failed");
@@ -294,8 +297,8 @@ mod tests {
 
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
-                config, knodetable, connector.clone(), store);
+        let mut dht = Dht::<u64, u64, _, u64, (), _, _, _>::new(n1.id().clone(), 
+                config, knodetable, |id, addr, req| connector.clone().request((), id, addr, req), store);
 
         // Perform store
         dht.find(id).wait().expect("find failed");

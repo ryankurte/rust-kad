@@ -14,7 +14,7 @@ use std::fmt::{Debug};
 use futures::prelude::*;
 use futures::future;
 
-use rr_mux::{Mux, Connector, Muxed};
+use rr_mux::{Mux, Connector, Requester};
 
 use crate::{Config};
 use crate::node::Node;
@@ -27,8 +27,8 @@ use crate::search::{Search, Operation};
 
 use crate::connection::{request_all};
 
-#[derive(Clone, Debug)]
-pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
+#[derive(Clone)]
+pub struct Dht<ID, ADDR, DATA, REQ_ID, CTX, CONN, TABLE, STORE> {
     id: ID,
     
     config: Config,
@@ -39,10 +39,11 @@ pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
     addr: PhantomData<ADDR>,
     data: PhantomData<DATA>,
     req_id: PhantomData<REQ_ID>,
+    ctx: PhantomData<CTX>,
 }
 
 
-impl <ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> 
+impl <ID, ADDR, DATA, REQ_ID, CTX, CONN, TABLE, STORE> Dht<ID, ADDR, DATA, REQ_ID, CTX, CONN, TABLE, STORE> 
 where 
     ID: DatabaseId + Send + 'static,
     ADDR: Clone + Debug + Send + 'static,
@@ -50,10 +51,11 @@ where
     TABLE: NodeTable<ID, ADDR> + Send + 'static,
     STORE: Datastore<ID, DATA> + Send + 'static,
     REQ_ID: RequestId + Send + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + Send + 'static,
+    CTX: Clone + Debug + Send + 'static,
+    CONN: FnMut(REQ_ID, Node<ID, ADDR>, Request<ID, DATA>) -> Box<Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> + Send + 'static> + Clone + Send + 'static,
 {
-    pub fn new(id: ID, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
-        Dht{id, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), addr: PhantomData, data: PhantomData, req_id: PhantomData}
+    pub fn new(id: ID, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, REQ_ID, CTX, CONN, TABLE, STORE> {
+        Dht{id, config, table: Arc::new(Mutex::new(table)), conn_mgr, datastore: Arc::new(Mutex::new(datastore)), addr: PhantomData, data: PhantomData, req_id: PhantomData, ctx: PhantomData }
     }
 
     /// Connect to a known node
@@ -66,7 +68,7 @@ where
         println!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
 
         // Launch request
-        self.conn_mgr.clone().request((), REQ_ID::generate(), target.clone(), Request::FindNode(self.id.clone()))
+        (self.conn_mgr.clone())(REQ_ID::generate(), target.clone(), Request::FindNode(self.id.clone()))
             .and_then(move |resp| {
                 // Check for correct response
                 match resp {
@@ -244,7 +246,7 @@ where
 }
 
 /// Stream trait implemented to allow polling on dht object
-impl <ID, ADDR, DATA, REQ_ID, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, REQ_ID, TABLE, CONN, STORE> {
+impl <ID, ADDR, DATA, REQ_ID, CTX, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA, REQ_ID, CTX, TABLE, CONN, STORE> {
     type Item = ();
     type Error = ();
 
@@ -267,8 +269,8 @@ impl <ID, ADDR, DATA, REQ_ID, TABLE, CONN, STORE> Future for Dht <ID, ADDR, DATA
         
         let store: HashMapStore<u64, u64> = HashMapStore::new();
         
-        let mut $dht = Dht::<u64, u64, _, u64, _, _, _>::new($root.id().clone(), 
-                $config, table, $connector.clone(), store);
+        let mut $dht = Dht::<u64, u64, _, u64, (), _, _, _>::new($root.id().clone(), 
+                $config, table, |id, addr, req| $connector.clone().request((), id, addr, req), store);
     }
 }
 

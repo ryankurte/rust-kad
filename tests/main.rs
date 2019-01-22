@@ -97,7 +97,7 @@ where
         // Fetch peer instance
         let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
 
-        let resp = peer.receive(&Node::new(self.id.clone(), self.addr.clone()), &req);
+        let resp = peer.receive(&Node::new(self.id.clone(), self.addr.clone()), &req).wait().unwrap();
 
         self.peers.lock().unwrap().insert(to.id().clone(), peer);
 

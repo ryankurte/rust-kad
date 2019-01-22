@@ -95,7 +95,7 @@ where
 }
 
 /// DhtMux Mux implementation for DHT connector compatibility
-pub type DhtMux<NODE_ID, ADDR, DATA, REQ_ID, CTX, SENDER> = rr_mux::Mux<REQ_ID, Node<NODE_ID, ADDR>, Request<NODE_ID, DATA>, Response<NODE_ID, ADDR, DATA>, DhtError, CTX, SENDER>;
+pub type DhtMux<NODE_ID, ADDR, DATA, REQ_ID, CTX> = rr_mux::Mux<REQ_ID, Node<NODE_ID, ADDR>, Request<NODE_ID, DATA>, Response<NODE_ID, ADDR, DATA>, DhtError, CTX>;
 
 #[cfg(test)]
 mod tests {
@@ -117,10 +117,7 @@ mod tests {
     #[test]
     fn test_mux() {
         // Create a generic mux
-        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, _, _>::new(|_ctx, _req_id, _message, _address| {
-
-            Box::new(futures::future::ok(()))
-        });
+        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, _>::new();
 
         // Bind it to the DHT instance
         let n1 = Node::new(0b0001, 100);

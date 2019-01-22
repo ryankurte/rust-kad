@@ -41,7 +41,6 @@ pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
     req_id: PhantomData<REQ_ID>,
 }
 
-
 impl <ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> 
 where 
     ID: DatabaseId + Send + 'static,
@@ -204,7 +203,7 @@ where
     }
 
     /// Receive and reply to requests
-    pub fn receive(&mut self, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> Response<ID, ADDR, DATA> {
+    pub fn receive(&mut self, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> impl Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> {
         // Build response
         let resp = match req {
             Request::Ping => {
@@ -234,7 +233,7 @@ where
         // Update record for sender
         self.table.lock().unwrap().update(from);
 
-        resp
+        future::ok(resp)
     }
 
     #[cfg(test)]
@@ -296,7 +295,7 @@ mod tests {
 
         // Ping
         assert_eq!(
-            dht.receive(&friend, &Request::Ping),
+            dht.receive(&friend, &Request::Ping).wait().unwrap(),
             Response::NoResult,
         );
 
@@ -305,7 +304,7 @@ mod tests {
 
         // Second ping
         assert_eq!(
-            dht.receive(&friend, &Request::Ping),
+            dht.receive(&friend, &Request::Ping).wait().unwrap(),
             Response::NoResult,
         );
 
@@ -328,7 +327,7 @@ mod tests {
 
         // Ping
         assert_eq!(
-            dht.receive(&friend, &Request::Ping),
+            dht.receive(&friend, &Request::Ping).wait().unwrap(),
             Response::NoResult,
         );
 
@@ -351,7 +350,7 @@ mod tests {
 
         // FindNodes
         assert_eq!(
-            dht.receive(&friend, &Request::FindNode(other.id().clone())),
+            dht.receive(&friend, &Request::FindNode(other.id().clone())).wait().unwrap(),
             Response::NodesFound(vec![friend.clone()]), 
         );
 
@@ -374,7 +373,7 @@ mod tests {
 
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
-            dht.receive(&other, &Request::FindValue(201)),
+            dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
             Response::NodesFound(vec![friend.clone()]), 
         );
 
@@ -383,7 +382,7 @@ mod tests {
         
         // FindValues
         assert_eq!(
-            dht.receive(&other, &Request::FindValue(201)),
+            dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
             Response::ValuesFound(vec![1337]), 
         );
 
@@ -402,7 +401,7 @@ mod tests {
 
         // Store
         assert_eq!(
-            dht.receive(&friend, &Request::Store(2, vec![1234])),
+            dht.receive(&friend, &Request::Store(2, vec![1234])).wait().unwrap(),
             Response::NoResult,
         );
 

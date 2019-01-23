@@ -123,6 +123,8 @@ where
     }
 
 
+
+
     /// Look up a node in the database by ID
     pub fn lookup(&mut self, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
         // Create a search instance
@@ -263,6 +265,15 @@ where
     #[cfg(test)]
     pub fn contains(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
         self.table.lock().unwrap().contains(id)
+    }
+
+    /// Create a basic search using the DHT
+    /// This is provided for integration of the Dht with other components
+    pub fn search(&mut self, id: ID, op: Operation, seed: &[Node<ID, ADDR>]) -> impl Future<Item=Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID>, Error=DhtError> {
+        let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone());
+        search.seed(&seed);
+
+        search.execute()
     }
 }
 

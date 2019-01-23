@@ -145,7 +145,7 @@ where
     }
 
     /// Fetch completed known nodes ordered by distance
-    pub fn completed(&self, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
+    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Complete )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
@@ -164,7 +164,7 @@ where
     /// And collects the results into the known node and data maps.
     ///
     /// This is intended to be called using loop_fn for recursion.
-    pub fn recurse(mut self) -> impl Future<Item=Self, Error=DhtError> {
+    pub(crate) fn recurse(mut self) -> impl Future<Item=Self, Error=DhtError> {
 
         // Fetch a section of known nodes to process
         let pending = self.pending();
@@ -222,8 +222,7 @@ where
         })
     }
 
-
-    /// Seed the search with nearest nodes
+    /// Seed the search with nearest nodes in addition to those provided in initialisation
     pub fn seed(&mut self, known: &[Node<ID, ADDR>]) {
         for n in known {
             self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));

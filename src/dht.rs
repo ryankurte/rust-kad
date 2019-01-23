@@ -27,7 +27,6 @@ use crate::search::{Search, Operation};
 
 use crate::connection::{request_all};
 
-#[derive(Clone, Debug)]
 pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
     id: ID,
     
@@ -41,14 +40,39 @@ pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
     req_id: PhantomData<REQ_ID>,
 }
 
+impl <ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> Clone for Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> 
+where
+    ID: DatabaseId + Clone + 'static,
+    ADDR: Clone + Debug + Clone + 'static,
+    DATA: Reducer<Item=DATA> + Clone + PartialEq + Debug + 'static,
+    REQ_ID: RequestId + Clone + 'static,
+    TABLE: NodeTable<ID, ADDR> + 'static,
+    STORE: Datastore<ID, DATA> + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,
+{
+    fn clone(&self) -> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
+        Dht{
+            id: self.id.clone(),
+            config: self.config.clone(),
+            table: self.table.clone(),
+            conn_mgr: self.conn_mgr.clone(),
+            datastore: self.datastore.clone(),
+            
+            addr: PhantomData,
+            data: PhantomData,
+            req_id: PhantomData,
+        }
+    }
+}
+
 impl <ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> 
 where 
-    ID: DatabaseId + Send + 'static,
-    ADDR: Clone + Debug + Send + 'static,
-    DATA: Reducer<Item=DATA> + Send + PartialEq + Clone + Debug + 'static,
+    ID: DatabaseId + Clone + Send + 'static,
+    ADDR: Clone + Debug + Clone + Send + 'static,
+    DATA: Reducer<Item=DATA> + Clone + Send + PartialEq + Clone + Debug + 'static,
+    REQ_ID: RequestId + Clone + Send + 'static,
     TABLE: NodeTable<ID, ADDR> + Send + 'static,
     STORE: Datastore<ID, DATA> + Send + 'static,
-    REQ_ID: RequestId + Send + 'static,
     CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + Send + 'static,
 {
     pub fn new(id: ID, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, REQ_ID, CONN, TABLE, STORE> {
@@ -410,6 +434,18 @@ mod tests {
 
         // Check expectations are done
         connector.finalise();
+    }
+
+    #[test]
+    fn test_clone() {
+
+        let root = Node::new(0, 001);
+        let friend = Node::new(1, 002);
+
+        let mut connector = MockConnector::new().expect(vec![]);
+        mock_dht!(connector, root, dht);
+
+        let _ = dht.clone();
     }
 
 }

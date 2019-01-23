@@ -80,10 +80,10 @@ pub type StandardDht<ID, ADDR, DATA, REQ_ID, CONN> = Dht<ID, ADDR, DATA, REQ_ID,
 
 impl <ID, ADDR, DATA, REQ_ID, CONN> StandardDht<ID, ADDR, DATA, REQ_ID, CONN> 
 where 
-    ID: DatabaseId + Send + 'static,
-    ADDR: Clone + Debug + Send + 'static,
-    DATA: Reducer<Item=DATA> + PartialEq + Send + Clone + Debug + 'static,
-    REQ_ID: RequestId + Send + 'static,
+    ID: DatabaseId + Clone + Send + 'static,
+    ADDR: PartialEq + Clone + Debug + Send + 'static,
+    DATA: Reducer<Item=DATA> + PartialEq + Clone + Send  + Debug + 'static,
+    REQ_ID: RequestId + Clone + Send + 'static,
     CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Send + Clone + 'static,
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.

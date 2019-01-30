@@ -45,7 +45,7 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID> {
+pub struct Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> {
     origin: ID,
     target: ID,
     op: Operation,
@@ -55,29 +55,31 @@ pub struct Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID> {
     known: HashMap<ID, (Node<ID, ADDR>, RequestState)>,
     data: HashMap<ID, Vec<DATA>>,
     conn: CONN,
+    ctx: CTX,
     _req_id: PhantomData<REQ_ID>,
 }
 
 pub type KnownMap<ID, ADDR> = HashMap<ID, (Node<ID, ADDR>, RequestState)>;
 pub type ValueMap<ID, DATA> = HashMap<ID, Vec<DATA>>;
 
-impl <ID, ADDR, DATA, TABLE, CONN, REQ_ID> Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID> 
+impl <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> 
 where
     ID: DatabaseId + 'static,
     ADDR: Clone + Debug + 'static,
     DATA: Clone + Debug + 'static,
     TABLE: NodeTable<ID, ADDR> + 'static,
     REQ_ID: RequestId + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Clone + 'static,
+    CTX: Clone + PartialEq + Debug + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Clone + 'static,
 {
-    pub fn new(origin: ID, target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN) 
-        -> Search<ID, ADDR, DATA, TABLE, CONN, REQ_ID> {
+    pub fn new(origin: ID, target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN, ctx: CTX) 
+        -> Search<ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> {
         let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
         let data = HashMap::<ID, Vec<DATA>>::new();
 
         let depth = config.max_recursion;
 
-        Search{origin, target, op, config, depth, known, table, data, conn, _req_id: PhantomData}
+        Search{origin, target, op, config, depth, known, table, data, conn, ctx, _req_id: PhantomData}
     }
 
     /// Fetch a pointer to the search target ID
@@ -184,7 +186,7 @@ where
         };
 
         // Send requests and handle responses
-        request_all(self.conn.clone(), &req, chunk)
+        request_all(self.conn.clone(), self.ctx.clone(), &req, chunk)
         .map(move |res| {
             for (n, v) in &res {
                 // Handle received responses
@@ -269,7 +271,7 @@ mod tests {
         config.k = 2;
 
         let table = Arc::new(Mutex::new(KNodeTable::new(root.id().clone(), 2, 8)));
-        let mut s = Search::<_, _, u64, _, _, u64>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone());
+        let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

@@ -30,7 +30,7 @@ use futures::future;
 extern crate rr_mux;
 use rr_mux::Connector;
 
-type MockPeer<ID, ADDR, DATA> = Dht<ID, ADDR, DATA, u64, MockConnector<ID, ADDR, DATA, u64>, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
+type MockPeer<ID, ADDR, DATA> = Dht<ID, ADDR, DATA, u64, MockConnector<ID, ADDR, DATA, u64>, (), KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
 
 type PeerMap<ID, ADDR, DATA> = HashMap<ID, MockPeer<ID, ADDR, DATA>>;
 
@@ -97,7 +97,7 @@ where
         // Fetch peer instance
         let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
 
-        let resp = peer.receive(&Node::new(self.id.clone(), self.addr.clone()), &req).wait().unwrap();
+        let resp = peer.receive((), &Node::new(self.id.clone(), self.addr.clone()), &req).wait().unwrap();
 
         self.peers.lock().unwrap().insert(to.id().clone(), peer);
 
@@ -133,7 +133,7 @@ fn integration() {
     for n in nodes.iter().skip(1) {
         let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-        peer.connect(n0.clone()).wait().expect("Error connecting to network");
+        peer.connect((), n0.clone()).wait().expect("Error connecting to network");
 
         mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
     }
@@ -148,7 +148,7 @@ fn integration() {
             
             let mut peer = { mgr.peers.lock().unwrap().remove(n1.id()).unwrap() };
 
-            let _node = peer.lookup(n2.id().clone()).wait().expect("Error finding node in network");
+            let _node = peer.lookup((), n2.id().clone()).wait().expect("Error finding node in network");
 
             mgr.peers.lock().unwrap().insert(n1.id().clone(), peer);
         }
@@ -160,7 +160,7 @@ fn integration() {
     {
         let mut peer = { mgr.peers.lock().unwrap().remove(n0.id()).unwrap() };
 
-        let _res = peer.store(addr, val).wait().expect("Error storing value");
+        let _res = peer.store((), addr, val).wait().expect("Error storing value");
 
         mgr.peers.lock().unwrap().insert(n0.id().clone(), peer);
     }
@@ -171,7 +171,7 @@ fn integration() {
             
         let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-        let val = peer.find(addr).wait().expect("Error finding values");
+        let val = peer.find((), addr).wait().expect("Error finding values");
         assert!(val.len() > 0);
 
         mgr.peers.lock().unwrap().insert(n.id().clone(), peer);

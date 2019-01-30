@@ -76,18 +76,19 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<ID, ADDR, DATA, REQ_ID, CONN> = Dht<ID, ADDR, DATA, REQ_ID, CONN, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
+pub type StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> = Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
 
-impl <ID, ADDR, DATA, REQ_ID, CONN> StandardDht<ID, ADDR, DATA, REQ_ID, CONN> 
+impl <ID, ADDR, DATA, REQ_ID, CONN, CTX> StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> 
 where 
     ID: DatabaseId + Clone + Send + 'static,
     ADDR: PartialEq + Clone + Debug + Send + 'static,
     DATA: Reducer<Item=DATA> + PartialEq + Clone + Send  + Debug + 'static,
     REQ_ID: RequestId + Clone + Send + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, ()> + Send + Clone + 'static,
+    CTX: Clone + PartialEq + Debug + Send + 'static,
+    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Send + Clone + 'static,
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
-    pub fn standard(id: ID, config: Config, conn: CONN) -> StandardDht<ID, ADDR, DATA, REQ_ID, CONN> {
+    pub fn standard(id: ID, config: Config, conn: CONN) -> StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> {
         let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
         let store = HashMapStore::new();
         Dht::new(id, config, table, conn, store)
@@ -117,11 +118,11 @@ mod tests {
     #[test]
     fn test_mux() {
         // Create a generic mux
-        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, _>::new();
+        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, ()>::new();
 
         // Bind it to the DHT instance
         let n1 = Node::new(0b0001, 100);
-        let dht = Dht::<NodeId, Addr, Data, RequestId, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
+        let dht = Dht::<NodeId, Addr, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]
@@ -149,11 +150,11 @@ mod tests {
         
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
+        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping
-        dht.connect(n2.clone()).wait().unwrap();
+        dht.connect((), n2.clone()).wait().unwrap();
 
         // Check bootstrapped node is added to db
         assert_eq!(Some(n2.clone()), dht.contains(n2.id()));
@@ -198,11 +199,11 @@ mod tests {
 
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
+        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
 
         // Perform search
-        dht.lookup(n4.id().clone()).wait().expect("lookup failed");
+        dht.lookup((), n4.id().clone()).wait().expect("lookup failed");
 
         connector.finalise();
     }
@@ -246,11 +247,11 @@ mod tests {
 
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
+        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
 
         // Perform store
-        dht.store(id, val).wait().expect("store failed");
+        dht.store((), id, val).wait().expect("store failed");
 
         connector.finalise();
     }
@@ -291,11 +292,11 @@ mod tests {
 
         // Instantiated DHT
         let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _>::new(n1.id().clone(), 
+        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
 
         // Perform store
-        dht.find(id).wait().expect("find failed");
+        dht.find((), id).wait().expect("find failed");
 
         connector.finalise();
     }

@@ -91,7 +91,7 @@ where
     ADDR: Debug + Clone + PartialEq + Send + 'static,
     DATA: Reducer<Item=DATA> + Debug + Clone + PartialEq + Send + 'static,
 {
-    fn request(&mut self, _ctx: (), req_id: REQ_ID, to: Node<ID, ADDR>, req: Request<ID, DATA>) -> 
+    fn request(&mut self, _ctx: (), _req_id: REQ_ID, to: Node<ID, ADDR>, req: Request<ID, DATA>) -> 
             Box<Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> + Send + 'static> {
 
         // Fetch peer instance
@@ -104,7 +104,7 @@ where
         Box::new(future::ok(resp))
     }
 
-    fn respond(&mut self, _ctx: (), req_id: REQ_ID, to: Node<ID, ADDR>, resp: Response<ID, ADDR, DATA>) -> Box<Future<Item=(), Error=DhtError> + Send + 'static> {
+    fn respond(&mut self, _ctx: (), _req_id: REQ_ID, _to: Node<ID, ADDR>, _resp: Response<ID, ADDR, DATA>) -> Box<Future<Item=(), Error=DhtError> + Send + 'static> {
         Box::new(future::ok(()))
     }
 }

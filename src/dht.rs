@@ -239,7 +239,7 @@ where
 
 
     /// Refresh node table
-    pub fn refresh(&mut self, ctx: CTX) -> impl Future<Item=(), Error=DhtError> {
+    pub fn refresh(&mut self, _ctx: CTX) -> impl Future<Item=(), Error=DhtError> {
         // TODO: send refresh to buckets that haven't been looked up recently
         // How to track recently looked up / contacted buckets..?
 
@@ -251,7 +251,7 @@ where
     }
 
     /// Receive and reply to requests
-    pub fn receive(&mut self, ctx: CTX, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> impl Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> {
+    pub fn receive(&mut self, _ctx: CTX, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> impl Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> {
         // Build response
         let resp = match req {
             Request::Ping => {

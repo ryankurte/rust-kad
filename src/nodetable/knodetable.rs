@@ -18,48 +18,48 @@ use super::nodetable::NodeTable;
 use super::kbucket::KBucket;
 
 /// KNodeTable Implementation
-/// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local ID
+/// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local Id
 /// as a simplification of the allocation based branching approach introduced in the paper.
-pub struct KNodeTable<ID, ADDR> {
-    id: ID,
-    buckets: Vec<KBucket<ID, ADDR>>
+pub struct KNodeTable<Id, Addr> {
+    id: Id,
+    buckets: Vec<KBucket<Id, Addr>>
 }
 
-impl <ID, ADDR> KNodeTable<ID, ADDR> 
+impl <Id, Addr> KNodeTable<Id, Addr> 
 where
-    ID: DatabaseId + Clone + 'static,
-    ADDR: Clone + Debug + 'static,
+    Id: DatabaseId + Clone + 'static,
+    Addr: Clone + Debug + 'static,
 {
     /// Create a new KNodeTable with the provded bucket and hash sizes
-    pub fn new(id: ID, bucket_size: usize, hash_size: usize) -> KNodeTable<ID, ADDR> {
-        // Create a new bucket and assign own ID
+    pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Addr> {
+        // Create a new bucket and assign own Id
         let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
         KNodeTable{id, buckets: buckets}
     }
 
-    // Calculate the distance between two IDs.
-    fn distance(a: &ID, b: &ID) -> ID {
-        ID::xor(a, b)
+    // Calculate the distance between two Ids.
+    fn distance(a: &Id, b: &Id) -> Id {
+        Id::xor(a, b)
     }
 
-    /// Fetch a mutable reference to the bucket containing the provided ID
-    fn bucket_mut(&mut self, id: &ID) -> &mut KBucket<ID, ADDR> {
+    /// Fetch a mutable reference to the bucket containing the provided Id
+    fn bucket_mut(&mut self, id: &Id) -> &mut KBucket<Id, Addr> {
         let index = self.bucket_index(id);
         &mut self.buckets[index]
     }
 
-    /// Fetch a mutable reference to the bucket containing the provided ID
-    fn bucket(&self, id: &ID) -> &KBucket<ID, ADDR> {
+    /// Fetch a mutable reference to the bucket containing the provided Id
+    fn bucket(&self, id: &Id) -> &KBucket<Id, Addr> {
         let index = self.bucket_index(id);
         &self.buckets[index]
     }
 
-    /// Fetch the bucket index for a given ID
-    /// This is basically just the number of bits in the distance between the local and target IDs
-    fn bucket_index(&self, id: &ID) -> usize {
+    /// Fetch the bucket index for a given Id
+    /// This is basically just the number of bits in the distance between the local and target Ids
+    fn bucket_index(&self, id: &Id) -> usize {
         // Find difference
-        let diff = KNodeTable::<ID, ADDR>::distance(&self.id, id);
+        let diff = KNodeTable::<Id, Addr>::distance(&self.id, id);
         assert!(!diff.is_zero(), "Distance cannot be zero");
 
         let index = diff.bits() - 1;
@@ -67,13 +67,13 @@ where
     }
 }
 
-impl <ID, ADDR> NodeTable<ID, ADDR> for KNodeTable<ID, ADDR> 
+impl <Id, Addr> NodeTable<Id, Addr> for KNodeTable<Id, Addr> 
 where
-    ID: DatabaseId + Clone + 'static,
-    ADDR: Clone + Debug + 'static,
+    Id: DatabaseId + Clone + 'static,
+    Addr: Clone + Debug + 'static,
 {
     /// Update a node in the table
-    fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
+    fn update(&mut self, node: &Node<Id, Addr>) -> bool {
         if node.id() == &self.id {
             return false
         }
@@ -84,15 +84,15 @@ where
         bucket.update(&node)
     }
 
-    /// Find the nearest nodes to the provided ID in the given range
-    fn nearest(&mut self, id: &ID, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
+    /// Find the nearest nodes to the provided Id in the given range
+    fn nearest(&mut self, id: &Id, range: Range<usize>) -> Vec<Node<Id, Addr>> {
 
         // Create a list of all nodes
         let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes() ).collect();
         let count = all.len();
 
         // Sort by distance
-        all.sort_by_key(|n| { KNodeTable::<ID, ADDR>::distance(id, n.id()) } );
+        all.sort_by_key(|n| { KNodeTable::<Id, Addr>::distance(id, n.id()) } );
 
         // Limit to count or total found
         let mut range = range;
@@ -102,21 +102,21 @@ where
         limited
     }
 
-    /// Peek at the oldest node in the bucket associated with a given ID
-    fn peek_oldest(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
+    /// Peek at the oldest node in the bucket associated with a given Id
+    fn peek_oldest(&mut self, id: &Id) -> Option<Node<Id, Addr>> {
         let bucket = self.bucket(id);
         bucket.oldest()
     }
 
-    fn replace(&mut self, node: &Node<ID, ADDR>, _replacement: &Node<ID, ADDR>) {
+    fn replace(&mut self, node: &Node<Id, Addr>, _replacement: &Node<Id, Addr>) {
         let _bucket = self.bucket_mut(node.id());
 
 
     }
 
-    /// Check if the node table contains a given node by ID
+    /// Check if the node table contains a given node by Id
     /// This returns the node object if found
-    fn contains(&self, id: &ID) -> Option<Node<ID, ADDR>> {
+    fn contains(&self, id: &Id) -> Option<Node<Id, Addr>> {
         let bucket = self.bucket(id);
         bucket.find(id)
     }

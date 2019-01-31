@@ -13,41 +13,41 @@ use std::fmt::Debug;
 use crate::id::DatabaseId;
 
 #[derive(Clone, Debug)]
-pub struct Node<ID, ADDR> {
-    id: ID,
-    address: ADDR,
+pub struct Node<Id, Addr> {
+    id: Id,
+    address: Addr,
     seen: Option<Instant>,
     frozen: bool,
 }
 
-impl <ID, ADDR> PartialEq for Node<ID, ADDR> 
+impl <Id, Addr> PartialEq for Node<Id, Addr> 
 where
-    ID: PartialEq,
-    ADDR: PartialEq,
+    Id: PartialEq,
+    Addr: PartialEq,
 {
-    fn eq(&self, other: &Node<ID, ADDR>) -> bool {
+    fn eq(&self, other: &Node<Id, Addr>) -> bool {
         self.id == other.id && self.address == other.address
     }
 }
 
-impl <ID, ADDR>Node<ID, ADDR> 
+impl <Id, Addr>Node<Id, Addr> 
 where 
-    ID: DatabaseId + Clone + Debug + 'static,
-    ADDR: Clone + Debug + 'static,
+    Id: DatabaseId + Clone + Debug + 'static,
+    Addr: Clone + Debug + 'static,
 {
-    pub fn new(id: ID, address: ADDR) -> Node<ID, ADDR> {
+    pub fn new(id: Id, address: Addr) -> Node<Id, Addr> {
         Node{id, address, seen: None, frozen: false}
     }
 
-    pub fn id(&self) -> &ID {
+    pub fn id(&self) -> &Id {
         &self.id
     }
 
-    pub fn address(&self) -> &ADDR {
+    pub fn address(&self) -> &Addr {
         &self.address
     }
 
-    pub fn set_address(&mut self, address: &ADDR) {
+    pub fn set_address(&mut self, address: &Addr) {
         self.address = address.clone();
     }
 
@@ -60,22 +60,22 @@ where
     }
 }
 
-impl <ID, ADDR> From<(ID, ADDR)> for Node<ID, ADDR> 
+impl <Id, Addr> From<(Id, Addr)> for Node<Id, Addr> 
 where 
-    ID: DatabaseId + Clone + Debug + 'static,
-    ADDR: Clone + Debug + 'static,
+    Id: DatabaseId + Clone + Debug + 'static,
+    Addr: Clone + Debug + 'static,
 {
-    fn from(d: (ID, ADDR)) -> Node<ID, ADDR> {
+    fn from(d: (Id, Addr)) -> Node<Id, Addr> {
         Node::new(d.0, d.1)
     }
 }
 
-impl <ID, ADDR> Into<(ID, ADDR)> for Node<ID, ADDR> 
+impl <Id, Addr> Into<(Id, Addr)> for Node<Id, Addr> 
 where 
-    ID: DatabaseId + Clone + Debug + 'static,
-    ADDR: Clone + Debug + 'static,
+    Id: DatabaseId + Clone + Debug + 'static,
+    Addr: Clone + Debug + 'static,
 {
-    fn into(self) -> (ID, ADDR) {
+    fn into(self) -> (Id, Addr) {
         (self.id, self.address)
     }
 }

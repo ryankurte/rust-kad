@@ -45,55 +45,55 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> {
-    origin: ID,
-    target: ID,
+pub struct Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> {
+    origin: Id,
+    target: Id,
     op: Operation,
     config: Config,
     depth: usize,
-    table: Arc<Mutex<TABLE>>,
-    known: HashMap<ID, (Node<ID, ADDR>, RequestState)>,
-    data: HashMap<ID, Vec<DATA>>,
-    conn: CONN,
-    ctx: CTX,
-    _req_id: PhantomData<REQ_ID>,
+    table: Arc<Mutex<Table>>,
+    known: HashMap<Id, (Node<Id, Addr>, RequestState)>,
+    data: HashMap<Id, Vec<Data>>,
+    conn: Conn,
+    ctx: Ctx,
+    _req_id: PhantomData<ReqId>,
 }
 
-pub type KnownMap<ID, ADDR> = HashMap<ID, (Node<ID, ADDR>, RequestState)>;
-pub type ValueMap<ID, DATA> = HashMap<ID, Vec<DATA>>;
+pub type KnownMap<Id, Addr> = HashMap<Id, (Node<Id, Addr>, RequestState)>;
+pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
-impl <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> 
+impl <Id, Addr, Data, Table, Conn, ReqId, Ctx> Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> 
 where
-    ID: DatabaseId + 'static,
-    ADDR: Clone + Debug + 'static,
-    DATA: Clone + Debug + 'static,
-    TABLE: NodeTable<ID, ADDR> + 'static,
-    REQ_ID: RequestId + 'static,
-    CTX: Clone + PartialEq + Debug + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Clone + 'static,
+    Id: DatabaseId + 'static,
+    Addr: Clone + Debug + 'static,
+    Data: Clone + Debug + 'static,
+    Table: NodeTable<Id, Addr> + 'static,
+    ReqId: RequestId + 'static,
+    Ctx: Clone + PartialEq + Debug + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr,Data>, DhtError, Ctx> + Clone + 'static,
 {
-    pub fn new(origin: ID, target: ID, op: Operation, config: Config, table: Arc<Mutex<TABLE>>, conn: CONN, ctx: CTX) 
-        -> Search<ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX> {
-        let known = HashMap::<ID, (Node<ID, ADDR>, RequestState)>::new();
-        let data = HashMap::<ID, Vec<DATA>>::new();
+    pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Arc<Mutex<Table>>, conn: Conn, ctx: Ctx) 
+        -> Search<Id, Addr,Data, Table, Conn, ReqId, Ctx> {
+        let known = HashMap::<Id, (Node<Id, Addr>, RequestState)>::new();
+        let data = HashMap::<Id, Vec<Data>>::new();
 
         let depth = config.max_recursion;
 
         Search{origin, target, op, config, depth, known, table, data, conn, ctx, _req_id: PhantomData}
     }
 
-    /// Fetch a pointer to the search target ID
-    pub fn target(&self) -> &ID {
+    /// Fetch a pointer to the search target Id
+    pub fn target(&self) -> &Id {
         &self.target
     }
 
     /// Fetch a copy of the Known Nodes map
-    pub fn known(&self) -> KnownMap<ID, ADDR> {
+    pub fn known(&self) -> KnownMap<Id, Addr> {
         self.known.clone()
     }
 
     /// Fetch a copy of the Received Data map
-    pub fn data(&self) -> ValueMap<ID, DATA> {
+    pub fn data(&self) -> ValueMap<Id, Data> {
         self.data.clone()
     }
 
@@ -115,7 +115,7 @@ where
                 let mut known: Vec<_> = s.known.iter()
                         .map(|(key, (_node, status))| (key.clone(), status.clone()) )
                         .collect();
-                known.sort_by_key(|(key, _status)| ID::xor(s.target(), key) );
+                known.sort_by_key(|(key, _status)| Id::xor(s.target(), key) );
                 let pending = &known[0..usize::min(known.len(), k)].iter()
                         .find(|(_key, status)| *status == RequestState::Pending );
                 if pending.is_none() {
@@ -138,20 +138,20 @@ where
     }
 
     /// Fetch pending known nodes ordered by distance
-    fn pending(&self) -> Vec<Node<ID, ADDR>> {
+    fn pending(&self) -> Vec<Node<Id, Addr>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Pending )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| ID::xor(&self.target, n.id()) );
+        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
         chunk
     }
 
     /// Fetch completed known nodes ordered by distance
-    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Node<ID, ADDR>> {
+    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Node<Id, Addr>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Complete )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| ID::xor(&self.target, n.id()) );
+        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
         
         // Limit to count or total found
         let mut range = range;
@@ -225,7 +225,7 @@ where
     }
 
     /// Seed the search with nearest nodes in addition to those provided in initialisation
-    pub fn seed(&mut self, known: &[Node<ID, ADDR>]) {
+    pub fn seed(&mut self, known: &[Node<Id, Addr>]) {
         for n in known {
             self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
         }

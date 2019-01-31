@@ -9,55 +9,55 @@
 use crate::node::Node;
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Request<ID, VALUE> {
+pub enum Request<Id, Value> {
     Ping,
-    FindNode(ID),
-    FindValue(ID),
-    Store(ID, Vec<VALUE>),
+    FindNode(Id),
+    FindValue(Id),
+    Store(Id, Vec<Value>),
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Response<ID, ADDR, VALUE> {
-    NodesFound(Vec<Node<ID, ADDR>>),
-    ValuesFound(Vec<VALUE>),
+pub enum Response<Id, Addr, Value> {
+    NodesFound(Vec<Node<Id, Addr>>),
+    ValuesFound(Vec<Value>),
     NoResult,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct RequestMessage<ID, ADDR, VALUE> {
-    pub request_id: ID,
-    pub caller: Node<ID, ADDR>,
-    pub request: Request<ID, VALUE>,
+pub struct RequestMessage<Id, Addr, Value> {
+    pub request_id: Id,
+    pub caller: Node<Id, Addr>,
+    pub request: Request<Id, Value>,
 }
 
-impl <ID, ADDR, VALUE> RequestMessage<ID, ADDR, VALUE> {
-    pub fn ping(request_id: ID, caller: Node<ID, ADDR>) -> RequestMessage<ID, ADDR, VALUE> {
+impl <Id, Addr,Value> RequestMessage<Id, Addr,Value> {
+    pub fn ping(request_id: Id, caller: Node<Id, Addr>) -> RequestMessage<Id, Addr,Value> {
         RequestMessage{request_id, caller, request: Request::Ping}
     }
 
-    pub fn find_node(request_id: ID, caller: Node<ID, ADDR>, id: ID) -> RequestMessage<ID, ADDR, VALUE> {
+    pub fn find_node(request_id: Id, caller: Node<Id, Addr>, id: Id) -> RequestMessage<Id, Addr,Value> {
         RequestMessage{request_id, caller, request: Request::FindNode(id)}
     }
 
-    pub fn find_values(request_id: ID, caller: Node<ID, ADDR>, id: ID) -> RequestMessage<ID, ADDR, VALUE> {
+    pub fn find_values(request_id: Id, caller: Node<Id, Addr>, id: Id) -> RequestMessage<Id, Addr,Value> {
         RequestMessage{request_id, caller, request: Request::FindValue(id)}
     }
 
-    pub fn store(request_id: ID, caller: Node<ID, ADDR>, id: ID, value: Vec<VALUE>) -> RequestMessage<ID, ADDR, VALUE> {
+    pub fn store(request_id: Id, caller: Node<Id, Addr>, id: Id, value: Vec<Value>) -> RequestMessage<Id, Addr,Value> {
         RequestMessage{request_id, caller, request: Request::Store(id, value)}
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct ResponseMessage<ID, ADDR, VALUE> {
-    pub request_id: ID,
-    pub responder: Node<ID, ADDR>,
-    pub response: Response<ID, ADDR, VALUE>,
+pub struct ResponseMessage<Id, Addr, Value> {
+    pub request_id: Id,
+    pub responder: Node<Id, Addr>,
+    pub response: Response<Id, Addr,Value>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Message<ID, ADDR, VALUE> {
-    Request(RequestMessage<ID, ADDR, VALUE>),
-    Response(ResponseMessage<ID, ADDR, VALUE>),
+pub enum Message<Id, Addr, Value> {
+    Request(RequestMessage<Id, Addr, Value>),
+    Response(ResponseMessage<Id, Addr, Value>),
 }
 

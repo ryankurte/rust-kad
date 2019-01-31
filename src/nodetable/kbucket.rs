@@ -17,20 +17,20 @@ use std::time::Instant;
 
 /// KBucket implementation
 /// This implements a single bucket for use in the KNodeTable implementation
-pub struct KBucket<ID, ADDR> {
+pub struct KBucket<Id, Addr> {
     bucket_size: usize,
-    nodes: Arc<Mutex<VecDeque<Node<ID, ADDR>>>>,
-    pending: Option<Node<ID, ADDR>>,
+    nodes: Arc<Mutex<VecDeque<Node<Id, Addr>>>>,
+    pending: Option<Node<Id, Addr>>,
     updated: Option<Instant>,
 }
 
-impl <ID, ADDR> KBucket<ID, ADDR> 
+impl <Id, Addr> KBucket<Id, Addr> 
 where
-    ID: DatabaseId + 'static,
-    ADDR: Clone + Debug + 'static,
+    Id: DatabaseId + 'static,
+    Addr: Clone + Debug + 'static,
 {
     /// Create a new KBucket with the given size
-    pub fn new(bucket_size: usize) -> KBucket<ID, ADDR> {
+    pub fn new(bucket_size: usize) -> KBucket<Id, Addr> {
         KBucket{bucket_size, 
             nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), 
             pending: None, 
@@ -38,7 +38,7 @@ where
     }
 
     /// Update a node in the bucket
-    pub fn update(&mut self, node: &Node<ID, ADDR>) -> bool {
+    pub fn update(&mut self, node: &Node<Id, Addr>) -> bool {
         let mut nodes = self.nodes.lock().unwrap();
 
         let res = if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
@@ -66,23 +66,23 @@ where
     }
 
     /// Find a node in the bucket
-    pub fn find(&self, id: &ID) -> Option<Node<ID, ADDR>> {
+    pub fn find(&self, id: &Id) -> Option<Node<Id, Addr>> {
         self.nodes.lock().unwrap().iter().find(|n| *n.id() == *id).map(|n| n.clone())
     }
 
     /// Clone the list of nodes currently in the bucket
-    pub(crate) fn nodes(&self) -> Vec<Node<ID, ADDR>> {
+    pub(crate) fn nodes(&self) -> Vec<Node<Id, Addr>> {
         self.nodes.lock().unwrap().iter().map(|n| n.clone()).collect()
     }
 
     /// Fetch the oldest node in the bucket
-    pub(crate) fn oldest(&self) -> Option<Node<ID, ADDR>> {
+    pub(crate) fn oldest(&self) -> Option<Node<Id, Addr>> {
         let nodes = self.nodes.lock().unwrap();
         nodes.get(nodes.len()-1).map(|n| n.clone())
     }
 
     /// Move a node to the start of the bucket
-    fn update_position(nodes: &mut VecDeque<Node<ID, ADDR>>, node: &Node<ID, ADDR>) {
+    fn update_position(nodes: &mut VecDeque<Node<Id, Addr>>, node: &Node<Id, Addr>) {
         // Find the node to update
         if let Some(_existing) = nodes.iter().find(|n| n.id() == node.id()).map(|n| n.clone()) {
             // Update node array

@@ -15,18 +15,18 @@ pub mod hashmapstore;
 pub use self::hashmapstore::HashMapStore;
 
 /// Datastore trait for data storage implementations
-pub trait Datastore<ID, DATA> 
+pub trait Datastore<Id, Data> 
 where
-    ID: DatabaseId,
-    DATA: Reducer<Item=DATA> + PartialEq + Clone + Debug,
+    Id: DatabaseId,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Debug,
 {
-    // Find data by ID
-    fn find(&self, id: &ID) -> Option<Vec<DATA>>;
+    // Find data by Id
+    fn find(&self, id: &Id) -> Option<Vec<Data>>;
 
-    // Store data by ID
+    // Store data by Id
     // This should add any new entries to the store and update
     // any matching / existing entries
-    fn store(&mut self, id: &ID, data: &Vec<DATA>);
+    fn store(&mut self, id: &Id, data: &Vec<Data>);
 }
 
 /// Reducer trait for performing MapReduce on data in the store

@@ -76,19 +76,19 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> = Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, KNodeTable<ID, ADDR>, HashMapStore<ID, DATA>>;
+pub type StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> = Dht<Id, Addr, Data, ReqId, Conn, Ctx, KNodeTable<Id, Addr>, HashMapStore<Id, Data>>;
 
-impl <ID, ADDR, DATA, REQ_ID, CONN, CTX> StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> 
+impl <Id, Addr,Data, ReqId, Conn, Ctx> StandardDht<Id, Addr,Data, ReqId, Conn, Ctx> 
 where 
-    ID: DatabaseId + Clone + Send + 'static,
-    ADDR: PartialEq + Clone + Debug + Send + 'static,
-    DATA: Reducer<Item=DATA> + PartialEq + Clone + Send  + Debug + 'static,
-    REQ_ID: RequestId + Clone + Send + 'static,
-    CTX: Clone + PartialEq + Debug + Send + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Send + Clone + 'static,
+    Id: DatabaseId + Clone + Send + 'static,
+    Addr: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
+    Ctx: Clone + PartialEq + Debug + Send + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Send + Clone + 'static,
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
-    pub fn standard(id: ID, config: Config, conn: CONN) -> StandardDht<ID, ADDR, DATA, REQ_ID, CONN, CTX> {
+    pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Addr,Data, ReqId, Conn, Ctx> {
         let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
         let store = HashMapStore::new();
         Dht::new(id, config, table, conn, store)
@@ -96,7 +96,7 @@ where
 }
 
 /// DhtMux Mux implementation for DHT connector compatibility
-pub type DhtMux<NODE_ID, ADDR, DATA, REQ_ID, CTX> = rr_mux::Mux<REQ_ID, Node<NODE_ID, ADDR>, Request<NODE_ID, DATA>, Response<NODE_ID, ADDR, DATA>, DhtError, CTX>;
+pub type DhtMux<NodeId, Addr, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
 
 #[cfg(test)]
 mod tests {

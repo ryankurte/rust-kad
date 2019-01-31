@@ -6,36 +6,36 @@ use std::fmt::Debug;
 use crate::id::DatabaseId;
 use crate::datastore::{Datastore, Reducer};
 
-pub struct HashMapStore<ID, DATA> {
-    data: HashMap<ID, Vec<DATA>>, 
+pub struct HashMapStore<Id, Data> {
+    data: HashMap<Id, Vec<Data>>, 
 }
 
-pub struct DataEntry<DATA, META> {
-    value: DATA,
-    meta: META,
+pub struct DataEntry<Data, Meta> {
+    value: Data,
+    meta: Meta,
 }
 
-impl <ID, DATA> HashMapStore<ID, DATA>
+impl <Id, Data> HashMapStore<Id, Data>
 where
-    ID: DatabaseId,
-    DATA: Reducer + PartialEq + Clone + Debug,
+    Id: DatabaseId,
+    Data: Reducer + PartialEq + Clone + Debug,
 {
-    pub fn new() -> HashMapStore<ID, DATA> {
+    pub fn new() -> HashMapStore<Id, Data> {
         HashMapStore{ data: HashMap::new() }
     }
 }
 
-impl <ID, DATA> Datastore<ID, DATA> for HashMapStore<ID, DATA>
+impl <Id, Data> Datastore<Id, Data> for HashMapStore<Id, Data>
 where
-    ID: DatabaseId,
-    DATA: Reducer<Item=DATA> + PartialEq + Clone + Debug,
+    Id: DatabaseId,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Debug,
 {
     
-    fn find(&self, id: &ID) -> Option<Vec<DATA>> {
+    fn find(&self, id: &Id) -> Option<Vec<Data>> {
         self.data.get(id).map(|d| d.clone() )
     }
 
-    fn store(&mut self, id: &ID, new: &Vec<DATA>) {
+    fn store(&mut self, id: &Id, new: &Vec<Data>) {
         let mut new = new.clone();
         
         match self.data.entry(id.clone()) {
@@ -45,7 +45,7 @@ where
             Entry::Occupied(o) => {
                 let existing = o.into_mut();
                 existing.append(&mut new);
-                DATA::reduce(existing);
+                Data::reduce(existing);
             }
         };
     }

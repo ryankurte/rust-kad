@@ -29,39 +29,39 @@ use crate::connection::{request_all};
 
 /// Generic DHT Implementation
 /// This is generic over:
-/// -  ID which must fulfill the DatabaseId trait
-/// - ADDR which is used by the connector to route messages
-/// - REQ_ID which is used by the connector for identifying requests and responses
-/// - CONN which must fulfill the Connector trait
-/// - CTX which is passed through the connector to provide arbitrary transaction context for implementations
-/// - TABLE which must fulfill the NodeTable<ID, ADDR> trait
-/// - STORE which must fullfil the Datastore<ID, DATA> trait
-pub struct Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> {
-    id: ID,
+/// -  Id which must fulfill the DatabaseId trait
+/// - Addr which is used by the connector to route messages
+/// - ReqId which is used by the connector for identifying requests and responses
+/// - Conn which must fulfill the Connector trait
+/// - Ctx which is passed through the connector to provide arbitrary transaction context for implementations
+/// - Table which must fulfill the NodeTable<Id, Addr> trait
+/// - Store which must fullfil the Datastore<Id, Data> trait
+pub struct Dht<Id, Addr, Data, ReqId, Conn, Ctx, Table, Store> {
+    id: Id,
     
     config: Config,
-    table: Arc<Mutex<TABLE>>,
-    conn_mgr: CONN,
-    datastore: Arc<Mutex<STORE>>,
+    table: Arc<Mutex<Table>>,
+    conn_mgr: Conn,
+    datastore: Arc<Mutex<Store>>,
 
-    addr: PhantomData<ADDR>,
-    data: PhantomData<DATA>,
-    req_id: PhantomData<REQ_ID>,
-    ctx: PhantomData<CTX>,
+    addr: PhantomData<Addr>,
+    data: PhantomData<Data>,
+    req_id: PhantomData<ReqId>,
+    ctx: PhantomData<Ctx>,
 }
 
-impl <ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> Clone for Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> 
+impl <Id, Addr, Data, ReqId, Conn, Ctx, Table, Store> Clone for Dht<Id, Addr, Data, ReqId, Conn, Ctx, Table, Store> 
 where
-    ID: DatabaseId + Clone + 'static,
-    ADDR: Clone + Debug + Clone + 'static,
-    DATA: Reducer<Item=DATA> + Clone + PartialEq + Debug + 'static,
-    REQ_ID: RequestId + Clone + 'static,
-    TABLE: NodeTable<ID, ADDR> + 'static,
-    STORE: Datastore<ID, DATA> + 'static,
-    CTX: Clone + PartialEq + Debug + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Clone + 'static,
+    Id: DatabaseId + Clone + 'static,
+    Addr: Clone + Debug + Clone + 'static,
+    Data: Reducer<Item=Data> + Clone + PartialEq + Debug + 'static,
+    ReqId: RequestId + Clone + 'static,
+    Table: NodeTable<Id, Addr> + 'static,
+    Store: Datastore<Id, Data> + 'static,
+    Ctx: Clone + PartialEq + Debug + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + 'static,
 {
-    fn clone(&self) -> Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> {
+    fn clone(&self) -> Dht<Id, Addr,Data, ReqId, Conn, Ctx, Table, Store> {
         Dht{
             id: self.id.clone(),
             config: self.config.clone(),
@@ -77,18 +77,18 @@ where
     }
 }
 
-impl <ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> 
+impl <Id, Addr,Data, ReqId, Conn, Ctx, Table, Store> Dht<Id, Addr,Data, ReqId, Conn, Ctx, Table, Store> 
 where 
-    ID: DatabaseId + Clone + Send + 'static,
-    ADDR: Clone + Debug + Clone + Send + 'static,
-    DATA: Reducer<Item=DATA> + Clone + Send + PartialEq + Clone + Debug + 'static,
-    REQ_ID: RequestId + Clone + Send + 'static,
-    TABLE: NodeTable<ID, ADDR> + Send + 'static,
-    STORE: Datastore<ID, DATA> + Send + 'static,
-    CTX: Clone + PartialEq + Debug + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Clone + Send + 'static,
+    Id: DatabaseId + Clone + Send + 'static,
+    Addr: Clone + Debug + Clone + Send + 'static,
+    Data: Reducer<Item=Data> + Clone + Send + PartialEq + Clone + Debug + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
+    Table: NodeTable<Id, Addr> + Send + 'static,
+    Store: Datastore<Id, Data> + Send + 'static,
+    Ctx: Clone + PartialEq + Debug + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr,Data>, DhtError, Ctx> + Clone + Send + 'static,
 {
-    pub fn new(id: ID, config: Config, table: TABLE, conn_mgr: CONN, datastore: STORE) -> Dht<ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> {
+    pub fn new(id: Id, config: Config, table: Table, conn_mgr: Conn, datastore: Store) -> Dht<Id, Addr,Data, ReqId, Conn, Ctx, Table, Store> {
         Dht{id, config, 
             table: Arc::new(Mutex::new(table)), 
             conn_mgr, 
@@ -102,7 +102,7 @@ where
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
-    pub fn connect(&mut self, ctx: CTX, target: Node<ID, ADDR>) -> impl Future<Item=(), Error=DhtError> + '_ {
+    pub fn connect(&mut self, ctx: Ctx, target: Node<Id, Addr>) -> impl Future<Item=(), Error=DhtError> + '_ {
         let table = self.table.clone();
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
@@ -110,7 +110,7 @@ where
         println!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
 
         // Launch request
-        self.conn_mgr.clone().request(ctx.clone(), REQ_ID::generate(), target.clone(), Request::FindNode(self.id.clone()))
+        self.conn_mgr.clone().request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone()))
             .and_then(move |resp| {
                 // Check for correct response
                 match resp {
@@ -146,8 +146,8 @@ where
 
 
 
-    /// Look up a node in the database by ID
-    pub fn lookup(&mut self, ctx: CTX, target: ID) -> impl Future<Item=Node<ID, ADDR>, Error=DhtError> + '_ {
+    /// Look up a node in the database by Id
+    pub fn lookup(&mut self, ctx: Ctx, target: Id) -> impl Future<Item=Node<Id, Addr>, Error=DhtError> + '_ {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -175,7 +175,7 @@ where
 
 
     /// Find a value from the DHT
-    pub fn find(&mut self, ctx: CTX, target: ID) -> impl Future<Item=Vec<DATA>, Error=DhtError> {
+    pub fn find(&mut self, ctx: Ctx, target: Id) -> impl Future<Item=Vec<Data>, Error=DhtError> {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -199,8 +199,8 @@ where
             }
 
             // Reduce data before returning
-            let mut flat_data: Vec<DATA> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
-            DATA::reduce(&mut flat_data);
+            let mut flat_data: Vec<Data> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
+            Data::reduce(&mut flat_data);
 
             // TODO: Send updates to any peers that returned outdated data?
 
@@ -212,7 +212,7 @@ where
 
 
     /// Store a value in the DHT
-    pub fn store(&mut self, ctx: CTX, target: ID, data: Vec<DATA>) -> impl Future<Item=(), Error=DhtError> {
+    pub fn store(&mut self, ctx: Ctx, target: Id, data: Vec<Data>) -> impl Future<Item=(), Error=DhtError> {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx.clone());
 
@@ -239,7 +239,7 @@ where
 
 
     /// Refresh node table
-    pub fn refresh(&mut self, _ctx: CTX) -> impl Future<Item=(), Error=DhtError> {
+    pub fn refresh(&mut self, _ctx: Ctx) -> impl Future<Item=(), Error=DhtError> {
         // TODO: send refresh to buckets that haven't been looked up recently
         // How to track recently looked up / contacted buckets..?
 
@@ -251,7 +251,7 @@ where
     }
 
     /// Receive and reply to requests
-    pub fn receive(&mut self, _ctx: CTX, from: &Node<ID, ADDR>, req: &Request<ID, DATA>) -> impl Future<Item=Response<ID, ADDR, DATA>, Error=DhtError> {
+    pub fn receive(&mut self, _ctx: Ctx, from: &Node<Id, Addr>, req: &Request<Id, Data>) -> impl Future<Item=Response<Id, Addr,Data>, Error=DhtError> {
         // Build response
         let resp = match req {
             Request::Ping => {
@@ -285,13 +285,13 @@ where
     }
 
     #[cfg(test)]
-    pub fn contains(&mut self, id: &ID) -> Option<Node<ID, ADDR>> {
+    pub fn contains(&mut self, id: &Id) -> Option<Node<Id, Addr>> {
         self.table.lock().unwrap().contains(id)
     }
 
     /// Create a basic search using the DHT
     /// This is provided for integration of the Dht with other components
-    pub fn search(&mut self, ctx: CTX, id: ID, op: Operation, seed: &[Node<ID, ADDR>]) -> impl Future<Item=Search <ID, ADDR, DATA, TABLE, CONN, REQ_ID, CTX>, Error=DhtError> {
+    pub fn search(&mut self, ctx: Ctx, id: Id, op: Operation, seed: &[Node<Id, Addr>]) -> impl Future<Item=Search <Id, Addr,Data, Table, Conn, ReqId, Ctx>, Error=DhtError> {
         let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
         search.seed(&seed);
 
@@ -300,7 +300,7 @@ where
 }
 
 /// Stream trait implemented to allow polling on dht object
-impl <ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> Future for Dht <ID, ADDR, DATA, REQ_ID, CONN, CTX, TABLE, STORE> {
+impl <Id, Addr,Data, ReqId, Conn, Ctx, Table, Store> Future for Dht <Id, Addr,Data, ReqId, Conn, Ctx, Table, Store> {
     type Item = ();
     type Error = ();
 

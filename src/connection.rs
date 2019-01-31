@@ -18,15 +18,15 @@ use rr_mux::{Connector};
 /// Send a request to a slice of nodes and collect the responses.
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
-pub fn request_all<ID, ADDR, DATA, CONN, REQ_ID, CTX>(conn: CONN, ctx: CTX, req: &Request<ID, DATA>, nodes: &[Node<ID, ADDR>]) -> 
-        impl Future<Item=Vec<(Node<ID, ADDR>, Option<Response<ID, ADDR, DATA>>)>, Error=DhtError> 
+pub fn request_all<Id, Addr, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[Node<Id, Addr>]) -> 
+        impl Future<Item=Vec<(Node<Id, Addr>, Option<Response<Id, Addr, Data>>)>, Error=DhtError> 
 where
-    ID: DatabaseId + Clone + Debug + 'static,
-    ADDR: Clone + Debug + 'static,
-    DATA: Clone + Debug + 'static,
-    REQ_ID: RequestId + 'static,
-    CTX: Clone + PartialEq + Debug + 'static,
-    CONN: Connector<REQ_ID, Node<ID, ADDR>, Request<ID, DATA>, Response<ID, ADDR, DATA>, DhtError, CTX> + Clone + 'static,       
+    Id: DatabaseId + Clone + Debug + 'static,
+    Addr: Clone + Debug + 'static,
+    Data: Clone + Debug + 'static,
+    ReqId: RequestId + 'static,
+    Ctx: Clone + PartialEq + Debug + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + 'static,       
 {
     let mut queries = Vec::new();
 
@@ -35,7 +35,7 @@ where
         let n1 = n.clone();
         let n2 = n.clone();
         let mut c = conn.clone();
-        let q = c.request(ctx.clone(), REQ_ID::generate(), n.clone(), req.clone())
+        let q = c.request(ctx.clone(), ReqId::generate(), n.clone(), req.clone())
             .map(|v| {
                 println!("Response: '{:?}' from: '{:?}'", v, n1.id());
                 (n1, Some(v)) 

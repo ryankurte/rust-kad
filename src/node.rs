@@ -9,10 +9,11 @@
 
 use std::time::{Instant};
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use crate::id::DatabaseId;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, Eq)]
 pub struct Node<Id, Addr> {
     id: Id,
     address: Addr,

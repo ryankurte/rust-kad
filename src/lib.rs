@@ -27,7 +27,7 @@ pub mod id;
 use id::{DatabaseId, RequestId};
 
 pub mod message;
-use crate::message::{Message, Request, Response};
+use crate::message::{Request, Response};
 
 pub mod node;
 use node::Node;
@@ -76,16 +76,17 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> = Dht<Id, Addr, Data, ReqId, Conn, Ctx, KNodeTable<Id, Addr>, HashMapStore<Id, Data>>;
+pub type StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> = Dht<Id, Addr, Data, ReqId, Conn, KNodeTable<Id, Addr>, HashMapStore<Id, Data>, Ctx>;
 
-impl <Id, Addr,Data, ReqId, Conn, Ctx> StandardDht<Id, Addr,Data, ReqId, Conn, Ctx> 
+impl <Id, Addr, Data, ReqId, Conn, Ctx> StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Addr: PartialEq + Clone + Debug + Send + 'static,
     Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Ctx: Clone + PartialEq + Debug + Send + 'static,
     Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Send + Clone + 'static,
+    Ctx: Clone + PartialEq + Debug + Send + 'static,
+
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
     pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Addr,Data, ReqId, Conn, Ctx> {
@@ -135,11 +136,11 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindNode(n1.id().clone()), Ok(Response::NodesFound(vec![n3.clone(), n4.clone()]))),
+            MockTransaction::request(n2.clone(), Request::FindNode(n1.id().clone()), (), Ok( (Response::NodesFound(vec![n3.clone(), n4.clone()]), ()) )),
 
             //bootsrap to found nodes
-            MockTransaction::request(n3.clone(), Request::FindNode(n1.id().clone()), Ok(Response::NodesFound(vec![]))),
-            MockTransaction::request(n4.clone(), Request::FindNode(n1.id().clone()), Ok(Response::NodesFound(vec![]))),
+            MockTransaction::request(n3.clone(), Request::FindNode(n1.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindNode(n1.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
         ]);
 
         // Create configuration
@@ -154,7 +155,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping
-        dht.connect((), n2.clone()).wait().unwrap();
+        dht.connect(n2.clone(), ()).wait().unwrap();
 
         // Check bootstrapped node is added to db
         assert_eq!(Some(n2.clone()), dht.contains(n2.id()));
@@ -178,12 +179,12 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindNode(n4.id().clone()), Ok(Response::NodesFound(vec![n4.clone()]))),
-            MockTransaction::request(n3.clone(), Request::FindNode(n4.id().clone()), Ok(Response::NodesFound(vec![n5.clone()]))),
+            MockTransaction::request(n2.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![n4.clone()]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
 
             // Second iteration
-            MockTransaction::request(n4.clone(), Request::FindNode(n4.id().clone()), Ok(Response::NodesFound(vec![]))),
-            MockTransaction::request(n5.clone(), Request::FindNode(n4.id().clone()), Ok(Response::NodesFound(vec![]))),
+            MockTransaction::request(n4.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n5.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
         ]);
 
         // Create configuration
@@ -203,7 +204,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform search
-        dht.lookup((), n4.id().clone()).wait().expect("lookup failed");
+        dht.lookup(n4.id().clone(), ()).wait().expect("lookup failed");
 
         connector.finalise();
     }
@@ -222,16 +223,16 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindNode(id), Ok(Response::NodesFound(vec![n4.clone()]))),
-            MockTransaction::request(n3.clone(), Request::FindNode(id), Ok(Response::NodesFound(vec![n5.clone()]))),
+            MockTransaction::request(n2.clone(), Request::FindNode(id), (), Ok(  (Response::NodesFound(vec![n4.clone()]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindNode(id), (), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
 
             // Second iteration to find k nodes closest to v
-            MockTransaction::request(n5.clone(), Request::FindNode(id), Ok(Response::NodesFound(vec![]))),
-            MockTransaction::request(n4.clone(), Request::FindNode(id), Ok(Response::NodesFound(vec![]))),
+            MockTransaction::request(n5.clone(), Request::FindNode(id), (), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindNode(id), (), Ok( (Response::NodesFound(vec![]), ()) )),
 
             // Final iteration pushes data to k nodes
-            MockTransaction::request(n5.clone(), Request::Store(id, val.clone()), Ok(Response::NoResult)),
-            MockTransaction::request(n4.clone(), Request::Store(id, val.clone()), Ok(Response::NoResult)),
+            MockTransaction::request(n5.clone(), Request::Store(id, val.clone()), (), Ok( (Response::NoResult, ()) )),
+            MockTransaction::request(n4.clone(), Request::Store(id, val.clone()), (), Ok( (Response::NoResult, ()) )),
         ]);
 
         // Create configuration
@@ -251,7 +252,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform store
-        dht.store((), id, val).wait().expect("store failed");
+        dht.store(id, val, ()).wait().expect("store failed");
 
         connector.finalise();
     }
@@ -271,12 +272,12 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindValue(id), Ok(Response::NodesFound(vec![n4.clone()]))),
-            MockTransaction::request(n3.clone(), Request::FindValue(id), Ok(Response::NodesFound(vec![n5.clone()]))),
+            MockTransaction::request(n2.clone(), Request::FindValue(id), (), Ok( (Response::NodesFound(vec![n4.clone()]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindValue(id), (), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
 
             // Next iteration gets node data
-            MockTransaction::request(n5.clone(), Request::FindValue(id), Ok(Response::ValuesFound(val.clone()))),
-            MockTransaction::request(n4.clone(), Request::FindValue(id), Ok(Response::ValuesFound(val.clone()))),
+            MockTransaction::request(n5.clone(), Request::FindValue(id), (), Ok( (Response::ValuesFound(val.clone()), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindValue(id), (), Ok( (Response::ValuesFound(val.clone()), ()) )),
         ]);
 
         // Create configuration
@@ -296,7 +297,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform store
-        dht.find((), id).wait().expect("find failed");
+        dht.find(id, ()).wait().expect("find failed");
 
         connector.finalise();
     }

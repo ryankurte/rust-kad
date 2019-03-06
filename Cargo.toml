@@ -13,9 +13,11 @@ num = { version = "0.2.0", features = ["rand"]}
 structopt = "0.2.14"
 rand = "0.5.5"
 
-rr-mux = "0.5.0"
+rr-mux = "0.6.0"
 
 [dependencies.log]
 version = "0.4.6"
 features = ["max_level_info"]
 
+#[patch.crates-io]
+#rr-mux = { path = "../rr-mux" }

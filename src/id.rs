@@ -9,7 +9,6 @@
 
 use std::hash::Hash;
 use std::fmt::Debug;
-use std::ops::BitXor;
 
 use num::Zero;
 use num::bigint::{BigUint};
@@ -92,7 +91,6 @@ database_id_slice!(64 / 8);
 database_id_slice!(128 / 8);
 database_id_slice!(256 / 8);
 
-use rand::distributions::{Standard, Distribution};
 
 pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
     fn generate() -> Self;

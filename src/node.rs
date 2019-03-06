@@ -9,7 +9,6 @@
 
 use std::time::{Instant};
 use std::fmt::Debug;
-use std::hash::Hash;
 
 use crate::id::DatabaseId;
 

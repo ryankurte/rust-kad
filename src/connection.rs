@@ -19,7 +19,7 @@ use rr_mux::{Connector};
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
 pub fn request_all<Id, Addr, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[Node<Id, Addr>]) -> 
-        impl Future<Item=Vec<(Node<Id, Addr>, Option<Response<Id, Addr, Data>>)>, Error=DhtError> 
+        impl Future<Item=Vec<(Node<Id, Addr>, Option<(Response<Id, Addr, Data>, Ctx)>)>, Error=DhtError> 
 where
     Id: DatabaseId + Clone + Debug + 'static,
     Addr: Clone + Debug + 'static,

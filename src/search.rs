@@ -190,7 +190,7 @@ where
         .map(move |res| {
             for (n, v) in &res {
                 // Handle received responses
-                if let Some(resp) = v {
+                if let Some((resp, _ctx)) = v {
                     match resp {
                         Response::NodesFound(nodes) => {
                             // Add nodes to known list
@@ -258,12 +258,12 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), Ok(Response::NodesFound(vec![nodes[3].clone()]))),
-            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), Ok(Response::NodesFound(vec![nodes[2].clone()]))),
+            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), (), Ok((Response::NodesFound(vec![nodes[3].clone()]), () ))),
+            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), (), Ok((Response::NodesFound(vec![nodes[2].clone()]), () ))),
             
             // Second execution
-            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), Ok(Response::NodesFound(vec![target.clone()]))),
-            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), Ok(Response::NodesFound(vec![nodes[4].clone()]))), 
+            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), (), Ok(( Response::NodesFound(vec![target.clone()]), () ))),
+            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), (), Ok(( Response::NodesFound(vec![nodes[4].clone()]), () ))), 
         ]);
 
         // Create search object

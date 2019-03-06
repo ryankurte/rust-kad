@@ -41,15 +41,16 @@ pub struct Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
     _ctx: PhantomData<Ctx>,
 }
 
-impl <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx>  Clone for Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> 
+impl <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> Clone for Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> 
 where
     Id: DatabaseId + Clone + 'static,
-    Addr: Clone + Debug + Clone + 'static,
+    Addr: Clone + Debug + 'static,
     Data: Reducer<Item=Data> + Clone + PartialEq + Debug + 'static,
     ReqId: RequestId + Clone + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + 'static,
     Table: NodeTable<Id, Addr> + 'static,
     Store: Datastore<Id, Data> + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, ()> + Clone + 'static,
+    Ctx: Clone + Debug + PartialEq + Send + 'static,
 {
     fn clone(&self) -> Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
         Dht{
@@ -70,12 +71,12 @@ where
 impl <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Addr: Clone + Debug + Clone + Send + 'static,
-    Data: Reducer<Item=Data> + Clone + Send + PartialEq + Clone + Debug + 'static,
+    Addr: Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + Clone + Send + PartialEq + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
+    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + Send + 'static,
     Table: NodeTable<Id, Addr> + Send + 'static,
     Store: Datastore<Id, Data> + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
 {
     pub fn new(id: Id, config: Config, table: Table, conn_mgr: Conn, datastore: Store) -> Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
@@ -85,7 +86,7 @@ where
             table: Arc::new(Mutex::new(table)), 
             conn_mgr, 
             datastore: Arc::new(Mutex::new(datastore)), 
-            
+
             _addr: PhantomData, 
             _data: PhantomData, 
             _req_id: PhantomData, 

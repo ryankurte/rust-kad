@@ -25,7 +25,7 @@ where
     Addr: Clone + Debug + 'static,
     Data: Clone + Debug + 'static,
     ReqId: RequestId + 'static,
-    Ctx: Clone + PartialEq + Debug + 'static,
+    Ctx: Clone + Debug + PartialEq + Send + 'static,
     Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + 'static,       
 {
     let mut queries = Vec::new();

@@ -69,7 +69,7 @@ where
     Data: Clone + Debug + 'static,
     Table: NodeTable<Id, Addr> + 'static,
     ReqId: RequestId + 'static,
-    Ctx: Clone + PartialEq + Debug + 'static,
+    Ctx: Clone + Debug + PartialEq + Send + 'static,
     Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr,Data>, DhtError, Ctx> + Clone + 'static,
 {
     pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Arc<Mutex<Table>>, conn: Conn, ctx: Ctx) 

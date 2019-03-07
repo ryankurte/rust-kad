@@ -136,11 +136,11 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindNode(n1.id().clone()), (), Ok( (Response::NodesFound(vec![n3.clone(), n4.clone()]), ()) )),
+            MockTransaction::request(n2.clone(), Request::FindNode(n1.id().clone()), Ok( (Response::NodesFound(vec![n3.clone(), n4.clone()]), ()) )),
 
             //bootsrap to found nodes
-            MockTransaction::request(n3.clone(), Request::FindNode(n1.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
-            MockTransaction::request(n4.clone(), Request::FindNode(n1.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindNode(n1.id().clone()), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindNode(n1.id().clone()), Ok( (Response::NodesFound(vec![]), ()) )),
         ]);
 
         // Create configuration
@@ -179,12 +179,12 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![n4.clone()]), ()) )),
-            MockTransaction::request(n3.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
+            MockTransaction::request(n2.clone(), Request::FindNode(n4.id().clone()), Ok( (Response::NodesFound(vec![n4.clone()]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindNode(n4.id().clone()), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
 
             // Second iteration
-            MockTransaction::request(n4.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
-            MockTransaction::request(n5.clone(), Request::FindNode(n4.id().clone()), (), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindNode(n4.id().clone()), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n5.clone(), Request::FindNode(n4.id().clone()), Ok( (Response::NodesFound(vec![]), ()) )),
         ]);
 
         // Create configuration
@@ -223,16 +223,16 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindNode(id), (), Ok(  (Response::NodesFound(vec![n4.clone()]), ()) )),
-            MockTransaction::request(n3.clone(), Request::FindNode(id), (), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
+            MockTransaction::request(n2.clone(), Request::FindNode(id), Ok(  (Response::NodesFound(vec![n4.clone()]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindNode(id), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
 
             // Second iteration to find k nodes closest to v
-            MockTransaction::request(n5.clone(), Request::FindNode(id), (), Ok( (Response::NodesFound(vec![]), ()) )),
-            MockTransaction::request(n4.clone(), Request::FindNode(id), (), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n5.clone(), Request::FindNode(id), Ok( (Response::NodesFound(vec![]), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindNode(id), Ok( (Response::NodesFound(vec![]), ()) )),
 
             // Final iteration pushes data to k nodes
-            MockTransaction::request(n5.clone(), Request::Store(id, val.clone()), (), Ok( (Response::NoResult, ()) )),
-            MockTransaction::request(n4.clone(), Request::Store(id, val.clone()), (), Ok( (Response::NoResult, ()) )),
+            MockTransaction::request(n5.clone(), Request::Store(id, val.clone()), Ok( (Response::NoResult, ()) )),
+            MockTransaction::request(n4.clone(), Request::Store(id, val.clone()), Ok( (Response::NoResult, ()) )),
         ]);
 
         // Create configuration
@@ -272,12 +272,12 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First transaction to bootstrap onto the network
-            MockTransaction::request(n2.clone(), Request::FindValue(id), (), Ok( (Response::NodesFound(vec![n4.clone()]), ()) )),
-            MockTransaction::request(n3.clone(), Request::FindValue(id), (), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
+            MockTransaction::request(n2.clone(), Request::FindValue(id), Ok( (Response::NodesFound(vec![n4.clone()]), ()) )),
+            MockTransaction::request(n3.clone(), Request::FindValue(id), Ok( (Response::NodesFound(vec![n5.clone()]), ()) )),
 
             // Next iteration gets node data
-            MockTransaction::request(n5.clone(), Request::FindValue(id), (), Ok( (Response::ValuesFound(val.clone()), ()) )),
-            MockTransaction::request(n4.clone(), Request::FindValue(id), (), Ok( (Response::ValuesFound(val.clone()), ()) )),
+            MockTransaction::request(n5.clone(), Request::FindValue(id), Ok( (Response::ValuesFound(val.clone()), ()) )),
+            MockTransaction::request(n4.clone(), Request::FindValue(id), Ok( (Response::ValuesFound(val.clone()), ()) )),
         ]);
 
         // Create configuration

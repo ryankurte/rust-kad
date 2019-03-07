@@ -16,12 +16,27 @@ pub enum Request<Id, Value> {
     Store(Id, Vec<Value>),
 }
 
+
+impl <Id, Value> Request<Id, Value> {
+
+    /// Fetch the database ID for the request (if present)
+    pub fn id(&self) -> Option<&Id> {
+        match self {
+            Request::Ping => None,
+            Request::FindNode(id) => Some(id),
+            Request::FindValue(id) => Some(id),
+            Request::Store(id, _) => Some(id),
+        }
+    }
+}
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum Response<Id, Addr, Value> {
     NodesFound(Vec<Node<Id, Addr>>),
     ValuesFound(Vec<Value>),
     NoResult,
 }
+
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct RequestMessage<Id, Addr, Value> {
@@ -47,6 +62,7 @@ impl <Id, Addr,Value> RequestMessage<Id, Addr,Value> {
         RequestMessage{request_id, caller, request: Request::Store(id, value)}
     }
 }
+
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct ResponseMessage<Id, Addr, Value> {

@@ -107,7 +107,7 @@ where
             .and_then(move |(resp, _ctx)| {
                 // Check for correct response
                 match resp {
-                    Response::NodesFound(nodes) => future::ok((target, nodes)),
+                    Response::NodesFound(_id, nodes) => future::ok((target, nodes)),
                     _ => {
                         println!("[DHT connect] invalid response from: {:?}", target.id());
                         future::err(DhtError::InvalidResponse)
@@ -251,15 +251,15 @@ where
             },
             Request::FindNode(id) => {
                 let nodes = self.table.lock().unwrap().nearest(id, 0..self.config.k);
-                Response::NodesFound(nodes)
+                Response::NodesFound(id.clone(), nodes)
             },
             Request::FindValue(id) => {
                 // Lockup the value
                 if let Some(values) = self.datastore.lock().unwrap().find(id) {
-                    Response::ValuesFound(values)
+                    Response::ValuesFound(id.clone(), values)
                 } else {
                     let nodes = self.table.lock().unwrap().nearest(id, 0..self.config.k);
-                    Response::NodesFound(nodes)
+                    Response::NodesFound(id.clone(), nodes)
                 }                
             },
             Request::Store(id, value) => {
@@ -400,7 +400,7 @@ mod tests {
         // FindNodes
         assert_eq!(
             dht.receive(&friend, &Request::FindNode(other.id().clone())).wait().unwrap(),
-            Response::NodesFound(vec![friend.clone()]), 
+            Response::NodesFound(other.id().clone(), vec![friend.clone()]), 
         );
 
         // Check expectations are done
@@ -423,7 +423,7 @@ mod tests {
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
             dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
-            Response::NodesFound(vec![friend.clone()]), 
+            Response::NodesFound(201, vec![friend.clone()]), 
         );
 
         // Add value to store
@@ -432,7 +432,7 @@ mod tests {
         // FindValues
         assert_eq!(
             dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
-            Response::ValuesFound(vec![1337]), 
+            Response::ValuesFound(201, vec![1337]), 
         );
 
         // Check expectations are done

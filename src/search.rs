@@ -192,7 +192,7 @@ where
                 // Handle received responses
                 if let Some((resp, _ctx)) = v {
                     match resp {
-                        Response::NodesFound(nodes) => {
+                        Response::NodesFound(_id, nodes) => {
                             // Add nodes to known list
                             for n in nodes {
                                 if n.id() != &self.origin {
@@ -200,7 +200,7 @@ where
                                 }
                             }
                         },
-                        Response::ValuesFound(values) => {
+                        Response::ValuesFound(_id, values) => {
                             // Add data to data list
                             self.data.insert(n.id().clone(), values.clone());
                         },
@@ -258,12 +258,12 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(vec![nodes[3].clone()]), () ))),
-            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(vec![nodes[2].clone()]), () ))),
+            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(target.id().clone(), vec![nodes[3].clone()]), () ))),
+            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(target.id().clone(), vec![nodes[2].clone()]), () ))),
             
             // Second execution
-            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(vec![target.clone()]), () ))),
-            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(vec![nodes[4].clone()]), () ))), 
+            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(target.id().clone(), vec![target.clone()]), () ))),
+            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(target.id().clone(), vec![nodes[4].clone()]), () ))), 
         ]);
 
         // Create search object

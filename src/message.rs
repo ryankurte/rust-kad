@@ -32,8 +32,8 @@ impl <Id, Value> Request<Id, Value> {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Response<Id, Addr, Value> {
-    NodesFound(Vec<Node<Id, Addr>>),
-    ValuesFound(Vec<Value>),
+    NodesFound(Id, Vec<Node<Id, Addr>>),
+    ValuesFound(Id, Vec<Value>),
     NoResult,
 }
 

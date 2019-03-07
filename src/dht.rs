@@ -100,7 +100,7 @@ where
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
 
-        println!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
+        info!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
 
         // Launch request
         self.conn_mgr.clone().request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone()))
@@ -109,7 +109,7 @@ where
                 match resp {
                     Response::NodesFound(_id, nodes) => future::ok((target, nodes)),
                     _ => {
-                        println!("[DHT connect] invalid response from: {:?}", target.id());
+                        warn!("[DHT connect] invalid response from: {:?}", target.id());
                         future::err(DhtError::InvalidResponse)
                     },
                 }
@@ -119,7 +119,7 @@ where
                 // node to the DHT
                 table.lock().unwrap().update(&target);
 
-                println!("[DHT connect] response received, searching {} nodes", found.len());
+                debug!("[DHT connect] response received, searching {} nodes", found.len());
 
                 // Perform FIND_NODE on own id with responded nodes to register self
                 let mut search = Search::new(self.id.clone(), id, Operation::FindNode, self.config.clone(), table, conn_mgr, ctx);
@@ -221,7 +221,7 @@ where
         .and_then(move |r| {
             // Send store request to found nodes
             let known = r.completed(0..k);
-            println!("sending store to: {:?}", known);
+            debug!("sending store to: {:?}", known);
             request_all(conn, ctx, &Request::Store(target, data), &known)
         }).and_then(|_| {
             // TODO: should we process success here?

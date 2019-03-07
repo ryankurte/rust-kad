@@ -31,13 +31,13 @@ where
     let mut queries = Vec::new();
 
     for n in nodes {
-        println!("Sending request: '{:?}' to: '{:?}'", req, n.id());
+        debug!("Sending request: '{:?}' to: '{:?}'", req, n.id());
         let n1 = n.clone();
         let n2 = n.clone();
         let mut c = conn.clone();
         let q = c.request(ctx.clone(), ReqId::generate(), n.clone(), req.clone())
             .map(|v| {
-                println!("Response: '{:?}' from: '{:?}'", v, n1.id());
+                debug!("Response: '{:?}' from: '{:?}'", v, n1.id());
                 (n1, Some(v)) 
             })
             .or_else(|e| {

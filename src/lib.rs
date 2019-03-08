@@ -33,10 +33,10 @@ pub mod node;
 use node::Node;
 
 pub mod nodetable;
-use nodetable::{KNodeTable};
+use nodetable::{NodeTable, KNodeTable};
 
 pub mod datastore;
-use datastore::{HashMapStore, Reducer};
+use datastore::{Datastore, HashMapStore, Reducer};
 
 pub mod search;
 
@@ -96,8 +96,11 @@ where
     }
 }
 
-/// DhtMux Mux implementation for DHT connector compatibility
+/// DhtMux defines an rr_mux::Mux over Dht types for convenience
 pub type DhtMux<NodeId, Addr, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
+
+/// DhtConnector defines an rr_mux::Connector impl over Dht types for convenience
+pub type DhtConnector<NodeId, Addr, Data, ReqId, Ctx> = Connector<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
 
 #[cfg(test)]
 mod tests {

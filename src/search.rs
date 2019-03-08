@@ -10,7 +10,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
 use std::marker::PhantomData;
 
 use futures::prelude::*;
@@ -51,7 +50,7 @@ pub struct Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> {
     op: Operation,
     config: Config,
     depth: usize,
-    table: Arc<Mutex<Table>>,
+    table: Table,
     known: HashMap<Id, (Node<Id, Addr>, RequestState)>,
     data: HashMap<Id, Vec<Data>>,
     conn: Conn,
@@ -67,12 +66,12 @@ where
     Id: DatabaseId + 'static,
     Addr: Clone + Debug + 'static,
     Data: Clone + Debug + 'static,
-    Table: NodeTable<Id, Addr> + 'static,
+    Table: NodeTable<Id, Addr> + Clone + Sync + Send + 'static,
     ReqId: RequestId + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
     Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr,Data>, DhtError, Ctx> + Clone + 'static,
 {
-    pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Arc<Mutex<Table>>, conn: Conn, ctx: Ctx) 
+    pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
         -> Search<Id, Addr,Data, Table, Conn, ReqId, Ctx> {
         let known = HashMap::<Id, (Node<Id, Addr>, RequestState)>::new();
         let data = HashMap::<Id, Vec<Data>>::new();
@@ -127,7 +126,8 @@ where
                 let pending = s.pending().len();
                 
                 if pending == 0 {
-                    let nearest: Vec<_> = s.table.lock().unwrap().nearest(s.target(), concurrency..concurrency*2);
+                    let mut table = s.table.clone();
+                    let nearest: Vec<_> = table.nearest(s.target(), concurrency..concurrency*2);
                     s.seed(&nearest);
                 }
                 
@@ -215,7 +215,7 @@ where
                 }
 
                 // Update node table
-                self.table.lock().unwrap().update(&n);
+                self.table.update(&n);
             }
             // Update depth limit
             self.depth -= 1;
@@ -270,7 +270,7 @@ mod tests {
         let mut config = Config::default();
         config.k = 2;
 
-        let table = Arc::new(Mutex::new(KNodeTable::new(root.id().clone(), 2, 8)));
+        let table = KNodeTable::new(root.id().clone(), 2, 8);
         let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
@@ -280,7 +280,7 @@ mod tests {
             assert!(s.known.get(nodes[0].id()).is_some());
             assert!(s.known.get(nodes[1].id()).is_some());
             // But not to the node table until they have responded
-            let t = table.lock().unwrap();
+            let t = table.clone();
             assert!(t.contains(nodes[0].id()).is_none());
             assert!(t.contains(nodes[1].id()).is_none());
         }
@@ -289,7 +289,7 @@ mod tests {
         s = s.recurse().wait().unwrap();
         {
             // Responding nodes should be added to the node table
-            let t = table.lock().unwrap();
+            let t = table.clone();
             assert!(t.contains(nodes[0].id()).is_some());
             assert!(t.contains(nodes[1].id()).is_some());
             // Viable responses should be added to the known map
@@ -301,7 +301,7 @@ mod tests {
         s = s.recurse().wait().unwrap();
         {
             // Responding nodes should be added to the node table
-            let t = table.lock().unwrap();
+            let t = table.clone();
             assert!(t.contains(nodes[2].id()).is_some());
             assert!(t.contains(nodes[3].id()).is_some());
             // Viable responses should be added to the known map

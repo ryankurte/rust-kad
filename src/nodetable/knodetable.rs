@@ -10,6 +10,7 @@
 use std::ops::Range;
 use std::fmt::Debug;
 use std::time::Instant;
+use std::sync::{Arc, Mutex};
 
 use crate::id::DatabaseId;
 use crate::node::Node;
@@ -20,9 +21,10 @@ use super::kbucket::KBucket;
 /// KNodeTable Implementation
 /// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local Id
 /// as a simplification of the allocation based branching approach introduced in the paper.
+#[derive(Clone)]
 pub struct KNodeTable<Id, Addr> {
     id: Id,
-    buckets: Vec<KBucket<Id, Addr>>
+    buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Addr>>>>>>
 }
 
 impl <Id, Addr> KNodeTable<Id, Addr> 
@@ -33,9 +35,9 @@ where
     /// Create a new KNodeTable with the provded bucket and hash sizes
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Addr> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
+        let buckets = (0..hash_size).map(|_| Arc::new(Mutex::new(KBucket::new(bucket_size)))).collect();
         // Generate KNodeTable object
-        KNodeTable{id, buckets: buckets}
+        KNodeTable{id, buckets: Arc::new(Mutex::new(buckets)) }
     }
 
     // Calculate the distance between two Ids.
@@ -43,16 +45,11 @@ where
         Id::xor(a, b)
     }
 
-    /// Fetch a mutable reference to the bucket containing the provided Id
-    fn bucket_mut(&mut self, id: &Id) -> &mut KBucket<Id, Addr> {
+    /// Fetch a reference to the bucket containing the provided Id
+    fn bucket(&self, id: &Id) -> Arc<Mutex<KBucket<Id, Addr>>> {
         let index = self.bucket_index(id);
-        &mut self.buckets[index]
-    }
-
-    /// Fetch a mutable reference to the bucket containing the provided Id
-    fn bucket(&self, id: &Id) -> &KBucket<Id, Addr> {
-        let index = self.bucket_index(id);
-        &self.buckets[index]
+        let buckets = &self.buckets.lock().unwrap();
+        buckets[index].clone()
     }
 
     /// Fetch the bucket index for a given Id
@@ -78,7 +75,8 @@ where
             return false
         }
 
-        let bucket = self.bucket_mut(node.id());
+        let bucket = self.bucket(node.id());
+        let mut bucket = bucket.lock().unwrap();
         let mut node = node.clone();
         node.set_seen(Instant::now());
         bucket.update(&node)
@@ -86,9 +84,10 @@ where
 
     /// Find the nearest nodes to the provided Id in the given range
     fn nearest(&mut self, id: &Id, range: Range<usize>) -> Vec<Node<Id, Addr>> {
+        let buckets = self.buckets.lock().unwrap();
 
         // Create a list of all nodes
-        let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes() ).collect();
+        let mut all: Vec<_> = buckets.iter().flat_map(|b| b.lock().unwrap().nodes() ).collect();
         let count = all.len();
 
         // Sort by distance
@@ -105,11 +104,13 @@ where
     /// Peek at the oldest node in the bucket associated with a given Id
     fn peek_oldest(&mut self, id: &Id) -> Option<Node<Id, Addr>> {
         let bucket = self.bucket(id);
+        let bucket = bucket.lock().unwrap();
         bucket.oldest()
     }
 
     fn replace(&mut self, node: &Node<Id, Addr>, _replacement: &Node<Id, Addr>) {
-        let _bucket = self.bucket_mut(node.id());
+        let bucket = self.bucket(node.id());
+        let mut _bucket = bucket.lock().unwrap();
 
 
     }
@@ -118,6 +119,7 @@ where
     /// This returns the node object if found
     fn contains(&self, id: &Id) -> Option<Node<Id, Addr>> {
         let bucket = self.bucket(id);
+        let bucket = bucket.lock().unwrap();
         bucket.find(id)
     }
 }

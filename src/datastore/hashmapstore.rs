@@ -2,12 +2,15 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
+
 
 use crate::id::DatabaseId;
 use crate::datastore::{Datastore, Reducer};
 
+#[derive(Clone)]
 pub struct HashMapStore<Id, Data> {
-    data: HashMap<Id, Vec<Data>>, 
+    data: Arc<Mutex<HashMap<Id, Vec<Data>>>>, 
 }
 
 pub struct DataEntry<Data, Meta> {
@@ -21,7 +24,7 @@ where
     Data: Reducer + PartialEq + Clone + Debug,
 {
     pub fn new() -> HashMapStore<Id, Data> {
-        HashMapStore{ data: HashMap::new() }
+        HashMapStore{ data: Arc::new(Mutex::new(HashMap::new())) }
     }
 }
 
@@ -32,13 +35,15 @@ where
 {
     
     fn find(&self, id: &Id) -> Option<Vec<Data>> {
-        self.data.get(id).map(|d| d.clone() )
+        let data = self.data.lock().unwrap();
+        data.get(id).map(|d| d.clone() )
     }
 
     fn store(&mut self, id: &Id, new: &Vec<Data>) {
         let mut new = new.clone();
+        let mut data = self.data.lock().unwrap();
         
-        match self.data.entry(id.clone()) {
+        match data.entry(id.clone()) {
             Entry::Vacant(v) => {
                 v.insert(new.clone()); 
             },

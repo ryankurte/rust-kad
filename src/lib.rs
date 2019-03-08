@@ -33,10 +33,10 @@ pub mod node;
 use node::Node;
 
 pub mod nodetable;
-use nodetable::{NodeTable, KNodeTable};
+use nodetable::{KNodeTable};
 
 pub mod datastore;
-use datastore::{Datastore, HashMapStore, Reducer};
+use datastore::{HashMapStore, Reducer};
 
 pub mod search;
 
@@ -108,7 +108,9 @@ mod tests {
     use futures::{Future};
 
     use super::*;
-    use crate::prelude::*;
+
+    use crate::nodetable::{NodeTable, KNodeTable};
+    use crate::datastore::{HashMapStore};
     
     use rr_mux::Mux;
     use rr_mux::mock::{MockTransaction, MockConnector};

@@ -100,7 +100,7 @@ where
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
 
-        info!("[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
+        info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
 
         // Launch request
         self.conn_mgr.clone().request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone()))

@@ -59,7 +59,6 @@ impl DatabaseId for Vec<u8> {
     }
 }
 
-
 /// helper macro to generate DatabaseId impl over [u8; N] types
 macro_rules! database_id_slice {
     ($N: expr) => (

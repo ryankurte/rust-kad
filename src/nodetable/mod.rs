@@ -16,3 +16,5 @@ pub use self::kbucket::KBucket;
 pub mod knodetable;
 pub use self::knodetable::KNodeTable;
 
+pub mod kentry;
+//pub use self::kentry::KEntry;

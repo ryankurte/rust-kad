@@ -18,31 +18,32 @@ use rr_mux::{Connector};
 /// Send a request to a slice of nodes and collect the responses.
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
-pub fn request_all<Id, Addr, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[Node<Id, Addr>]) -> 
-        impl Future<Item=Vec<(Node<Id, Addr>, Option<(Response<Id, Addr, Data>, Ctx)>)>, Error=DhtError> 
+pub fn request_all<Id, Node, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[(Id, Node)]) -> 
+        impl Future<Item=Vec<(Id, Node, Option<(Response<Id, Node, Data>, Ctx)>)>, Error=DhtError> 
 where
     Id: DatabaseId + Clone + Debug + 'static,
-    Addr: Clone + Debug + 'static,
+    Node: Clone + Debug + 'static,
     Data: Clone + Debug + 'static,
     ReqId: RequestId + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + 'static,       
+    Conn: Connector<ReqId, Node, Request<Id, Data>, Response<Id, Node, Data>, DhtError, Ctx> + Clone + 'static,       
 {
     let mut queries = Vec::new();
 
     for n in nodes {
-        debug!("Sending request: '{:?}' to: '{:?}'", req, n.id());
-        let n1 = n.clone();
-        let n2 = n.clone();
+        debug!("Sending request: '{:?}' to: '{:?}'", req, n.0);
+        let (a1, n1) = n.clone();
+        let (a2, n2) = n.clone();
         let mut c = conn.clone();
-        let q = c.request(ctx.clone(), ReqId::generate(), n.clone(), req.clone())
+
+        let q = c.request(ctx.clone(), ReqId::generate(), n1, req.clone())
             .map(|v| {
-                debug!("Response: '{:?}' from: '{:?}'", v, n1.id());
-                (n1, Some(v)) 
+                debug!("Response: '{:?}' from: '{:?}'", v, a1);
+                (a1, n1, Some(v)) 
             })
             .or_else(|e| {
                 if e == DhtError::Timeout {
-                    Ok((n2, None))
+                    Ok((a2, n2, None))
                 } else {
                     Err(e)
                 }

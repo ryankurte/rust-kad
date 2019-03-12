@@ -70,12 +70,12 @@ where
     Node: Clone + Debug + 'static,
 {
     /// Update a node in the table
-    fn update(&mut self, id: Id, node: Node) -> bool {
-        if id == self.id {
+    fn update(&mut self, id: &Id, node: Node) -> bool {
+        if *id == self.id {
             return false
         }
 
-        let bucket = self.bucket(&id);
+        let bucket = self.bucket(id);
         let mut bucket = bucket.lock().unwrap();
         let mut node = node.clone();
 
@@ -112,7 +112,7 @@ where
     }
 
     fn replace(&mut self, id: Id, old: Node, new: Node) {
-        let bucket = self.bucket(id);
+        let bucket = self.bucket(&id);
         let mut _bucket = bucket.lock().unwrap();
 
         unimplemented!();
@@ -136,26 +136,26 @@ mod test {
 
     #[test]
     fn test_k_node_table() {
-        let n = Node::new(0b0100, 1);
+        let n = (0b0100, 1);
 
-        let mut t = KNodeTable::<u64, u64>::new(n.id().clone(), 10, 4);
+        let mut t = KNodeTable::<u64, u64>::new(n.0.clone(), 10, 4);
 
         let nodes = vec![
-            Node::new(0b0000, 1),
-            Node::new(0b0001, 2),
-            Node::new(0b0110, 3),
-            Node::new(0b1011, 4),
+            (0b0000, 1),
+            (0b0001, 2),
+            (0b0110, 3),
+            (0b1011, 4),
         ];
 
         // Add some nodes
         for n in &nodes {
-            assert_eq!(true, t.contains(n.id()).is_none());
-            assert_eq!(true, t.update(&n));
-            assert_eq!(*n, t.contains(n.id()).unwrap());
+            assert_eq!(true, t.contains(&n.0).is_none());
+            assert_eq!(true, t.update(&n.0, n.1));
+            assert_eq!(n.1, t.contains(&n.0).unwrap());
         }
         
         // Find closest nodes
-        assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(n.id(), 0..2));
+        assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(&n.0, 0..2));
         assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&0b0010, 0..2));
     }
 }

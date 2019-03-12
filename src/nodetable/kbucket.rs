@@ -8,12 +8,13 @@
 
 
 use crate::id::DatabaseId;
-use crate::node::Node;
 
 use std::fmt::Debug;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+use super::kentry::KEntry;
 
 /// KBucket implementation
 /// This implements a single bucket for use in the KNodeTable implementation
@@ -22,21 +23,6 @@ pub struct KBucket<Id, Node> {
     entries: Arc<Mutex<VecDeque<KEntry<Id, Node>>>>,
     pending: Option<KEntry<Id, Node>>,
     updated: Option<Instant>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct KEntry<Id, Node> {
-    id: Id,
-    node: Node,
-}
-
-impl <Id, Node> KEntry<Id, Node> {
-    pub fn id(&self) -> Id {
-        self.id
-    }
-    pub fn node(&self) -> Node {
-        self.node
-    }
 }
 
 impl <Id, Node> KBucket<Id, Node> 
@@ -53,11 +39,11 @@ where
     }
 
     /// Update a node in the bucket
-    pub fn update(&mut self, id: Id, node: Node) -> bool {
+    pub fn update(&mut self, id: &Id, node: Node) -> bool {
         let mut entries = self.entries.lock().unwrap();
-        let entry = KEntry{id, node};
+        let entry = KEntry{id: id.clone(), node};
 
-        let res = if let Some(_n) = entries.clone().iter().find(|n| n.id() == id ) {
+        let res = if let Some(_n) = entries.clone().iter().find(|n| n.id() == *id ) {
             // If the node already exists, update it
             info!(target: "dht", "[KBucket] Updating node {:?}", entry);
             KBucket::update_position(&mut entries, &entry);
@@ -116,36 +102,36 @@ mod test {
 
     #[test]
     fn test_k_bucket_update() {
-        let mut b = KBucket::<u64, u64>::new(4);
+        let mut b = KBucket::<u64, u16>::new(4);
 
         assert_eq!(true, b.find(&0b00).is_none());
 
         // Generate fake nodes
-        let n1 = Node::new(0b00, 1);
-        let n2 = Node::new(0b01, 2);
-        let n3 = Node::new(0b10, 3);
-        let n4 = Node::new(0b11, 4);
+        let (a1, n1) = (0b000, 1);
+        let (a2, n2) = (0b001, 2);
+        let (a3, n3) = (0b010, 3);
+        let (a4, n4) = (0b011, 4);
+        let (a5, n5) = (0b100, 5);
 
         // Fill KBucket
-        assert_eq!(true, b.update(&n1));
-        assert_eq!(n1, b.find(n1.id()).unwrap().node);
+        assert_eq!(true, b.update(&a1, n1));
+        assert_eq!(n1, b.find(&a1).unwrap().node());
         
-        assert_eq!(true, b.update(&n2));
-        assert_eq!(n2, b.find(n2.id()).unwrap().node);
+        assert_eq!(true, b.update(&a2, n2));
+        assert_eq!(n2, b.find(&a2).unwrap().node());
         
-        assert_eq!(true, b.update(&n3));
-        assert_eq!(n3, b.find(n3.id()).unwrap().node);
+        assert_eq!(true, b.update(&a3, n3));
+        assert_eq!(n3, b.find(&a3).unwrap().node());
 
-        assert_eq!(true, b.update(&n4));
-        assert_eq!(n4, b.find(n4.id()).unwrap().node);
+        assert_eq!(true, b.update(&a4, n4));
+        assert_eq!(n4, b.find(&a4).unwrap().node());
 
         // Attempt to add to full KBucket
-        assert_eq!(false, b.update(&Node::new(0b100, 5)));
+        assert_eq!(false, b.update(&a5, n5));
 
         // Update existing item
-        let mut n4a = n4.clone();
-        n4a.set_address(&5);
-        assert_eq!(true, b.update(&n4a));
-        assert_eq!(n4a, b.find(n4.id()).unwrap());
+        let mut n4a = 100;
+        assert_eq!(true, b.update(&a4, n4a));
+        assert_eq!(n4a, b.find(&a4).unwrap().node());
     }
 }

@@ -16,8 +16,8 @@ use futures::prelude::*;
 use futures::future;
 use futures::future::{Loop};
 
-use crate::Config;
-use crate::node::Node;
+use crate::{Config, DhtConnector};
+
 use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
 use crate::nodetable::{NodeTable};
@@ -44,36 +44,36 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> {
+pub struct Search <Id, Node, Data, Table, Conn, ReqId, Ctx> {
     origin: Id,
     target: Id,
     op: Operation,
     config: Config,
     depth: usize,
     table: Table,
-    known: HashMap<Id, (Node<Id, Addr>, RequestState)>,
+    known: HashMap<Id, (Node, RequestState)>,
     data: HashMap<Id, Vec<Data>>,
     conn: Conn,
     ctx: Ctx,
     _req_id: PhantomData<ReqId>,
 }
 
-pub type KnownMap<Id, Addr> = HashMap<Id, (Node<Id, Addr>, RequestState)>;
+pub type KnownMap<Id, Node> = HashMap<Id, (Node, RequestState)>;
 pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
-impl <Id, Addr, Data, Table, Conn, ReqId, Ctx> Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> 
+impl <Id, Node, Data, Table, Conn, ReqId, Ctx> Search <Id, Node, Data, Table, Conn, ReqId, Ctx> 
 where
     Id: DatabaseId + 'static,
-    Addr: Clone + Debug + 'static,
+    Node: Clone + Debug + 'static,
     Data: Clone + Debug + 'static,
-    Table: NodeTable<Id, Addr> + Clone + Sync + Send + 'static,
+    Table: NodeTable<Id, Node> + Clone + Sync + Send + 'static,
+    Conn: DhtConnector<Id, Node, Data, ReqId, Ctx> + Clone + 'static,
     ReqId: RequestId + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr,Data>, DhtError, Ctx> + Clone + 'static,
 {
     pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
-        -> Search<Id, Addr,Data, Table, Conn, ReqId, Ctx> {
-        let known = HashMap::<Id, (Node<Id, Addr>, RequestState)>::new();
+        -> Search<Id, Node, Data, Table, Conn, ReqId, Ctx> {
+        let known = HashMap::<Id, (Node, RequestState)>::new();
         let data = HashMap::<Id, Vec<Data>>::new();
 
         let depth = config.max_recursion;
@@ -87,7 +87,7 @@ where
     }
 
     /// Fetch a copy of the Known Nodes map
-    pub fn known(&self) -> KnownMap<Id, Addr> {
+    pub fn known(&self) -> KnownMap<Id, Node> {
         self.known.clone()
     }
 
@@ -138,20 +138,23 @@ where
     }
 
     /// Fetch pending known nodes ordered by distance
-    fn pending(&self) -> Vec<Node<Id, Addr>> {
+    fn pending(&self) -> Vec<(Id, Node)> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Pending )
-                .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
+                .map(|(k, (n, _s))| (k.clone(), n.clone()) ).collect();
+
+        chunk.sort_by_key(|(k, _n)| Id::xor(&self.target, k) );
         chunk
     }
 
     /// Fetch completed known nodes ordered by distance
-    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Node<Id, Addr>> {
+    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<(Id, Node)> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Complete )
-                .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
+                .map(|(k, (n, _s))| (k.clone(), n.clone()) ).collect();
+        
+        // Sort chunk by distance
+        chunk.sort_by_key(|(k, _n)| Id::xor(&self.target, k) );
         
         // Limit to count or total found
         let mut range = range;
@@ -176,8 +179,8 @@ where
             self.config.max_recursion - self.depth, self.config.max_recursion, chunk);
 
         // Update nodes in the chunk to active state
-        for target in chunk {
-            self.known.entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+        for (id, _n) in chunk {
+            self.known.entry(*id).and_modify(|(_n, s)| *s = RequestState::Active );
         }
 
         let req = match self.op {
@@ -188,34 +191,34 @@ where
         // Send requests and handle responses
         request_all(self.conn.clone(), self.ctx.clone(), &req, chunk)
         .map(move |res| {
-            for (n, v) in &res {
+            for (id, n, v) in &res {
                 // Handle received responses
                 if let Some((resp, _ctx)) = v {
                     match resp {
                         Response::NodesFound(_id, nodes) => {
                             // Add nodes to known list
                             for n in nodes {
-                                if n.id() != &self.origin {
-                                    self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+                                if id != &self.origin {
+                                    self.known.entry(id.clone()).or_insert((n.clone(), RequestState::Pending));
                                 }
                             }
                         },
                         Response::ValuesFound(_id, values) => {
                             // Add data to data list
-                            self.data.insert(n.id().clone(), values.clone());
+                            self.data.insert(id.clone(), values.clone());
                         },
                         Response::NoResult => { },
                     }
 
                     // Update node state to completed
-                    self.known.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+                    self.known.entry(id.clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
                 } else {
                     // Update node state to timed out
-                    self.known.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                    self.known.entry(id.clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
                 }
 
                 // Update node table
-                self.table.update(&n);
+                self.table.update(id, *n);
             }
             // Update depth limit
             self.depth -= 1;
@@ -225,9 +228,9 @@ where
     }
 
     /// Seed the search with nearest nodes in addition to those provided in initialisation
-    pub fn seed(&mut self, known: &[Node<Id, Addr>]) {
-        for n in known {
-            self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+    pub fn seed(&mut self, known: &[(Id, Node)]) {
+        for (id, n) in known {
+            self.known.entry(id.clone()).or_insert((n.clone(), RequestState::Pending));
         }
     }
 }
@@ -244,45 +247,45 @@ mod tests {
 
     #[test]
     fn test_search_nodes() {
-        let root = Node::new(0, 001);
-        let target = Node::new(10, 600);
+        let root    = (0, 001);
+        let target  = (10, 600);
 
         let nodes = vec![
-            Node::new(1, 100),
-            Node::new(2, 200),
-            Node::new(3, 300),
-            Node::new(4, 400),
-            Node::new(5, 500),
+            (1, 100),
+            (2, 200),
+            (3, 300),
+            (4, 400),
+            (5, 500),
         ];
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(target.id().clone(), vec![nodes[3].clone()]), () ))),
-            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(target.id().clone(), vec![nodes[2].clone()]), () ))),
+            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![nodes[3].clone()]), () ))),
+            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![nodes[2].clone()]), () ))),
             
             // Second execution
-            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(target.id().clone(), vec![target.clone()]), () ))),
-            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(target.id().clone(), vec![nodes[4].clone()]), () ))), 
+            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![target.clone()]), () ))),
+            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![nodes[4].clone()]), () ))), 
         ]);
 
         // Create search object
         let mut config = Config::default();
         config.k = 2;
 
-        let table = KNodeTable::new(root.id().clone(), 2, 8);
-        let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
+        let table = KNodeTable::new(root.0.clone(), 2, 8);
+        let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.0.clone(), target.0.clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);
         {
             // This should add the nearest nodes to the known map
-            assert!(s.known.get(nodes[0].id()).is_some());
-            assert!(s.known.get(nodes[1].id()).is_some());
+            assert!(s.known.get(&nodes[0].0).is_some());
+            assert!(s.known.get(&nodes[1].0).is_some());
             // But not to the node table until they have responded
             let t = table.clone();
-            assert!(t.contains(nodes[0].id()).is_none());
-            assert!(t.contains(nodes[1].id()).is_none());
+            assert!(t.contains(&nodes[0].0).is_none());
+            assert!(t.contains(&nodes[1].0).is_none());
         }
         
         // Perform first iteration
@@ -290,11 +293,11 @@ mod tests {
         {
             // Responding nodes should be added to the node table
             let t = table.clone();
-            assert!(t.contains(nodes[0].id()).is_some());
-            assert!(t.contains(nodes[1].id()).is_some());
+            assert!(t.contains(&nodes[0].0).is_some());
+            assert!(t.contains(&nodes[1].0).is_some());
             // Viable responses should be added to the known map
-            assert!(s.known.get(nodes[2].id()).is_some());
-            assert!(s.known.get(nodes[3].id()).is_some());
+            assert!(s.known.get(&nodes[2].0).is_some());
+            assert!(s.known.get(&nodes[3].0).is_some());
         }
 
         // Perform second iteration
@@ -302,11 +305,11 @@ mod tests {
         {
             // Responding nodes should be added to the node table
             let t = table.clone();
-            assert!(t.contains(nodes[2].id()).is_some());
-            assert!(t.contains(nodes[3].id()).is_some());
+            assert!(t.contains(&nodes[2].0).is_some());
+            assert!(t.contains(&nodes[3].0).is_some());
             // Viable responses should be added to the known map
-            assert!(s.known.get(nodes[4].id()).is_some());
-            assert!(s.known.get(target.id()).is_some());
+            assert!(s.known.get(&nodes[4].0).is_some());
+            assert!(s.known.get(&target.0).is_some());
         }
 
         connector.finalise();

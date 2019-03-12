@@ -76,20 +76,20 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> = Dht<Id, Addr, Data, ReqId, Conn, KNodeTable<Id, Addr>, HashMapStore<Id, Data>, Ctx>;
+pub type StandardDht<Id, Node, Data, ReqId, Conn, Ctx> = Dht<Id, Node, Data, ReqId, Conn, KNodeTable<Id, Node>, HashMapStore<Id, Data>, Ctx>;
 
-impl <Id, Addr, Data, ReqId, Conn, Ctx> StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> 
+impl <Id, Node, Data, ReqId, Conn, Ctx> StandardDht<Id, Node, Data, ReqId, Conn, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Addr: PartialEq + Clone + Debug + Send + 'static,
+    Node: PartialEq + Clone + Debug + Send + 'static,
     Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Send + Clone + 'static,
+    Conn: DhtConnector<Id, Node, Data, ReqId, Ctx> + Send + Clone + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
-    pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Addr,Data, ReqId, Conn, Ctx> {
+    pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Node, Data, ReqId, Conn, Ctx> {
         let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
         let store = HashMapStore::new();
         Dht::new(id, config, table, conn, store)
@@ -97,10 +97,29 @@ where
 }
 
 /// DhtMux defines an rr_mux::Mux over Dht types for convenience
-pub type DhtMux<NodeId, Addr, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
+pub type DhtMux<NodeId, Node, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx>;
 
 /// DhtConnector defines an rr_mux::Connector impl over Dht types for convenience
-pub type DhtConnector<NodeId, Addr, Data, ReqId, Ctx> = Connector<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
+pub trait DhtConnector<NodeId, Node, Data, ReqId, Ctx>: Connector<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> {}
+
+impl <NodeId, Node, Data, ReqId, Ctx> DhtConnector<NodeId, Node, Data, ReqId, Ctx> for Connector<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> 
+where 
+    NodeId: DatabaseId + Clone + Send + 'static,
+    Node: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
+    Ctx: Clone + PartialEq + Debug + Send + 'static,
+{}
+
+
+impl <NodeId, Node, Data, ReqId, Ctx> DhtConnector<NodeId, Node, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> 
+where 
+    NodeId: DatabaseId + Clone + Send + 'static,
+    Node: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
+    Ctx: Clone + PartialEq + Debug + Send + 'static,
+{}
 
 #[cfg(test)]
 mod tests {
@@ -124,11 +143,11 @@ mod tests {
     #[test]
     fn test_mux() {
         // Create a generic mux
-        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, ()>::new();
+        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, ()>::new();
 
         // Bind it to the DHT instance
         let n1 = Node::new(0b0001, 100);
-        let dht = Dht::<NodeId, Addr, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
+        let dht = Dht::<NodeId, Node, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]

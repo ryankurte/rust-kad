@@ -20,30 +20,24 @@ extern crate rand;
 extern crate rr_mux;
 use rr_mux::{Connector};
 
-pub mod error;
-use error::Error as DhtError;
+pub mod common;
 
-pub mod id;
-use id::{DatabaseId, RequestId};
+use crate::common::id::{DatabaseId, RequestId};
+use crate::common::entry::Entry;
+use crate::common::error::Error as DhtError;
+use crate::common::message::{Request, Response};
 
-pub mod message;
-use crate::message::{Request, Response};
 
-pub mod entry;
-use entry::Entry;
+pub mod table;
+use table::{KNodeTable};
 
-pub mod nodetable;
-use nodetable::{KNodeTable};
-
-pub mod datastore;
-use datastore::{HashMapStore, Reducer};
-
-pub mod search;
+pub mod store;
+use store::{HashMapStore, Reducer};
 
 pub mod dht;
 use dht::Dht;
 
-pub mod connection;
+pub mod connector;
 
 pub mod prelude;
 
@@ -96,11 +90,6 @@ where
     }
 }
 
-/// DhtMux defines an rr_mux::Mux over Dht types for convenience
-pub type DhtMux<NodeId, Info, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, DhtError, Ctx>;
-
-/// DhtConnector defines an rr_mux::Connector impl over Dht types for convenience
-pub type DhtConnector<NodeId, Info, Data, ReqId, Ctx> = Connector<ReqId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, DhtError, Ctx>;
 
 #[cfg(test)]
 mod tests {
@@ -109,8 +98,8 @@ mod tests {
 
     use super::*;
 
-    use crate::nodetable::{NodeTable, KNodeTable};
-    use crate::datastore::{HashMapStore};
+    use crate::table::{NodeTable, KNodeTable};
+    use crate::store::{HashMapStore};
     
     use rr_mux::Mux;
     use rr_mux::mock::{MockTransaction, MockConnector};

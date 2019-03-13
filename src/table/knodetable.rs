@@ -12,8 +12,7 @@ use std::fmt::Debug;
 use std::time::Instant;
 use std::sync::{Arc, Mutex};
 
-use crate::id::DatabaseId;
-use crate::entry::Entry;
+use crate::common::{DatabaseId, Entry};
 
 use super::nodetable::NodeTable;
 use super::kbucket::KBucket;
@@ -69,7 +68,7 @@ where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
 {
-    /// Update a node in the table
+    /// Update a node in the NodeTable
     fn update(&mut self, node: &Entry<Id, Info>) -> bool {
         if node.id() == &self.id {
             return false
@@ -115,7 +114,7 @@ where
 
     }
 
-    /// Check if the node table contains a given node by Id
+    /// Check if the node NodeTable contains a given node by Id
     /// This returns the node object if found
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>> {
         let bucket = self.bucket(id);
@@ -128,7 +127,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::entry::Entry;
+    use super::*;
     use super::{KNodeTable, NodeTable};
 
     #[test]

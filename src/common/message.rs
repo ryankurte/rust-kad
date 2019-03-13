@@ -6,7 +6,7 @@
  * Copyright 2018 Ryan Kurte
  */
 
-use crate::entry::Entry;
+use super::entry::Entry;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Request<Id, Value> {

@@ -62,7 +62,7 @@ impl DatabaseId for Vec<u8> {
 /// helper macro to generate DatabaseId impl over [u8; N] types
 macro_rules! database_id_slice {
     ($N: expr) => (
-        impl crate::id::DatabaseId for [u8; $N] {
+        impl super::id::DatabaseId for [u8; $N] {
             fn xor(a: &Self, b: &Self) -> Self {
                 let mut c: Self = [0u8; $N];
                 for i in 0..c.len() {

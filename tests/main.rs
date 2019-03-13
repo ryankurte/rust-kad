@@ -14,13 +14,10 @@ use std::marker::PhantomData;
 extern crate kad;
 
 use kad::Config;
+use kad::common::*;
 use kad::dht::Dht;
-use kad::nodetable::KNodeTable;
-use kad::entry::Entry;
-use kad::id::DatabaseId;
-use kad::error::Error as DhtError;
-use kad::message::{Request, Response};
-use kad::datastore::{HashMapStore, Reducer};
+use kad::table::KNodeTable;
+use kad::store::{HashMapStore, Reducer};
 
 extern crate futures;
 use futures::prelude::*;
@@ -85,7 +82,7 @@ where
     }
 }
 
-impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
+impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
     Id: DatabaseId + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
@@ -93,7 +90,7 @@ where
     Ctx: Debug + Clone + Send + 'static,
 {
     fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
-            Box<Future<Item=(Response<Id, Info, Data>, Ctx), Error=DhtError> + Send + 'static> {
+            Box<Future<Item=(Response<Id, Info, Data>, Ctx), Error=Error> + Send + 'static> {
 
         // Fetch peer instance
         let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
@@ -105,7 +102,7 @@ where
         Box::new(future::ok((resp, ctx)))
     }
 
-    fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Box<Future<Item=(), Error=DhtError> + Send + 'static> {
+    fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Box<Future<Item=(), Error=Error> + Send + 'static> {
         Box::new(future::ok(()))
     }
 }

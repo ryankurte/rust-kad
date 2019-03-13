@@ -10,7 +10,7 @@
 use std::time::{Instant};
 use std::fmt::Debug;
 
-use crate::id::DatabaseId;
+use super::id::DatabaseId;
 
 #[derive(Clone, Debug, Hash, Eq)]
 pub struct Entry<Id, Info> {

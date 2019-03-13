@@ -17,15 +17,13 @@ use futures::future;
 use futures::future::{Loop};
 
 use crate::Config;
-use crate::entry::Entry;
-use crate::id::{DatabaseId, RequestId};
-use crate::error::Error as DhtError;
-use crate::nodetable::{NodeTable};
-use crate::message::{Request, Response};
+use crate::common::*;
+
+use crate::table::{NodeTable};
 
 
 use rr_mux::{Connector};
-use crate::connection::{request_all};
+use crate::connector::{request_all};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -69,7 +67,7 @@ where
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     ReqId: RequestId + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info,Data>, DhtError, Ctx> + Clone + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info,Data>, Error, Ctx> + Clone + 'static,
 {
     pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
         -> Search<Id, Info,Data, Table, Conn, ReqId, Ctx> {
@@ -96,7 +94,7 @@ where
         self.data.clone()
     }
 
-    pub fn execute(self) -> impl Future<Item=Self, Error=DhtError> 
+    pub fn execute(self) -> impl Future<Item=Self, Error=Error> 
     {
         // Execute recursive search
         future::loop_fn(self, |s1| {
@@ -166,7 +164,7 @@ where
     /// And collects the results into the known node and data maps.
     ///
     /// This is intended to be called using loop_fn for recursion.
-    pub(crate) fn recurse(mut self) -> impl Future<Item=Self, Error=DhtError> {
+    pub(crate) fn recurse(mut self) -> impl Future<Item=Self, Error=Error> {
 
         // Fetch a section of known nodes to process
         let pending = self.pending();
@@ -238,7 +236,7 @@ mod tests {
     use std::clone::Clone;
 
     use super::*;
-    use crate::nodetable::{NodeTable, KNodeTable};
+    use crate::table::{NodeTable, KNodeTable};
 
     use rr_mux::mock::{MockTransaction, MockConnector};
 

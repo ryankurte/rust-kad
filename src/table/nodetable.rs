@@ -8,8 +8,7 @@
 
 use std::ops::Range;
 
-use crate::id::DatabaseId;
-use crate::entry::Entry;
+use crate::common::{DatabaseId, Entry};
 
 // Generic Node Table implementation
 // This keeps track of known nodes

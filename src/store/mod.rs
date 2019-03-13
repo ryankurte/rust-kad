@@ -9,7 +9,7 @@
 
 use std::fmt::Debug;
 
-use crate::id::DatabaseId;
+use crate::common::DatabaseId;
 
 pub mod hashmapstore;
 pub use self::hashmapstore::HashMapStore;

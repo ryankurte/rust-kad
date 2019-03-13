@@ -5,8 +5,8 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
 
-use crate::id::DatabaseId;
-use crate::datastore::{Datastore, Reducer};
+use crate::common::DatabaseId;
+use crate::store::{Datastore, Reducer};
 
 #[derive(Clone)]
 pub struct HashMapStore<Id, Data> {

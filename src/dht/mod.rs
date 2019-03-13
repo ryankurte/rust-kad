@@ -16,15 +16,16 @@ use futures::future;
 use rr_mux::{Connector};
 
 use crate::{Config};
-use crate::entry::Entry;
-use crate::id::{DatabaseId, RequestId};
-use crate::error::Error as DhtError;
-use crate::nodetable::NodeTable;
-use crate::message::{Request, Response};
-use crate::datastore::{Datastore, Reducer};
-use crate::search::{Search, Operation};
 
-use crate::connection::{request_all};
+use crate::common::*;
+
+use crate::table::NodeTable;
+use crate::store::{Datastore, Reducer};
+
+use crate::connector::{request_all};
+
+pub mod search;
+pub use self::search::{Search, Operation};
 
 pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     id: Id,
@@ -46,7 +47,7 @@ where
     Info: Clone + Debug + 'static,
     Data: Reducer<Item=Data> + Clone + PartialEq + Debug + 'static,
     ReqId: RequestId + Clone + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> + Clone + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
@@ -73,7 +74,7 @@ where
     Info: Clone + Debug + Send + 'static,
     Data: Reducer<Item=Data> + Clone + Send + PartialEq + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> + Clone + Send + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + Send + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
@@ -95,7 +96,7 @@ where
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
-    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=(), Error=DhtError> + '_ {
+    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=(), Error=Error> + '_ {
         let table = self.table.clone();
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
@@ -110,7 +111,7 @@ where
                     Response::NodesFound(_id, nodes) => future::ok((target, nodes)),
                     _ => {
                         warn!("[DHT connect] invalid response from: {:?}", target.id());
-                        future::err(DhtError::InvalidResponse)
+                        future::err(Error::InvalidResponse)
                     },
                 }
             }).and_then(move |(target, found)| {
@@ -140,7 +141,7 @@ where
 
 
     /// Look up a node in the database by Id
-    pub fn lookup(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Entry<Id, Info>, Error=DhtError> + '_ {
+    pub fn lookup(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Entry<Id, Info>, Error=Error> + '_ {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -161,14 +162,14 @@ where
             if let Some((n, _s)) = known.get(s.target()) {
                 Ok(n.clone())
             } else {
-                Err(DhtError::NotFound)
+                Err(Error::NotFound)
             }
         })
     }
 
 
     /// Find a value from the DHT
-    pub fn find(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Vec<Data>, Error=DhtError> {
+    pub fn find(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Vec<Data>, Error=Error> {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -188,7 +189,7 @@ where
             // Return data if found
             let data = s.data();
             if data.len() == 0 {
-                return Err(DhtError::NotFound)
+                return Err(Error::NotFound)
             }
 
             // Reduce data before returning
@@ -205,7 +206,7 @@ where
 
 
     /// Store a value in the DHT
-    pub fn store(&mut self, target: Id, data: Vec<Data>, ctx: Ctx) -> impl Future<Item=(), Error=DhtError> {
+    pub fn store(&mut self, target: Id, data: Vec<Data>, ctx: Ctx) -> impl Future<Item=(), Error=Error> {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx.clone());
 
@@ -231,7 +232,7 @@ where
 
 
     /// Refresh node table
-    pub fn refresh(&mut self) -> impl Future<Item=(), Error=DhtError> {
+    pub fn refresh(&mut self) -> impl Future<Item=(), Error=Error> {
         // TODO: send refresh to buckets that haven't been looked up recently
         // How to track recently looked up / contacted buckets..?
 
@@ -239,11 +240,11 @@ where
         // Message oldest node, if no response evict
         // Maybe this could be implemented as a periodic ping and timeout instead?
 
-        future::err(DhtError::Unimplemented)
+        future::err(Error::Unimplemented)
     }
 
     /// Receive and reply to requests
-    pub fn receive(&mut self, from: &Entry<Id, Info>, req: &Request<Id, Data>) -> impl Future<Item=Response<Id, Info, Data>, Error=DhtError> {
+    pub fn receive(&mut self, from: &Entry<Id, Info>, req: &Request<Id, Data>) -> impl Future<Item=Response<Id, Info, Data>, Error=Error> {
         // Build response
         let resp = match req {
             Request::Ping => {
@@ -283,7 +284,7 @@ where
 
     /// Create a basic search using the DHT
     /// This is provided for integration of the Dht with other components
-    pub fn search(&mut self, id: Id, op: Operation, seed: &[Entry<Id, Info>], ctx: Ctx) -> impl Future<Item=Search<Id, Info, Data, Table, Conn, ReqId, Ctx>, Error=DhtError> {
+    pub fn search(&mut self, id: Id, op: Operation, seed: &[Entry<Id, Info>], ctx: Ctx) -> impl Future<Item=Search<Id, Info, Data, Table, Conn, ReqId, Ctx>, Error=Error> {
         let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
         search.seed(&seed);
 
@@ -325,8 +326,8 @@ mod tests {
     use std::clone::Clone;
 
     use super::*;
-    use crate::datastore::{HashMapStore, Datastore};
-    use crate::nodetable::{NodeTable, KNodeTable};
+    use crate::store::{HashMapStore, Datastore};
+    use crate::table::{NodeTable, KNodeTable};
 
     use rr_mux::mock::{MockConnector};
 

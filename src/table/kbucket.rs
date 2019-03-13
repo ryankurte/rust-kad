@@ -7,8 +7,7 @@
  */
 
 
-use crate::id::DatabaseId;
-use crate::entry::Entry;
+use crate::common::{DatabaseId, Entry};
 
 use std::fmt::Debug;
 use std::collections::VecDeque;
@@ -95,8 +94,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::entry::Entry;
-    use super::KBucket;
+    use super::*;
 
     #[test]
     fn test_k_bucket_update() {

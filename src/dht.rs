@@ -16,7 +16,7 @@ use futures::future;
 use rr_mux::{Connector};
 
 use crate::{Config};
-use crate::node::Node;
+use crate::entry::Entry;
 use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
 use crate::nodetable::NodeTable;
@@ -26,7 +26,7 @@ use crate::search::{Search, Operation};
 
 use crate::connection::{request_all};
 
-pub struct Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
+pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     id: Id,
     
     config: Config,
@@ -34,24 +34,24 @@ pub struct Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
     conn_mgr: Conn,
     datastore: Store,
 
-    _addr: PhantomData<Addr>,
+    _addr: PhantomData<Info>,
     _data: PhantomData<Data>,
     _req_id: PhantomData<ReqId>,
     _ctx: PhantomData<Ctx>,
 }
 
-impl <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> Clone for Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> 
+impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Clone for Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
 where
     Id: DatabaseId + Clone + 'static,
-    Addr: Clone + Debug + 'static,
+    Info: Clone + Debug + 'static,
     Data: Reducer<Item=Data> + Clone + PartialEq + Debug + 'static,
     ReqId: RequestId + Clone + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + 'static,
-    Table: NodeTable<Id, Addr> + Clone + Sync + Send + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> + Clone + 'static,
+    Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
 {
-    fn clone(&self) -> Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
+    fn clone(&self) -> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
         Dht{
             id: self.id.clone(),
             config: self.config.clone(),
@@ -67,18 +67,18 @@ where
     }
 }
 
-impl <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> 
+impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Addr: Clone + Debug + Send + 'static,
+    Info: Clone + Debug + Send + 'static,
     Data: Reducer<Item=Data> + Clone + Send + PartialEq + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Clone + Send + 'static,
-    Table: NodeTable<Id, Addr> + Clone + Sync + Send + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> + Clone + Send + 'static,
+    Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
 {
-    pub fn new(id: Id, config: Config, table: Table, conn_mgr: Conn, datastore: Store) -> Dht<Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
+    pub fn new(id: Id, config: Config, table: Table, conn_mgr: Conn, datastore: Store) -> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
         Dht{
             id,
             config, 
@@ -95,12 +95,12 @@ where
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
-    pub fn connect(&mut self, target: Node<Id, Addr>, ctx: Ctx) -> impl Future<Item=(), Error=DhtError> + '_ {
+    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=(), Error=DhtError> + '_ {
         let table = self.table.clone();
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
 
-        info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.address());
+        info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.info());
 
         // Launch request
         self.conn_mgr.clone().request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone()))
@@ -140,7 +140,7 @@ where
 
 
     /// Look up a node in the database by Id
-    pub fn lookup(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Node<Id, Addr>, Error=DhtError> + '_ {
+    pub fn lookup(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Entry<Id, Info>, Error=DhtError> + '_ {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -243,7 +243,7 @@ where
     }
 
     /// Receive and reply to requests
-    pub fn receive(&mut self, from: &Node<Id, Addr>, req: &Request<Id, Data>) -> impl Future<Item=Response<Id, Addr, Data>, Error=DhtError> {
+    pub fn receive(&mut self, from: &Entry<Id, Info>, req: &Request<Id, Data>) -> impl Future<Item=Response<Id, Info, Data>, Error=DhtError> {
         // Build response
         let resp = match req {
             Request::Ping => {
@@ -277,13 +277,13 @@ where
     }
 
     #[cfg(test)]
-    pub fn contains(&mut self, id: &Id) -> Option<Node<Id, Addr>> {
+    pub fn contains(&mut self, id: &Id) -> Option<Entry<Id, Info>> {
         self.table.contains(id)
     }
 
     /// Create a basic search using the DHT
     /// This is provided for integration of the Dht with other components
-    pub fn search(&mut self, id: Id, op: Operation, seed: &[Node<Id, Addr>], ctx: Ctx) -> impl Future<Item=Search<Id, Addr, Data, Table, Conn, ReqId, Ctx>, Error=DhtError> {
+    pub fn search(&mut self, id: Id, op: Operation, seed: &[Entry<Id, Info>], ctx: Ctx) -> impl Future<Item=Search<Id, Info, Data, Table, Conn, ReqId, Ctx>, Error=DhtError> {
         let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
         search.seed(&seed);
 
@@ -292,7 +292,7 @@ where
 }
 
 /// Stream trait implemented to allow polling on dht object
-impl <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> Future for Dht <Id, Addr, Data, ReqId, Conn, Table, Store, Ctx> {
+impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Future for Dht <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     type Item = ();
     type Error = ();
 
@@ -333,8 +333,8 @@ mod tests {
     #[test]
     fn test_receive_common() {
 
-        let root = Node::new(0, 001);
-        let friend = Node::new(1, 002);
+        let root = Entry::new(0, 001);
+        let friend = Entry::new(1, 002);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -368,8 +368,8 @@ mod tests {
     #[test]
     fn test_receive_ping() {
 
-        let root = Node::new(0, 001);
-        let friend = Node::new(1, 002);
+        let root = Entry::new(0, 001);
+        let friend = Entry::new(1, 002);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -387,9 +387,9 @@ mod tests {
     #[test]
     fn test_receive_find_nodes() {
 
-        let root = Node::new(0, 001);
-        let friend = Node::new(1, 002);
-        let other = Node::new(2, 003);
+        let root = Entry::new(0, 001);
+        let friend = Entry::new(1, 002);
+        let other = Entry::new(2, 003);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -410,9 +410,9 @@ mod tests {
         #[test]
     fn test_receive_find_values() {
 
-        let root = Node::new(0, 001);
-        let friend = Node::new(1, 002);
-        let other = Node::new(2, 003);
+        let root = Entry::new(0, 001);
+        let friend = Entry::new(1, 002);
+        let other = Entry::new(2, 003);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -442,8 +442,8 @@ mod tests {
     #[test]
     fn test_receive_store() {
 
-        let root = Node::new(0, 001);
-        let friend = Node::new(1, 002);
+        let root = Entry::new(0, 001);
+        let friend = Entry::new(1, 002);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -464,8 +464,8 @@ mod tests {
     #[test]
     fn test_clone() {
 
-        let root = Node::new(0, 001);
-        let _friend = Node::new(1, 002);
+        let root = Entry::new(0, 001);
+        let _friend = Entry::new(1, 002);
 
         let connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);

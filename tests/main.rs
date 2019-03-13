@@ -16,7 +16,7 @@ extern crate kad;
 use kad::Config;
 use kad::dht::Dht;
 use kad::nodetable::KNodeTable;
-use kad::node::Node;
+use kad::entry::Entry;
 use kad::id::DatabaseId;
 use kad::error::Error as DhtError;
 use kad::message::{Request, Response};
@@ -29,31 +29,31 @@ use futures::future;
 extern crate rr_mux;
 use rr_mux::Connector;
 
-type MockPeer<Id, Addr, Data> = Dht<Id, Addr, Data, u64, MockConnector<Id, Addr, Data, u64, ()>, KNodeTable<Id, Addr>, HashMapStore<Id, Data>, ()>;
+type MockPeer<Id, Info, Data> = Dht<Id, Info, Data, u64, MockConnector<Id, Info, Data, u64, ()>, KNodeTable<Id, Info>, HashMapStore<Id, Data>, ()>;
 
-type PeerMap<Id, Addr, Data> = HashMap<Id, MockPeer<Id, Addr, Data>>;
+type PeerMap<Id, Info, Data> = HashMap<Id, MockPeer<Id, Info, Data>>;
 
-struct MockNetwork <Id, Addr, Data> {
-    peers: Arc<Mutex<PeerMap<Id, Addr, Data>>>, 
+struct MockNetwork <Id, Info, Data> {
+    peers: Arc<Mutex<PeerMap<Id, Info, Data>>>, 
 }
 
-impl <Id, Addr, Data> MockNetwork < Id, Addr, Data> 
+impl <Id, Info, Data> MockNetwork < Id, Info, Data> 
 where
     Id: DatabaseId + 'static,
-    Addr: Debug + Clone + PartialEq + Send + 'static,
+    Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Reducer<Item=Data> + Debug + Clone + PartialEq + Send + 'static,
     
 {
-    pub fn new(config: Config, nodes: &[Node<Id, Addr>]) -> MockNetwork<Id, Addr,Data> {
+    pub fn new(config: Config, nodes: &[Entry<Id, Info>]) -> MockNetwork<Id, Info,Data> {
         let m = MockNetwork{ peers: Arc::new(Mutex::new(HashMap::new())) };
 
         for n in nodes {
             let config = config.clone();
 
-            let table = KNodeTable::<Id, Addr>::new(n.id().clone(), config.k, config.hash_size);
+            let table = KNodeTable::<Id, Info>::new(n.id().clone(), config.k, config.hash_size);
             let store = HashMapStore::<Id, Data>::new();
 
-            let conn = MockConnector::new(n.id().clone(), n.address().clone(), m.peers.clone());
+            let conn = MockConnector::new(n.id().clone(), n.info().clone(), m.peers.clone());
             
             let dht = Dht::new(n.id().clone(), config, table, conn, store);
 
@@ -65,47 +65,47 @@ where
 }
 
 #[derive(Clone)]
-struct MockConnector<Id, Addr, Data, ReqId, Ctx> {
+struct MockConnector<Id, Info, Data, ReqId, Ctx> {
     id: Id,
-    addr: Addr,
-    peers: Arc<Mutex<PeerMap<Id, Addr,Data>>>, 
+    addr: Info,
+    peers: Arc<Mutex<PeerMap<Id, Info,Data>>>, 
     _req_id: PhantomData<ReqId>,
     _ctx: PhantomData<Ctx>,
 }
 
-impl <Id, Addr, Data, ReqId, Ctx> MockConnector <Id, Addr, Data, ReqId, Ctx> 
+impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx> 
 where
     Id: DatabaseId + 'static,
-    Addr: Debug + Clone + PartialEq + Send + 'static,
+    Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Reducer<Item=Data> + Debug + Clone + PartialEq + Send + 'static,
     
 {
-    pub fn new( id: Id, addr: Addr, peers: Arc<Mutex<PeerMap<Id, Addr, Data>>>) -> Self {
+    pub fn new( id: Id, addr: Info, peers: Arc<Mutex<PeerMap<Id, Info, Data>>>) -> Self {
          MockConnector{ id, addr, peers, _req_id: PhantomData , _ctx: PhantomData}
     }
 }
 
-impl <Id, Addr, Data, ReqId, Ctx> Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> for MockConnector <Id, Addr, Data, ReqId, Ctx>
+impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
     Id: DatabaseId + 'static,
-    Addr: Debug + Clone + PartialEq + Send + 'static,
+    Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Reducer<Item=Data> + Debug + Clone + PartialEq + Send + 'static,
     Ctx: Debug + Clone + Send + 'static,
 {
-    fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Node<Id, Addr>, req: Request<Id, Data>) -> 
-            Box<Future<Item=(Response<Id, Addr, Data>, Ctx), Error=DhtError> + Send + 'static> {
+    fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
+            Box<Future<Item=(Response<Id, Info, Data>, Ctx), Error=DhtError> + Send + 'static> {
 
         // Fetch peer instance
         let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
 
-        let resp = peer.receive(&Node::new(self.id.clone(), self.addr.clone()), &req).wait().unwrap();
+        let resp = peer.receive(&Entry::new(self.id.clone(), self.addr.clone()), &req).wait().unwrap();
 
         self.peers.lock().unwrap().insert(to.id().clone(), peer);
 
         Box::new(future::ok((resp, ctx)))
     }
 
-    fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Node<Id, Addr>, _resp: Response<Id, Addr, Data>) -> Box<Future<Item=(), Error=DhtError> + Send + 'static> {
+    fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Box<Future<Item=(), Error=DhtError> + Send + 'static> {
         Box::new(future::ok(()))
     }
 }
@@ -123,7 +123,7 @@ fn integration() {
     // Build basic nodes
     let mut nodes = Vec::new();
     for i in 0..16 {
-        nodes.push(Node::new(i * 16, i));
+        nodes.push(Entry::new(i * 16, i));
     }
     let n0 = &nodes[0];
 

@@ -1,7 +1,7 @@
 
 pub use crate::{dht::Dht, StandardDht};
 
-pub use crate::{error::Error as DhtError, node::Node as DhtNode};
+pub use crate::{error::Error as DhtError, entry::Entry as DhtEntry};
 
 pub use crate::message::{Request as DhtRequest, Response as DhtResponse};
 

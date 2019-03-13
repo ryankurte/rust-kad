@@ -29,8 +29,8 @@ use id::{DatabaseId, RequestId};
 pub mod message;
 use crate::message::{Request, Response};
 
-pub mod node;
-use node::Node;
+pub mod entry;
+use entry::Entry;
 
 pub mod nodetable;
 use nodetable::{KNodeTable};
@@ -76,20 +76,20 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> = Dht<Id, Addr, Data, ReqId, Conn, KNodeTable<Id, Addr>, HashMapStore<Id, Data>, Ctx>;
+pub type StandardDht<Id, Info, Data, ReqId, Conn, Ctx> = Dht<Id, Info, Data, ReqId, Conn, KNodeTable<Id, Info>, HashMapStore<Id, Data>, Ctx>;
 
-impl <Id, Addr, Data, ReqId, Conn, Ctx> StandardDht<Id, Addr, Data, ReqId, Conn, Ctx> 
+impl <Id, Info, Data, ReqId, Conn, Ctx> StandardDht<Id, Info, Data, ReqId, Conn, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Addr: PartialEq + Clone + Debug + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
     Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr, Data>, DhtError, Ctx> + Send + Clone + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> + Send + Clone + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
-    pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Addr,Data, ReqId, Conn, Ctx> {
+    pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Info,Data, ReqId, Conn, Ctx> {
         let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
         let store = HashMapStore::new();
         Dht::new(id, config, table, conn, store)
@@ -97,10 +97,10 @@ where
 }
 
 /// DhtMux defines an rr_mux::Mux over Dht types for convenience
-pub type DhtMux<NodeId, Addr, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
+pub type DhtMux<NodeId, Info, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, DhtError, Ctx>;
 
 /// DhtConnector defines an rr_mux::Connector impl over Dht types for convenience
-pub type DhtConnector<NodeId, Addr, Data, ReqId, Ctx> = Connector<ReqId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, Ctx>;
+pub type DhtConnector<NodeId, Info, Data, ReqId, Ctx> = Connector<ReqId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, DhtError, Ctx>;
 
 #[cfg(test)]
 mod tests {
@@ -117,26 +117,26 @@ mod tests {
 
     type RequestId = u64;
     type NodeId = u64;
-    type Addr = u64;
+    type Info = u64;
     type Data = u64;
 
 
     #[test]
     fn test_mux() {
         // Create a generic mux
-        let dht_mux = Mux::<RequestId, Node<NodeId, Addr>, Request<NodeId, Data>, Response<NodeId, Addr, Data>, DhtError, ()>::new();
+        let dht_mux = Mux::<RequestId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, DhtError, ()>::new();
 
         // Bind it to the DHT instance
-        let n1 = Node::new(0b0001, 100);
-        let dht = Dht::<NodeId, Addr, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
+        let n1 = Entry::new(0b0001, 100);
+        let dht = Dht::<NodeId, Info, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]
     fn test_connect() {
-        let n1 = Node::new(0b0001, 100);
-        let n2 = Node::new(0b0010, 200);
-        let n3 = Node::new(0b0011, 300);
-        let n4 = Node::new(0b1000, 400);
+        let n1 = Entry::new(0b0001, 100);
+        let n2 = Entry::new(0b0010, 200);
+        let n3 = Entry::new(0b0011, 300);
+        let n4 = Entry::new(0b1000, 400);
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
@@ -175,11 +175,11 @@ mod tests {
 
    #[test]
     fn test_lookup() {
-        let n1 = Node::new(0b1000, 100);
-        let n2 = Node::new(0b0011, 200);
-        let n3 = Node::new(0b0010, 300);
-        let n4 = Node::new(0b1001, 400);
-        let n5 = Node::new(0b1010, 400);
+        let n1 = Entry::new(0b1000, 100);
+        let n2 = Entry::new(0b0011, 200);
+        let n3 = Entry::new(0b0010, 300);
+        let n4 = Entry::new(0b1001, 400);
+        let n5 = Entry::new(0b1010, 400);
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
@@ -216,11 +216,11 @@ mod tests {
 
        #[test]
     fn test_store() {
-        let n1 = Node::new(0b1000, 100);
-        let n2 = Node::new(0b0011, 200);
-        let n3 = Node::new(0b0010, 300);
-        let n4 = Node::new(0b1001, 400);
-        let n5 = Node::new(0b1010, 500);
+        let n1 = Entry::new(0b1000, 100);
+        let n2 = Entry::new(0b0011, 200);
+        let n3 = Entry::new(0b0010, 300);
+        let n4 = Entry::new(0b1001, 400);
+        let n5 = Entry::new(0b1010, 500);
 
         let id = 0b1011;
         let val = vec![1234];
@@ -265,11 +265,11 @@ mod tests {
 
     #[test]
     fn test_find() {
-        let n1 = Node::new(0b1000, 100);
-        let n2 = Node::new(0b0011, 200);
-        let n3 = Node::new(0b0010, 300);
-        let n4 = Node::new(0b1001, 400);
-        let n5 = Node::new(0b1010, 500);
+        let n1 = Entry::new(0b1000, 100);
+        let n2 = Entry::new(0b0011, 200);
+        let n3 = Entry::new(0b0010, 300);
+        let n4 = Entry::new(0b1001, 400);
+        let n5 = Entry::new(0b1010, 500);
 
         let id = 0b1011;
         let val = vec![1234];

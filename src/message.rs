@@ -6,7 +6,7 @@
  * Copyright 2018 Ryan Kurte
  */
 
-use crate::node::Node;
+use crate::entry::Entry;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Request<Id, Value> {
@@ -31,49 +31,49 @@ impl <Id, Value> Request<Id, Value> {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Response<Id, Addr, Value> {
-    NodesFound(Id, Vec<Node<Id, Addr>>),
+pub enum Response<Id, Info, Value> {
+    NodesFound(Id, Vec<Entry<Id, Info>>),
     ValuesFound(Id, Vec<Value>),
     NoResult,
 }
 
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct RequestMessage<Id, Addr, Value> {
+pub struct RequestMessage<Id, Info, Value> {
     pub request_id: Id,
-    pub caller: Node<Id, Addr>,
+    pub caller: Entry<Id, Info>,
     pub request: Request<Id, Value>,
 }
 
-impl <Id, Addr,Value> RequestMessage<Id, Addr,Value> {
-    pub fn ping(request_id: Id, caller: Node<Id, Addr>) -> RequestMessage<Id, Addr,Value> {
+impl <Id, Info,Value> RequestMessage<Id, Info,Value> {
+    pub fn ping(request_id: Id, caller: Entry<Id, Info>) -> RequestMessage<Id, Info,Value> {
         RequestMessage{request_id, caller, request: Request::Ping}
     }
 
-    pub fn find_node(request_id: Id, caller: Node<Id, Addr>, id: Id) -> RequestMessage<Id, Addr,Value> {
+    pub fn find_node(request_id: Id, caller: Entry<Id, Info>, id: Id) -> RequestMessage<Id, Info,Value> {
         RequestMessage{request_id, caller, request: Request::FindNode(id)}
     }
 
-    pub fn find_values(request_id: Id, caller: Node<Id, Addr>, id: Id) -> RequestMessage<Id, Addr,Value> {
+    pub fn find_values(request_id: Id, caller: Entry<Id, Info>, id: Id) -> RequestMessage<Id, Info,Value> {
         RequestMessage{request_id, caller, request: Request::FindValue(id)}
     }
 
-    pub fn store(request_id: Id, caller: Node<Id, Addr>, id: Id, value: Vec<Value>) -> RequestMessage<Id, Addr,Value> {
+    pub fn store(request_id: Id, caller: Entry<Id, Info>, id: Id, value: Vec<Value>) -> RequestMessage<Id, Info,Value> {
         RequestMessage{request_id, caller, request: Request::Store(id, value)}
     }
 }
 
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct ResponseMessage<Id, Addr, Value> {
+pub struct ResponseMessage<Id, Info, Value> {
     pub request_id: Id,
-    pub responder: Node<Id, Addr>,
-    pub response: Response<Id, Addr,Value>,
+    pub responder: Entry<Id, Info>,
+    pub response: Response<Id, Info,Value>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Message<Id, Addr, Value> {
-    Request(RequestMessage<Id, Addr, Value>),
-    Response(ResponseMessage<Id, Addr, Value>),
+pub enum Message<Id, Info, Value> {
+    Request(RequestMessage<Id, Info, Value>),
+    Response(ResponseMessage<Id, Info, Value>),
 }
 

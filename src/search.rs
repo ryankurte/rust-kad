@@ -17,7 +17,7 @@ use futures::future;
 use futures::future::{Loop};
 
 use crate::Config;
-use crate::node::Node;
+use crate::entry::Entry;
 use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
 use crate::nodetable::{NodeTable};
@@ -44,36 +44,36 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> {
+pub struct Search <Id, Info, Data, Table, Conn, ReqId, Ctx> {
     origin: Id,
     target: Id,
     op: Operation,
     config: Config,
     depth: usize,
     table: Table,
-    known: HashMap<Id, (Node<Id, Addr>, RequestState)>,
+    known: HashMap<Id, (Entry<Id, Info>, RequestState)>,
     data: HashMap<Id, Vec<Data>>,
     conn: Conn,
     ctx: Ctx,
     _req_id: PhantomData<ReqId>,
 }
 
-pub type KnownMap<Id, Addr> = HashMap<Id, (Node<Id, Addr>, RequestState)>;
+pub type KnownMap<Id, Info> = HashMap<Id, (Entry<Id, Info>, RequestState)>;
 pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
-impl <Id, Addr, Data, Table, Conn, ReqId, Ctx> Search <Id, Addr, Data, Table, Conn, ReqId, Ctx> 
+impl <Id, Info, Data, Table, Conn, ReqId, Ctx> Search <Id, Info, Data, Table, Conn, ReqId, Ctx> 
 where
     Id: DatabaseId + 'static,
-    Addr: Clone + Debug + 'static,
+    Info: Clone + Debug + 'static,
     Data: Clone + Debug + 'static,
-    Table: NodeTable<Id, Addr> + Clone + Sync + Send + 'static,
+    Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     ReqId: RequestId + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<ReqId, Node<Id, Addr>, Request<Id, Data>, Response<Id, Addr,Data>, DhtError, Ctx> + Clone + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info,Data>, DhtError, Ctx> + Clone + 'static,
 {
     pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
-        -> Search<Id, Addr,Data, Table, Conn, ReqId, Ctx> {
-        let known = HashMap::<Id, (Node<Id, Addr>, RequestState)>::new();
+        -> Search<Id, Info,Data, Table, Conn, ReqId, Ctx> {
+        let known = HashMap::<Id, (Entry<Id, Info>, RequestState)>::new();
         let data = HashMap::<Id, Vec<Data>>::new();
 
         let depth = config.max_recursion;
@@ -87,7 +87,7 @@ where
     }
 
     /// Fetch a copy of the Known Nodes map
-    pub fn known(&self) -> KnownMap<Id, Addr> {
+    pub fn known(&self) -> KnownMap<Id, Info> {
         self.known.clone()
     }
 
@@ -138,7 +138,7 @@ where
     }
 
     /// Fetch pending known nodes ordered by distance
-    fn pending(&self) -> Vec<Node<Id, Addr>> {
+    fn pending(&self) -> Vec<Entry<Id, Info>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Pending )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
@@ -147,7 +147,7 @@ where
     }
 
     /// Fetch completed known nodes ordered by distance
-    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Node<Id, Addr>> {
+    pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Entry<Id, Info>> {
         let mut chunk: Vec<_> = self.known.iter()
                 .filter(|(_k, (_n, s))| *s == RequestState::Complete )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
@@ -225,7 +225,7 @@ where
     }
 
     /// Seed the search with nearest nodes in addition to those provided in initialisation
-    pub fn seed(&mut self, known: &[Node<Id, Addr>]) {
+    pub fn seed(&mut self, known: &[Entry<Id, Info>]) {
         for n in known {
             self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
         }
@@ -244,15 +244,15 @@ mod tests {
 
     #[test]
     fn test_search_nodes() {
-        let root = Node::new(0, 001);
-        let target = Node::new(10, 600);
+        let root = Entry::new(0, 001);
+        let target = Entry::new(10, 600);
 
         let nodes = vec![
-            Node::new(1, 100),
-            Node::new(2, 200),
-            Node::new(3, 300),
-            Node::new(4, 400),
-            Node::new(5, 500),
+            Entry::new(1, 100),
+            Entry::new(2, 200),
+            Entry::new(3, 300),
+            Entry::new(4, 400),
+            Entry::new(5, 500),
         ];
 
         // Build expectations

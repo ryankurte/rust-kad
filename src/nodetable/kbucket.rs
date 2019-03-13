@@ -8,7 +8,7 @@
 
 
 use crate::id::DatabaseId;
-use crate::node::Node;
+use crate::entry::Entry;
 
 use std::fmt::Debug;
 use std::collections::VecDeque;
@@ -17,20 +17,20 @@ use std::time::Instant;
 
 /// KBucket implementation
 /// This implements a single bucket for use in the KNodeTable implementation
-pub struct KBucket<Id, Addr> {
+pub struct KBucket<Id, Info> {
     bucket_size: usize,
-    nodes: Arc<Mutex<VecDeque<Node<Id, Addr>>>>,
-    pending: Option<Node<Id, Addr>>,
+    nodes: Arc<Mutex<VecDeque<Entry<Id, Info>>>>,
+    pending: Option<Entry<Id, Info>>,
     updated: Option<Instant>,
 }
 
-impl <Id, Addr> KBucket<Id, Addr> 
+impl <Id, Info> KBucket<Id, Info> 
 where
     Id: DatabaseId + 'static,
-    Addr: Clone + Debug + 'static,
+    Info: Clone + Debug + 'static,
 {
     /// Create a new KBucket with the given size
-    pub fn new(bucket_size: usize) -> KBucket<Id, Addr> {
+    pub fn new(bucket_size: usize) -> KBucket<Id, Info> {
         KBucket{bucket_size, 
             nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), 
             pending: None, 
@@ -38,7 +38,7 @@ where
     }
 
     /// Update a node in the bucket
-    pub fn update(&mut self, node: &Node<Id, Addr>) -> bool {
+    pub fn update(&mut self, node: &Entry<Id, Info>) -> bool {
         let mut nodes = self.nodes.lock().unwrap();
 
         let res = if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
@@ -66,23 +66,23 @@ where
     }
 
     /// Find a node in the bucket
-    pub fn find(&self, id: &Id) -> Option<Node<Id, Addr>> {
+    pub fn find(&self, id: &Id) -> Option<Entry<Id, Info>> {
         self.nodes.lock().unwrap().iter().find(|n| *n.id() == *id).map(|n| n.clone())
     }
 
     /// Clone the list of nodes currently in the bucket
-    pub(crate) fn nodes(&self) -> Vec<Node<Id, Addr>> {
+    pub(crate) fn nodes(&self) -> Vec<Entry<Id, Info>> {
         self.nodes.lock().unwrap().iter().map(|n| n.clone()).collect()
     }
 
     /// Fetch the oldest node in the bucket
-    pub(crate) fn oldest(&self) -> Option<Node<Id, Addr>> {
+    pub(crate) fn oldest(&self) -> Option<Entry<Id, Info>> {
         let nodes = self.nodes.lock().unwrap();
         nodes.get(nodes.len()-1).map(|n| n.clone())
     }
 
     /// Move a node to the start of the bucket
-    fn update_position(nodes: &mut VecDeque<Node<Id, Addr>>, node: &Node<Id, Addr>) {
+    fn update_position(nodes: &mut VecDeque<Entry<Id, Info>>, node: &Entry<Id, Info>) {
         // Find the node to update
         if let Some(_existing) = nodes.iter().find(|n| n.id() == node.id()).map(|n| n.clone()) {
             // Update node array
@@ -95,7 +95,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::node::Node;
+    use crate::entry::Entry;
     use super::KBucket;
 
     #[test]
@@ -105,10 +105,10 @@ mod test {
         assert_eq!(true, b.find(&0b00).is_none());
 
         // Generate fake nodes
-        let n1 = Node::new(0b00, 1);
-        let n2 = Node::new(0b01, 2);
-        let n3 = Node::new(0b10, 3);
-        let n4 = Node::new(0b11, 4);
+        let n1 = Entry::new(0b00, 1);
+        let n2 = Entry::new(0b01, 2);
+        let n3 = Entry::new(0b10, 3);
+        let n4 = Entry::new(0b11, 4);
 
         // Fill KBucket
         assert_eq!(true, b.update(&n1));
@@ -124,11 +124,11 @@ mod test {
         assert_eq!(n4, b.find(n4.id()).unwrap());
 
         // Attempt to add to full KBucket
-        assert_eq!(false, b.update(&Node::new(0b100, 5)));
+        assert_eq!(false, b.update(&Entry::new(0b100, 5)));
 
         // Update existing item
         let mut n4a = n4.clone();
-        n4a.set_address(&5);
+        n4a.set_info(&5);
         assert_eq!(true, b.update(&n4a));
         assert_eq!(n4a, b.find(n4.id()).unwrap());
     }

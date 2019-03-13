@@ -9,7 +9,6 @@ pub mod tokio;
 
 use crate::id::{DatabaseId, RequestId};
 use crate::error::Error as DhtError;
-use crate::node::Node;
 use crate::message::{Request, Response};
 
 use rr_mux::{Connector};
@@ -36,7 +35,7 @@ where
         let (a2, n2) = n.clone();
         let mut c = conn.clone();
 
-        let q = c.request(ctx.clone(), ReqId::generate(), n1, req.clone())
+        let q = c.request(ctx.clone(), ReqId::generate(), n1.clone(), req.clone())
             .map(|v| {
                 debug!("Response: '{:?}' from: '{:?}'", v, a1);
                 (a1, n1, Some(v)) 

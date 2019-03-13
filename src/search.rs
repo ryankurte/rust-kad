@@ -215,14 +215,14 @@ where
                     }
 
                     // Update node state to completed
-                    self.known.entry(*resp_id).and_modify(|(_n, s)| *s = RequestState::Complete );
+                    self.known.entry(resp_id.clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
                 } else {
                     // Update node state to timed out
-                    self.known.entry(*resp_id).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                    self.known.entry(resp_id.clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
                 }
 
                 // Update node table
-                self.table.update(resp_id, *n);
+                self.table.update(resp_id);
             }
             // Update depth limit
             self.depth -= 1;
@@ -253,7 +253,7 @@ mod tests {
     #[derive(Debug, Clone, PartialEq)]
     struct Node (u64);
 
-    type Value = u64;
+    type Data = u64;
     type Ctx = ();
 
     #[test]
@@ -261,39 +261,31 @@ mod tests {
         let root    = (MockId(0), Node(001));
         let target  = (MockId(10), Node(600));
 
-        let ids = vec![
-            MockId(1),
-            MockId(2),
-            MockId(3),
-            MockId(4),
-            MockId(5),
-        ];
-
         let nodes = vec![
-            Node(100),
-            Node(200),
-            Node(300),
-            Node(400),
-            Node(500),
+            (MockId(1), Node(100)),
+            (MockId(2), Node(200)),
+            (MockId(3), Node(300)),
+            (MockId(4), Node(400)),
+            (MockId(5), Node(500)),
         ];
 
         // Build expectations
-        let mut connector = MockConnector::new().expect(vec![
+        let mut connector: MockConnector<Node, Request<MockId, Data>, Response<MockId, Node, Data>, DhtError, Ctx> = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::request(ids[1].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![(ids[3], nodes[3])]), () ))),
-            MockTransaction::request(ids[0].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![(ids[2], nodes[2])]), () ))),
+            MockTransaction::request(nodes[1].0, Request::FindNode(target.0), Ok((Response::NodesFound(target.0, vec![nodes[3]]), () ))),
+            MockTransaction::request(nodes[0].0, Request::FindNode(target.0), Ok((Response::NodesFound(target.0, vec![nodes[2]]), () ))),
             
             // Second execution
-            MockTransaction::request(ids[2].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![target]), () ))),
-            MockTransaction::request(ids[3].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![(ids[4], nodes[4])]), () ))), 
+            MockTransaction::request(nodes[2].0, Request::FindNode(target.0), Ok(( Response::NodesFound(target.0, vec![target]),   () ))),
+            MockTransaction::request(nodes[3].0, Request::FindNode(target.0), Ok(( Response::NodesFound(target.0, vec![nodes[4]]), () ))), 
         ]);
 
         // Create search object
         let mut config = Config::default();
         config.k = 2;
 
-        let table = KNodeTable::new(root.0.clone(), 2, 8);
-        let mut s = Search::<MockId, Node, Value, _, _, u64, ()>::new(root.0.clone(), target.0.clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
+        let table = KNodeTable::new(root.0, 2, 8);
+        let mut s = Search::new(root.0, target.0, Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

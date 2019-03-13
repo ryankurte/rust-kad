@@ -71,7 +71,7 @@ where
         bucket.find(id)
     }
 
-    pub (crate) fn update_entry<F(&mut self, id: &Id, f: F)
+    fn update_entry<F>(&mut self, id: &Id, f: F)
     where F: FnMut(&mut KEntry<Id, Node>)
     {
         let bucket = self.bucket(id);
@@ -79,8 +79,7 @@ where
 
         match bucket.find(id) {
             Some(e) => {
-                f(&mut e);
-                bucket.update(id, e);
+                //TODO"
             },
             None => ()
         };
@@ -93,39 +92,27 @@ where
     Node: Clone + Debug + 'static,
 {
     /// Update a node in the table
-    fn update(&mut self, id: &Id, node: Node) -> bool {
+    fn register(&mut self, id: &Id, node: Node) -> bool {
         if *id == self.id {
-            return false
+            return false;
         }
 
         let bucket = self.bucket(id);
         let mut bucket = bucket.lock().unwrap();
-        let mut node = node.clone();
 
-        // TODO: reimplement seen
-        //node.set_seen(Instant::now());
-
-        bucket.update(id, node)
+        bucket.register(id, node)
     }
 
-     fn update_fn<T: FnMut(&Id, &mut Node)>(&mut self, id: &Id, f: T) {
+     fn update(&mut self, id: &Id) -> bool {
         if *id == self.id {
-            return;
+            return false;
         }
 
         // Fetch an instance from the bucket (and lock)
         let bucket = self.bucket(id);
         let mut bucket = bucket.lock().unwrap();
 
-        // Check the instance exists
-        match bucket.find(id) {
-            Some(e) => f(id, &mut e.node()) ,
-            None => return
-        };
-
-        
-
-        //bucket.update(id, entry.node());
+        bucket.update(id)
      }
 
     /// Find the nearest nodes to the provided Id in the given range
@@ -143,7 +130,7 @@ where
         let mut range = range;
         range.end = usize::min(count, range.end);
 
-        let limited = all.drain(range).map(|e| (e.id(), e.node()) ).collect();
+        let limited = all.drain(range).map(|e| (e.id().clone(), e.node().clone() ) ).collect();
         limited
     }
 
@@ -151,7 +138,7 @@ where
     fn peek_oldest(&mut self, id: &Id) -> Option<(Id, Node)> {
         let bucket = self.bucket(id);
         let bucket = bucket.lock().unwrap();
-        bucket.oldest().map(|e| (e.id(), e.node()) )
+        bucket.oldest().map(|e| (e.id().clone(), e.node().clone()) )
     }
 
     fn replace(&mut self, id: Id, old: Node, new: Node) {
@@ -164,9 +151,7 @@ where
     /// Check if the node table contains a given node by Id
     /// This returns the node object if found
     fn contains(&self, id: &Id) -> Option<Node> {
-        let bucket = self.bucket(id);
-        let bucket = bucket.lock().unwrap();
-        bucket.find(id).map(|e| e.node() )
+        self.entry(id).map(|e| e.node().clone() )
     }
 }
 
@@ -193,7 +178,7 @@ mod test {
         // Add some nodes
         for n in &nodes {
             assert_eq!(true, t.contains(&n.0).is_none());
-            assert_eq!(true, t.update(&n.0, n.1));
+            assert_eq!(true, t.register(&n.0, n.1));
             assert_eq!(n.1, t.contains(&n.0).unwrap());
         }
         

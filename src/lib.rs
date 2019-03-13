@@ -100,9 +100,9 @@ where
 pub type DhtMux<NodeId, Node, Data, ReqId, Ctx> = rr_mux::Mux<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx>;
 
 /// DhtConnector defines an rr_mux::Connector impl over Dht types for convenience
-pub trait DhtConnector<NodeId, Node, Data, ReqId, Ctx>: Connector<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> {}
+pub trait DhtConnector<NodeId, Node, Data, ReqId, Ctx>: Connector<ReqId, NodeId, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> {}
 
-impl <NodeId, Node, Data, ReqId, Ctx> DhtConnector<NodeId, Node, Data, ReqId, Ctx> for Connector<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> 
+impl <NodeId, Node, Data, ReqId, Ctx> DhtConnector<NodeId, Node, Data, ReqId, Ctx> for Connector<ReqId, NodeId, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> 
 where 
     NodeId: DatabaseId + Clone + Send + 'static,
     Node: PartialEq + Clone + Debug + Send + 'static,
@@ -112,7 +112,7 @@ where
 {}
 
 
-impl <NodeId, Node, Data, ReqId, Ctx> DhtConnector<NodeId, Node, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> 
+impl <NodeId, Node, Data, ReqId, Ctx> DhtConnector<NodeId, Node, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<NodeId, Request<NodeId, Data>, Response<NodeId, Node, Data>, DhtError, Ctx> 
 where 
     NodeId: DatabaseId + Clone + Send + 'static,
     Node: PartialEq + Clone + Debug + Send + 'static,

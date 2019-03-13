@@ -39,23 +39,26 @@ where
         }
     }
 
-    /// Update a node in the bucket
-    pub fn update(&mut self, id: &Id, entry: KEntry<Id, Node>) -> bool {
+    pub fn register(&mut self, id: &Id, node: Node) -> bool {
         let mut entries = self.entries.lock().unwrap();
 
-        let res = if let Some(_n) = entries.clone().iter().find(|n| n.id() == *id ) {
+        let res = if let Some(entry) = entries.clone().iter().find(|n| n.id() == id ) {
             // If the node already exists, update it
             info!(target: "dht", "[KBucket] Updating node {:?}", entry);
+            // TODO: update
             KBucket::update_position(&mut entries, &entry);
             true
         } else if entries.len() < self.bucket_size {
             // If there's space in the bucket, add it
-            info!(target: "dht", "[KBucket] Adding node {:?}", entry);
+            info!(target: "dht", "[KBucket] Adding node {:?}", node);
+            let entry = KEntry::new(id.clone(), node);
             entries.push_back(entry);
             true
         } else {
-            // If there's no space, discard it
-            info!(target: "dht", "[KBucket] No space to add node {:?}", entry);
+            // If there's no space, add to pending list (maybe)
+            info!(target: "dht", "[KBucket] No space to add node {:?}", node);
+            let entry = KEntry::new(id.clone(), node);
+            // TODO: make this a list?
             self.pending = Some(entry);
             false
         };
@@ -67,9 +70,20 @@ where
         res
     }
 
+    /// Update a node in the bucket
+    pub fn update(&mut self, id: &Id) -> bool {
+        let mut entries = self.entries.lock().unwrap();
+        
+        if let Some(e) = entries.clone().iter().find(|n| n.id() == id ) {
+
+        }
+
+        return false;
+    }
+
     /// Find a node in the bucket
     pub fn find(&self, id: &Id) -> Option<KEntry<Id, Node>> {
-        self.entries.lock().unwrap().iter().find(|e| e.id() == *id).map(|e| e.clone())
+        self.entries.lock().unwrap().iter().find(|e| e.id() == id).map(|e| e.clone())
     }
 
     /// Clone the list of nodes currently in the bucket
@@ -114,24 +128,24 @@ mod test {
         let (a5, n5) = (0b100, 5);
 
         // Fill KBucket
-        assert_eq!(true, b.update(&a1, n1));
-        assert_eq!(n1, b.find(&a1).unwrap().node());
+        assert_eq!(true, b.register(&a1, n1));
+        assert_eq!(n1, *b.find(&a1).unwrap().node());
         
-        assert_eq!(true, b.update(&a2, n2));
-        assert_eq!(n2, b.find(&a2).unwrap().node());
+        assert_eq!(true, b.register(&a2, n2));
+        assert_eq!(n2, *b.find(&a2).unwrap().node());
         
-        assert_eq!(true, b.update(&a3, n3));
-        assert_eq!(n3, b.find(&a3).unwrap().node());
+        assert_eq!(true, b.register(&a3, n3));
+        assert_eq!(n3, *b.find(&a3).unwrap().node());
 
-        assert_eq!(true, b.update(&a4, n4));
-        assert_eq!(n4, b.find(&a4).unwrap().node());
+        assert_eq!(true, b.register(&a4, n4));
+        assert_eq!(n4, *b.find(&a4).unwrap().node());
 
         // Attempt to add to full KBucket
-        assert_eq!(false, b.update(&a5, n5));
+        assert_eq!(false, b.register(&a5, n5));
 
         // Update existing item
         let mut n4a = 100;
-        assert_eq!(true, b.update(&a4, n4a));
-        assert_eq!(n4a, b.find(&a4).unwrap().node());
+        assert_eq!(true, b.register(&a4, n4a));
+        assert_eq!(n4a, *b.find(&a4).unwrap().node());
     }
 }

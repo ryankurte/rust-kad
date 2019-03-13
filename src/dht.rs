@@ -355,7 +355,7 @@ mod tests {
         );
 
         // Adds node to appropriate k bucket
-        let friend1 = dht.table.contains(&friend.0).unwrap();
+        let friend1 = dht.table.entry(&friend.0).unwrap();
 
         // Second ping
         assert_eq!(
@@ -364,7 +364,8 @@ mod tests {
         );
 
         // Updates node in appropriate k bucket
-        let friend2 = dht.table.contains(&friend.0).unwrap();
+        let friend2 = dht.table.entry(&friend.0).unwrap();
+        
         assert_ne!(friend1.seen(), friend2.seen());
 
         // Check expectations are done
@@ -405,8 +406,8 @@ mod tests {
 
         // FindNodes
         assert_eq!(
-            dht.receive(&friend.0, &Request::FindNode(other.id().clone())).wait().unwrap(),
-            Response::NodesFound(other.id().clone(), vec![friend.clone()]), 
+            dht.receive(&friend.0, &Request::FindNode(other.0)).wait().unwrap(),
+            Response::NodesFound(other.0, vec![friend]), 
         );
 
         // Check expectations are done
@@ -419,26 +420,27 @@ mod tests {
         let root = (MockId(0), 001);
         let friend = (MockId(1), 002);
         let other = (MockId(2), 003);
+        let value = MockId(201);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Add friend to known table
-        dht.table.update(&friend);
+        dht.table.register(&friend.0, friend.1);
 
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
-            dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
-            Response::NodesFound(201, vec![friend.clone()]), 
+            dht.receive(&other.0, &Request::FindValue(value)).wait().unwrap(),
+            Response::NodesFound(value, vec![friend]), 
         );
 
         // Add value to store
-        dht.datastore.store(&201, &vec![1337]);
+        dht.datastore.store(&value, &vec![1337]);
         
         // FindValues
         assert_eq!(
-            dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
-            Response::ValuesFound(201, vec![1337]), 
+            dht.receive(&other.0, &Request::FindValue(value)).wait().unwrap(),
+            Response::ValuesFound(value, vec![1337]), 
         );
 
         // Check expectations are done
@@ -451,17 +453,18 @@ mod tests {
         let root = (MockId(0), 001);
         let friend = (MockId(1), 002);
         let _other = (MockId(2), 003);
+        let value = MockId(201);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Store
         assert_eq!(
-            dht.receive(&friend, &Request::Store(2, vec![1234])).wait().unwrap(),
+            dht.receive(&friend.0, &Request::Store(value, vec![1234])).wait().unwrap(),
             Response::NoResult,
         );
 
-        let v = dht.datastore.find(&2).expect("missing value");
+        let v = dht.datastore.find(&value).expect("missing value");
         assert_eq!(v, vec![1234]);
 
         // Check expectations are done

@@ -14,15 +14,19 @@ use crate::node::Node;
 // Generic Node Table implementation
 // This keeps track of known nodes
 pub trait NodeTable<Id: DatabaseId + Clone + 'static, Node: Clone + 'static> {
-    // Update a node in the table
-    // Returns true if node has been stored or updated, false if there is no room remaining in the table
-    fn update(&mut self, id: &Id, node: Node) -> bool;
+    /// Register or update node data
+    /// This is called to attempt to add or update a node in the node table
+    /// Returns true if node has been stored or updated, false if there is no room remaining in the table
+    fn register(&mut self, id: &Id, node: Node) -> bool;
 
-    fn update_fn<T: FnMut(&Id, &mut Node)>(&mut self, id: &Id, f: T);
+    /// Update node metadata
+    /// This is called when messages are received / lost / error to keep track of node connectivity
+    fn update(&mut self, id: &Id) -> bool;
 
     // Find nearest nodes
     // Returns a list of the nearest nodes to the provided id
     fn nearest(&mut self, id: &Id, range: Range<usize>) -> Vec<(Id, Node)>;
+    
     // Find an exact node
     // This is used to fetch a node from the node table
     fn contains(&self, id: &Id) -> Option<Node>;

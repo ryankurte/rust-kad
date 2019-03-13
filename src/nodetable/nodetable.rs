@@ -17,6 +17,9 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Node: Clone + 'static> {
     // Update a node in the table
     // Returns true if node has been stored or updated, false if there is no room remaining in the table
     fn update(&mut self, id: &Id, node: Node) -> bool;
+
+    fn update_fn<T: FnMut(&Id, &mut Node)>(&mut self, id: &Id, f: T);
+
     // Find nearest nodes
     // Returns a list of the nearest nodes to the provided id
     fn nearest(&mut self, id: &Id, range: Range<usize>) -> Vec<(Id, Node)>;

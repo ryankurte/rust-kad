@@ -23,10 +23,29 @@ pub trait DatabaseId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug 
     fn is_zero(&self) -> bool;
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct MockId(pub u64);
+
+/// DatabaseId implementation for u64
+/// This is only for testing use
+impl DatabaseId for MockId {
+    fn xor(a: &Self, b: &Self) -> Self {
+        MockId(a.0 ^ b.0)
+    }
+
+    fn bits(&self) -> usize {
+        (64 - self.0.leading_zeros()) as usize
+    }
+
+    fn is_zero(&self) -> bool {
+        Zero::is_zero(&self.0)
+    }
+}
+
 /// DatabaseId implementation for u64
 /// This is only for testing use
 impl DatabaseId for u64 {
-    fn xor(a: &u64, b: &u64) -> u64 {
+    fn xor(a: &Self, b: &Self) -> Self {
         a ^ b
     }
 

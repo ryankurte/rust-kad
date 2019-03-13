@@ -16,6 +16,7 @@ use crate::id::DatabaseId;
 use crate::node::Node;
 
 use super::nodetable::NodeTable;
+use super::kentry::KEntry;
 use super::kbucket::KBucket;
 
 /// KNodeTable Implementation
@@ -62,6 +63,28 @@ where
         let index = diff.bits() - 1;
         index
     }
+
+    /// Fetch a specified entry
+    pub (crate) fn entry(&self, id: &Id) -> Option<KEntry<Id, Node>> {
+        let bucket = self.bucket(id);
+        let bucket = bucket.lock().unwrap();
+        bucket.find(id)
+    }
+
+    pub (crate) fn update_entry<F(&mut self, id: &Id, f: F)
+    where F: FnMut(&mut KEntry<Id, Node>)
+    {
+        let bucket = self.bucket(id);
+        let bucket = bucket.lock().unwrap();
+
+        match bucket.find(id) {
+            Some(e) => {
+                f(&mut e);
+                bucket.update(id, e);
+            },
+            None => ()
+        };
+    }
 }
 
 impl <Id, Node> NodeTable<Id, Node> for KNodeTable<Id, Node> 
@@ -84,6 +107,26 @@ where
 
         bucket.update(id, node)
     }
+
+     fn update_fn<T: FnMut(&Id, &mut Node)>(&mut self, id: &Id, f: T) {
+        if *id == self.id {
+            return;
+        }
+
+        // Fetch an instance from the bucket (and lock)
+        let bucket = self.bucket(id);
+        let mut bucket = bucket.lock().unwrap();
+
+        // Check the instance exists
+        match bucket.find(id) {
+            Some(e) => f(id, &mut e.node()) ,
+            None => return
+        };
+
+        
+
+        //bucket.update(id, entry.node());
+     }
 
     /// Find the nearest nodes to the provided Id in the given range
     fn nearest(&mut self, id: &Id, range: Range<usize>) -> Vec<(Id, Node)> {

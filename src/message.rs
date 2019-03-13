@@ -32,7 +32,7 @@ impl <Id, Value> Request<Id, Value> {
 #[derive(PartialEq, Clone, Debug)]
 pub enum Response<Id, Node, Value> {
     // NodesFound contains the search address and a list of near nodes
-    NodesFound(Id, Vec<Node>),
+    NodesFound(Id, Vec<(Id, Node)>),
     /// ValuesFound contains the search address and a list of near values
     ValuesFound(Id, Vec<Value>),
     /// NoResult indicates no nodes or values were located

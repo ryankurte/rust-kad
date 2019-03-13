@@ -23,8 +23,6 @@ use crate::error::Error as DhtError;
 use crate::nodetable::{NodeTable};
 use crate::message::{Request, Response};
 
-
-use rr_mux::{Connector};
 use crate::connection::{request_all};
 
 /// Search describes DHT search operations
@@ -41,6 +39,7 @@ pub enum RequestState {
     Active,
     Timeout,
     Complete,
+    Failed,
 }
 
 /// Search object provides the basis for executing searches on the DHT
@@ -191,19 +190,24 @@ where
         // Send requests and handle responses
         request_all(self.conn.clone(), self.ctx.clone(), &req, chunk)
         .map(move |res| {
-            for (id, n, v) in &res {
+            for (resp_id, resp_n, v) in &res {
                 // Handle received responses
                 if let Some((resp, _ctx)) = v {
                     match resp {
-                        Response::NodesFound(_id, nodes) => {
-                            // Add nodes to known list
-                            for n in nodes {
-                                if id != &self.origin {
-                                    self.known.entry(id.clone()).or_insert((n.clone(), RequestState::Pending));
+                        Response::NodesFound(id, nodes) => {
+                            // Check returned ID matches search ID
+                            if *id != self.target {
+                                self.known.entry(resp_id.clone()).or_insert((resp_n.clone(), RequestState::Failed));
+                                continue;
+                            }
+                            // Add discovered nodes to known list
+                            for (i, n) in nodes {
+                                if i != &self.origin {
+                                    self.known.entry(i.clone()).or_insert((n.clone(), RequestState::Pending));
                                 }
                             }
                         },
-                        Response::ValuesFound(_id, values) => {
+                        Response::ValuesFound(id, values) => {
                             // Add data to data list
                             self.data.insert(id.clone(), values.clone());
                         },
@@ -211,14 +215,14 @@ where
                     }
 
                     // Update node state to completed
-                    self.known.entry(id.clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+                    self.known.entry(*resp_id).and_modify(|(_n, s)| *s = RequestState::Complete );
                 } else {
                     // Update node state to timed out
-                    self.known.entry(id.clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                    self.known.entry(*resp_id).and_modify(|(_n, s)| *s = RequestState::Timeout );
                 }
 
                 // Update node table
-                self.table.update(id, *n);
+                self.table.update(resp_id, *n);
             }
             // Update depth limit
             self.depth -= 1;
@@ -242,31 +246,46 @@ mod tests {
 
     use super::*;
     use crate::nodetable::{NodeTable, KNodeTable};
+    use crate::id::MockId;
 
     use rr_mux::mock::{MockTransaction, MockConnector};
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct Node (u64);
+
+    type Value = u64;
+    type Ctx = ();
+
     #[test]
     fn test_search_nodes() {
-        let root    = (0, 001);
-        let target  = (10, 600);
+        let root    = (MockId(0), Node(001));
+        let target  = (MockId(10), Node(600));
+
+        let ids = vec![
+            MockId(1),
+            MockId(2),
+            MockId(3),
+            MockId(4),
+            MockId(5),
+        ];
 
         let nodes = vec![
-            (1, 100),
-            (2, 200),
-            (3, 300),
-            (4, 400),
-            (5, 500),
+            Node(100),
+            Node(200),
+            Node(300),
+            Node(400),
+            Node(500),
         ];
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![nodes[3].clone()]), () ))),
-            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![nodes[2].clone()]), () ))),
+            MockTransaction::request(ids[1].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![(ids[3], nodes[3])]), () ))),
+            MockTransaction::request(ids[0].clone(), Request::FindNode(target.0.clone()), Ok((Response::NodesFound(target.0.clone(), vec![(ids[2], nodes[2])]), () ))),
             
             // Second execution
-            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![target.clone()]), () ))),
-            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![nodes[4].clone()]), () ))), 
+            MockTransaction::request(ids[2].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![target]), () ))),
+            MockTransaction::request(ids[3].clone(), Request::FindNode(target.0.clone()), Ok(( Response::NodesFound(target.0.clone(), vec![(ids[4], nodes[4])]), () ))), 
         ]);
 
         // Create search object
@@ -274,7 +293,7 @@ mod tests {
         config.k = 2;
 
         let table = KNodeTable::new(root.0.clone(), 2, 8);
-        let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.0.clone(), target.0.clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
+        let mut s = Search::<MockId, Node, Value, _, _, u64, ()>::new(root.0.clone(), target.0.clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);

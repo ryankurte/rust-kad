@@ -35,13 +35,13 @@ where
         KBucket{bucket_size, 
             entries: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), 
             pending: None, 
-            updated: None}
+            updated: None
+        }
     }
 
     /// Update a node in the bucket
-    pub fn update(&mut self, id: &Id, node: Node) -> bool {
+    pub fn update(&mut self, id: &Id, entry: KEntry<Id, Node>) -> bool {
         let mut entries = self.entries.lock().unwrap();
-        let entry = KEntry{id: id.clone(), node};
 
         let res = if let Some(_n) = entries.clone().iter().find(|n| n.id() == *id ) {
             // If the node already exists, update it

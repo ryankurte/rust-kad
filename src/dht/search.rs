@@ -20,10 +20,10 @@ use crate::Config;
 use crate::common::*;
 
 use crate::table::{NodeTable};
-
+use crate::store::Reducer;
 
 use rr_mux::{Connector};
-use crate::connector::{request_all};
+use crate::connector::{Connector as DhtConnector, request_all};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -61,11 +61,11 @@ pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
 impl <Id, Info, Data, Table, Conn, ReqId, Ctx> Search <Id, Info, Data, Table, Conn, ReqId, Ctx> 
 where
-    Id: DatabaseId + 'static,
-    Info: Clone + Debug + 'static,
-    Data: Clone + Debug + 'static,
+    Id: DatabaseId + Clone + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
-    ReqId: RequestId + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
     Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info,Data>, Error, Ctx> + Clone + 'static,
 {

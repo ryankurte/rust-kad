@@ -43,10 +43,10 @@ pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
 
 impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Clone for Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
 where
-    Id: DatabaseId + Clone + 'static,
-    Info: Clone + Debug + 'static,
-    Data: Reducer<Item=Data> + Clone + PartialEq + Debug + 'static,
-    ReqId: RequestId + Clone + 'static,
+    Id: DatabaseId + Clone + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
     Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
@@ -71,8 +71,8 @@ where
 impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Info: Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + Clone + Send + PartialEq + Debug + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + Send + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,

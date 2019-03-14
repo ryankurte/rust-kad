@@ -15,30 +15,30 @@ use rr_mux;
 
 
 /// Mux defines an rr_mux::Mux over Dht types for convenience
-pub type Mux<NodeId, Node, Data, ReqId, Ctx> = 
-    rr_mux::Mux<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, Error, Ctx>;
+pub type Mux<Id, Info, Data, ReqId, Ctx> = 
+    rr_mux::Mux<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx>;
 
 /// Connector defines an rr_mux::Connector impl over Dht types for convenience
-pub trait Connector<NodeId, Node, Data, ReqId, Ctx>: 
-    rr_mux::Connector<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, Error, Ctx> {}
+pub trait Connector<Id, Info, Data, ReqId, Ctx>: 
+    rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + 'static {}
 
 
 /// Generic impl of Connector over matching rr_mux::Connector impls
-impl <NodeId, Node, Data, ReqId, Ctx> Connector<NodeId, Node, Data, ReqId, Ctx> for rr_mux::Connector<ReqId, Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, Error, Ctx> 
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> 
 where 
-    NodeId: DatabaseId + Clone + Send + 'static,
-    Node: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
+    Id: DatabaseId + Clone + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 {}
 
 /// Generic impl of Connector over matching rr_mux::mock::MockConnector impls
-impl <NodeId, Node, Data, ReqId, Ctx> Connector<NodeId, Node, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<Node, Request<NodeId, Data>, Response<NodeId, Node, Data>, Error, Ctx> 
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> 
 where 
-    NodeId: DatabaseId + Clone + Send + 'static,
-    Node: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
+    Id: DatabaseId + Clone + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 {}
@@ -49,12 +49,12 @@ where
 pub fn request_all<Id, Info, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[Entry<Id, Info>]) -> 
         impl Future<Item=Vec<(Entry<Id, Info>, Option<(Response<Id, Info, Data>, Ctx)>)>, Error=Error> 
 where
-    Id: DatabaseId + Clone + Debug + 'static,
-    Info: Clone + Debug + 'static,
-    Data: Clone + Debug + 'static,
-    ReqId: RequestId + 'static,
-    Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + 'static,       
+    Id: DatabaseId + Debug + Clone + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
+    Ctx: Clone + PartialEq + Debug + Send + 'static,
+    Conn: rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + 'static,
 {
     let mut queries = Vec::new();
 

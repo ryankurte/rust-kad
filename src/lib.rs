@@ -21,12 +21,7 @@ extern crate rr_mux;
 use rr_mux::{Connector};
 
 pub mod common;
-
-use crate::common::id::{DatabaseId, RequestId};
-use crate::common::entry::Entry;
-use crate::common::error::Error as DhtError;
-use crate::common::message::{Request, Response};
-
+use crate::common::*;
 
 pub mod table;
 use table::{KNodeTable};
@@ -78,7 +73,7 @@ where
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, DhtError, Ctx> + Send + Clone + 'static,
+    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Send + Clone + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 
 {
@@ -113,7 +108,7 @@ mod tests {
     #[test]
     fn test_mux() {
         // Create a generic mux
-        let dht_mux = Mux::<RequestId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, DhtError, ()>::new();
+        let dht_mux = Mux::<RequestId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, Error, ()>::new();
 
         // Bind it to the DHT instance
         let n1 = Entry::new(0b0001, 100);

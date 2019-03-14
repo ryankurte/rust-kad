@@ -39,6 +39,7 @@ pub enum RequestState {
     Active,
     Timeout,
     Complete,
+    InvalidResponse,
 }
 
 /// Search object provides the basis for executing searches on the DHT
@@ -186,34 +187,41 @@ where
         // Send requests and handle responses
         request_all(self.conn.clone(), self.ctx.clone(), &req, chunk)
         .map(move |res| {
-            for (n, v) in &res {
+            for (resp_entry, resp_msg) in &res {
                 // Handle received responses
-                if let Some((resp, _ctx)) = v {
+                if let Some((resp, _ctx)) = resp_msg {
                     match resp {
-                        Response::NodesFound(_id, nodes) => {
-                            // Add nodes to known list
-                            for n in nodes {
-                                if n.id() != &self.origin {
-                                    self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+                        Response::NodesFound(id, entries) => {
+                            // Ignore invalid response IDs
+                            if *id != self.target {
+                                self.known.entry(resp_entry.id().clone()).or_insert((resp_entry.clone(), RequestState::InvalidResponse));
+                                continue;
+                            }
+
+                            // Add nodes to known list for further search iterations
+                            // TODO: check that these nodes are _closer_ than the responding entity?
+                            for e in entries {
+                                if e.id() != &self.origin {
+                                    self.known.entry(e.id().clone()).or_insert((e.clone(), RequestState::Pending));
                                 }
                             }
                         },
-                        Response::ValuesFound(_id, values) => {
+                        Response::ValuesFound(id, values) => {
                             // Add data to data list
-                            self.data.insert(n.id().clone(), values.clone());
+                            self.data.insert(id.clone(), values.clone());
                         },
                         Response::NoResult => { },
                     }
 
                     // Update node state to completed
-                    self.known.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+                    self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
                 } else {
                     // Update node state to timed out
-                    self.known.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                    self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
                 }
 
                 // Update node table
-                self.table.update(&n);
+                self.table.update(&resp_entry);
             }
             // Update depth limit
             self.depth -= 1;

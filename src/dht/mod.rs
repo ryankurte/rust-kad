@@ -27,6 +27,7 @@ use crate::connector::{request_all};
 pub mod search;
 pub use self::search::{Search, Operation};
 
+#[derive(Clone)]
 pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     id: Id,
     
@@ -39,33 +40,6 @@ pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     _data: PhantomData<Data>,
     _req_id: PhantomData<ReqId>,
     _ctx: PhantomData<Ctx>,
-}
-
-impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Clone for Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
-where
-    Id: DatabaseId + Clone + Send + 'static,
-    Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
-    ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + 'static,
-    Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
-    Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
-    Ctx: Clone + Debug + PartialEq + Send + 'static,
-{
-    fn clone(&self) -> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
-        Dht{
-            id: self.id.clone(),
-            config: self.config.clone(),
-            table: self.table.clone(),
-            conn_mgr: self.conn_mgr.clone(),
-            datastore: self.datastore.clone(),
-            
-            _addr: PhantomData,
-            _data: PhantomData,
-            _req_id: PhantomData,
-            _ctx: PhantomData,
-        }
-    }
 }
 
 impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 

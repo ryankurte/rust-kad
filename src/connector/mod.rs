@@ -9,7 +9,6 @@ pub mod tokio;
 
 use crate::common::*;
 
-use store::Reducer;
 
 use rr_mux;
 
@@ -28,7 +27,7 @@ impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_m
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
+    Data: PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 {}
@@ -38,7 +37,7 @@ impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_m
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
+    Data: PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 {}
@@ -51,7 +50,7 @@ pub fn request_all<Id, Info, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: 
 where
     Id: DatabaseId + Debug + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
+    Data: PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
     Conn: rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + 'static,

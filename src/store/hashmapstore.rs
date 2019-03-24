@@ -6,11 +6,14 @@ use std::sync::{Arc, Mutex};
 
 
 use crate::common::DatabaseId;
-use crate::store::{Datastore, Reducer};
+use crate::store::Datastore;
+
+pub type Reducer<Data> = Fn(&mut Vec<Data>) + Send + 'static;
 
 #[derive(Clone)]
 pub struct HashMapStore<Id, Data> {
-    data: Arc<Mutex<HashMap<Id, Vec<Data>>>>, 
+    data: Arc<Mutex<HashMap<Id, Vec<Data>>>>,
+    reducer: Option<Arc<Mutex<Box<Reducer<Data>>>>>,
 }
 
 pub struct DataEntry<Data, Meta> {
@@ -21,17 +24,23 @@ pub struct DataEntry<Data, Meta> {
 impl <Id, Data> HashMapStore<Id, Data>
 where
     Id: DatabaseId,
-    Data: Reducer + PartialEq + Clone + Debug,
+    Data: PartialEq + Clone + Debug,
 {
+    /// Create a new HashMapStore without a reducer
     pub fn new() -> HashMapStore<Id, Data> {
-        HashMapStore{ data: Arc::new(Mutex::new(HashMap::new())) }
+        HashMapStore{ data: Arc::new(Mutex::new(HashMap::new())), reducer: None }
+    }
+
+    /// Create a new HashMapStore with the provided reducer
+    pub fn new_with_reducer(reducer: Box<Reducer<Data>>) -> HashMapStore<Id, Data> {
+        HashMapStore{ data: Arc::new(Mutex::new(HashMap::new())), reducer: Some(Arc::new(Mutex::new(reducer))) }
     }
 }
 
 impl <Id, Data> Datastore<Id, Data> for HashMapStore<Id, Data>
 where
     Id: DatabaseId,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Debug,
+    Data: PartialEq + Clone + Debug,
 {
     
     fn find(&self, id: &Id) -> Option<Vec<Data>> {
@@ -48,19 +57,16 @@ where
                 v.insert(new.clone()); 
             },
             Entry::Occupied(o) => {
-                let existing = o.into_mut();
+                // Add new entry
+                let mut existing = o.into_mut();
                 existing.append(&mut new);
-                Data::reduce(existing);
+
+                // Reduce if provided
+                if let Some(reducer) = self.reducer.clone() {
+                    let reducer = reducer.lock().unwrap();
+                    (reducer)(&mut existing);
+                }
             }
         };
-    }
-}
-
-impl Reducer for u64 {
-    type Item = u64;
-
-    fn reduce(v: &mut Vec<u64>) {
-        v.sort();
-        v.dedup();
     }
 }

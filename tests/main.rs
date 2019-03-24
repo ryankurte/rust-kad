@@ -17,7 +17,7 @@ use kad::Config;
 use kad::common::*;
 use kad::dht::Dht;
 use kad::table::KNodeTable;
-use kad::store::{HashMapStore, Reducer};
+use kad::store::{HashMapStore};
 
 extern crate futures;
 use futures::prelude::*;
@@ -38,7 +38,7 @@ impl <Id, Info, Data> MockNetwork < Id, Info, Data>
 where
     Id: DatabaseId + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Reducer<Item=Data> + Debug + Clone + PartialEq + Send + 'static,
+    Data: Debug + Clone + PartialEq + Send + 'static,
     
 {
     pub fn new(config: Config, nodes: &[Entry<Id, Info>]) -> MockNetwork<Id, Info,Data> {
@@ -74,7 +74,7 @@ impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx>
 where
     Id: DatabaseId + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Reducer<Item=Data> + Debug + Clone + PartialEq + Send + 'static,
+    Data: Debug + Clone + PartialEq + Send + 'static,
     
 {
     pub fn new( id: Id, addr: Info, peers: Arc<Mutex<PeerMap<Id, Info, Data>>>) -> Self {
@@ -86,7 +86,7 @@ impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, 
 where
     Id: DatabaseId + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Reducer<Item=Data> + Debug + Clone + PartialEq + Send + 'static,
+    Data: Debug + Clone + PartialEq + Send + 'static,
     Ctx: Debug + Clone + Send + 'static,
 {
     fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 

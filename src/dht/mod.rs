@@ -20,7 +20,7 @@ use crate::{Config};
 use crate::common::*;
 
 use crate::table::NodeTable;
-use crate::store::{Datastore, Reducer};
+use crate::store::{Datastore};
 
 use crate::connector::{request_all};
 
@@ -46,7 +46,7 @@ impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId,
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send + Debug + 'static,
+    Data: PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + Send + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
@@ -64,7 +64,7 @@ where
             _addr: PhantomData, 
             _data: PhantomData, 
             _req_id: PhantomData, 
-            _ctx: PhantomData 
+            _ctx: PhantomData,
         }
     }
 
@@ -166,9 +166,8 @@ where
                 return Err(Error::NotFound)
             }
 
-            // Reduce data before returning
+            // TODO: Reduce data before returning? (should be done on insertion anyway..?)
             let mut flat_data: Vec<Data> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
-            Data::reduce(&mut flat_data);
 
             // TODO: Send updates to any peers that returned outdated data?
 
@@ -260,7 +259,12 @@ where
     /// This is provided for integration of the Dht with other components
     pub fn search(&mut self, id: Id, op: Operation, seed: &[Entry<Id, Info>], ctx: Ctx) -> impl Future<Item=Search<Id, Info, Data, Table, Conn, ReqId, Ctx>, Error=Error> {
         let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
-        search.seed(&seed);
+        search.seed(seed);
+
+        info!("Starting search with nodes: ");
+        for e in seed {
+            info!("{:?}", e.info());
+        }
 
         search.execute()
     }

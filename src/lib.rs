@@ -27,7 +27,7 @@ pub mod table;
 use table::{KNodeTable};
 
 pub mod store;
-use store::{HashMapStore, Reducer};
+use store::{HashMapStore};
 
 pub mod dht;
 use dht::Dht;
@@ -71,7 +71,7 @@ impl <Id, Info, Data, ReqId, Conn, Ctx> StandardDht<Id, Info, Data, ReqId, Conn,
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: Reducer<Item=Data> + PartialEq + Clone + Send  + Debug + 'static,
+    Data: PartialEq + Clone + Send  + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Send + Clone + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,

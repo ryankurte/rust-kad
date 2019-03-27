@@ -42,17 +42,17 @@ where
 
         let res = if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
             // If the node already exists, update it
-            info!(target: "dht", "[KBucket] Updating node {:?}", node);
+            trace!(target: "dht", "[KBucket] Updating node {:?}", node);
             KBucket::update_position(&mut nodes, node);
             true
         } else if nodes.len() < self.bucket_size {
             // If there's space in the bucket, add it
-            info!(target: "dht", "[KBucket] Adding node {:?}", node);
+            trace!(target: "dht", "[KBucket] Adding node {:?}", node);
             nodes.push_back(node.clone());
             true
         } else {
             // If there's no space, discard it
-            info!(target: "dht", "[KBucket] No space to add node {:?}", node);
+            trace!(target: "dht", "[KBucket] No space to add node {:?}", node);
             self.pending = Some(node.clone());
             false
         };

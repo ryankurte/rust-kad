@@ -261,9 +261,9 @@ where
         let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
         search.seed(seed);
 
-        info!("Starting search with nodes: ");
+        trace!("Starting search with nodes: ");
         for e in seed {
-            info!("{:?}", e.info());
+            trace!("    {:?} - {:?}", e.id(), e.info());
         }
 
         search.execute()

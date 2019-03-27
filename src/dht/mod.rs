@@ -70,10 +70,11 @@ where
 
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT
-    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=(), Error=Error> + '_ {
+    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=(), Error=Error> {
         let table = self.table.clone();
         let conn_mgr = self.conn_mgr.clone();
         let id = self.id.clone();
+        let config = self.config.clone();
 
         info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.info());
 
@@ -97,7 +98,7 @@ where
                 debug!("[DHT connect] response received, searching {} nodes", found.len());
 
                 // Perform FIND_NODE on own id with responded nodes to register self
-                let mut search = Search::new(self.id.clone(), id, Operation::FindNode, self.config.clone(), table, conn_mgr, ctx);
+                let mut search = Search::new(id.clone(), id, Operation::FindNode, config.clone(), table, conn_mgr, ctx);
                 search.seed(&found);
 
                 search.execute()
@@ -111,11 +112,8 @@ where
             })
     }
 
-
-
-
     /// Look up a node in the database by Id
-    pub fn lookup(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Entry<Id, Info>, Error=Error> + '_ {
+    pub fn lookup(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Entry<Id, Info>, Error=Error> {
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 

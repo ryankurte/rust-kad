@@ -138,7 +138,7 @@ where
     /// Fetch pending known nodes ordered by distance
     fn pending(&self) -> Vec<Entry<Id, Info>> {
         let mut chunk: Vec<_> = self.known.iter()
-                .filter(|(_k, (_n, s))| *s == RequestState::Pending )
+                .filter(|(k, (_n, s))| (*s == RequestState::Pending) & (*k != &self.origin) )
                 .map(|(_k, (n, _s))| n.clone() ).collect();
         chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
         chunk

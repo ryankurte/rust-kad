@@ -98,15 +98,15 @@ mod test {
 
     #[test]
     fn test_k_bucket_update() {
-        let mut b = KBucket::<u64, u64>::new(4);
+        let mut b = KBucket::<[u8; 1], u64>::new(4);
 
-        assert_eq!(true, b.find(&0b00).is_none());
+        assert_eq!(true, b.find(&[0b0000]).is_none());
 
         // Generate fake nodes
-        let n1 = Entry::new(0b00, 1);
-        let n2 = Entry::new(0b01, 2);
-        let n3 = Entry::new(0b10, 3);
-        let n4 = Entry::new(0b11, 4);
+        let n1 = Entry::new([0b0000], 1);
+        let n2 = Entry::new([0b0001], 2);
+        let n3 = Entry::new([0b0010], 3);
+        let n4 = Entry::new([0b0011], 4);
 
         // Fill KBucket
         assert_eq!(true, b.update(&n1));
@@ -122,7 +122,7 @@ mod test {
         assert_eq!(n4, b.find(n4.id()).unwrap());
 
         // Attempt to add to full KBucket
-        assert_eq!(false, b.update(&Entry::new(0b100, 5)));
+        assert_eq!(false, b.update(&Entry::new([0b100], 5)));
 
         // Update existing item
         let mut n4a = n4.clone();

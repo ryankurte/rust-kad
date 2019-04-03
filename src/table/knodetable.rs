@@ -132,15 +132,15 @@ mod test {
 
     #[test]
     fn test_k_node_table() {
-        let n = Entry::new(0b0100, 1);
+        let n = Entry::new([0b0100], 1);
 
-        let mut t = KNodeTable::<u64, u64>::new(n.id().clone(), 10, 4);
+        let mut t = KNodeTable::<[u8; 1], u64>::new(n.id().clone(), 10, 4);
 
         let nodes = vec![
-            Entry::new(0b0000, 1),
-            Entry::new(0b0001, 2),
-            Entry::new(0b0110, 3),
-            Entry::new(0b1011, 4),
+            Entry::new([0b0000], 1),
+            Entry::new([0b0001], 2),
+            Entry::new([0b0110], 3),
+            Entry::new([0b1011], 4),
         ];
 
         // Add some nodes
@@ -152,6 +152,6 @@ mod test {
         
         // Find closest nodes
         assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(n.id(), 0..2));
-        assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&0b0010, 0..2));
+        assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&[0b0010], 0..2));
     }
 }

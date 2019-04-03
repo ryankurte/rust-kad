@@ -193,7 +193,7 @@ where
         .and_then(move |r| {
             // Send store request to found nodes
             let known = r.completed(0..k);
-            info!("sending store to: {:?}", known);
+            debug!("sending store to: {:?}", known);
             request_all(conn, ctx, &Request::Store(target, data), &known)
         }).and_then(|_| {
             // TODO: should we process success here?
@@ -223,30 +223,26 @@ where
             },
             Request::FindNode(id) => {
                 let nodes = self.table.nearest(id, 0..self.config.k);
-                if nodes.len() != 0 {
-                    Response::NodesFound(id.clone(), nodes)
-                } else {
-                    Response::NoResult
-                }
+                Response::NodesFound(id.clone(), nodes)
             },
             Request::FindValue(id) => {
-                // Lookup the value
+                // Lockup the value
                 if let Some(values) = self.datastore.find(id) {
                     Response::ValuesFound(id.clone(), values)
                 } else {
                     let nodes = self.table.nearest(id, 0..self.config.k);
-                    if nodes.len() != 0 {
-                        Response::NodesFound(id.clone(), nodes)
-                    } else {
-                        Response::NoResult
-                    }
+                    Response::NodesFound(id.clone(), nodes)
                 }                
             },
             Request::Store(id, value) => {
                 // Write value to local storage
-                let stored = self.datastore.store(id, value);
+                let values = self.datastore.store(id, value);
                 // Reply to confirm write was completed
-                Response::ValuesFound(id.clone(), stored)
+                if values.len() != 0 {
+                    Response::ValuesFound(id.clone(), values)
+                } else {
+                    Response::NoResult
+                }
             },
         };
 
@@ -298,9 +294,9 @@ impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Future for Dht <Id, Info, 
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
         let table = KNodeTable::new($root.id().clone(), $config.k, $config.hash_size);
         
-        let store: HashMapStore<u64, u64> = HashMapStore::new();
+        let store: HashMapStore<[u8; 1], u64> = HashMapStore::new();
         
-        let mut $dht = Dht::<u64, u64, _, u64, _, _, _, ()>::new($root.id().clone(), 
+        let mut $dht = Dht::<[u8; 1], u64, _, u64, _, _, _, ()>::new($root.id().clone(), 
                 $config, table, $connector.clone(), store);
     }
 }
@@ -318,8 +314,8 @@ mod tests {
     #[test]
     fn test_receive_common() {
 
-        let root = Entry::new(0, 001);
-        let friend = Entry::new(1, 002);
+        let root = Entry::new([0], 001);
+        let friend = Entry::new([1], 002);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -353,8 +349,8 @@ mod tests {
     #[test]
     fn test_receive_ping() {
 
-        let root = Entry::new(0, 001);
-        let friend = Entry::new(1, 002);
+        let root = Entry::new([0], 001);
+        let friend = Entry::new([1], 002);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -372,9 +368,9 @@ mod tests {
     #[test]
     fn test_receive_find_nodes() {
 
-        let root = Entry::new(0, 001);
-        let friend = Entry::new(1, 002);
-        let other = Entry::new(2, 003);
+        let root = Entry::new([0], 001);
+        let friend = Entry::new([1], 002);
+        let other = Entry::new([2], 003);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -395,9 +391,9 @@ mod tests {
         #[test]
     fn test_receive_find_values() {
 
-        let root = Entry::new(0, 001);
-        let friend = Entry::new(1, 002);
-        let other = Entry::new(2, 003);
+        let root = Entry::new([0], 001);
+        let friend = Entry::new([1], 002);
+        let other = Entry::new([2], 003);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
@@ -407,17 +403,17 @@ mod tests {
 
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
-            dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
-            Response::NodesFound(201, vec![friend.clone()]), 
+            dht.receive(&other, &Request::FindValue([201])).wait().unwrap(),
+            Response::NodesFound([201], vec![friend.clone()]), 
         );
 
         // Add value to store
-        dht.datastore.store(&201, &vec![1337]);
+        dht.datastore.store(&[201], &vec![1337]);
         
         // FindValues
         assert_eq!(
-            dht.receive(&other, &Request::FindValue(201)).wait().unwrap(),
-            Response::ValuesFound(201, vec![1337]), 
+            dht.receive(&other, &Request::FindValue([201])).wait().unwrap(),
+            Response::ValuesFound([201], vec![1337]), 
         );
 
         // Check expectations are done
@@ -427,19 +423,19 @@ mod tests {
     #[test]
     fn test_receive_store() {
 
-        let root = Entry::new(0, 001);
-        let friend = Entry::new(1, 002);
+        let root = Entry::new([0], 001);
+        let friend = Entry::new([1], 002);
 
         let mut connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
 
         // Store
         assert_eq!(
-            dht.receive(&friend, &Request::Store(2, vec![1234])).wait().unwrap(),
-            Response::NoResult,
+            dht.receive(&friend, &Request::Store([2], vec![1234])).wait().unwrap(),
+            Response::ValuesFound([2], vec![1234]),
         );
 
-        let v = dht.datastore.find(&2).expect("missing value");
+        let v = dht.datastore.find(&[2]).expect("missing value");
         assert_eq!(v, vec![1234]);
 
         // Check expectations are done
@@ -449,8 +445,8 @@ mod tests {
     #[test]
     fn test_clone() {
 
-        let root = Entry::new(0, 001);
-        let _friend = Entry::new(1, 002);
+        let root = Entry::new([0], 001);
+        let _friend = Entry::new([1], 002);
 
         let connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);

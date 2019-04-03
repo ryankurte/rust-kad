@@ -14,7 +14,7 @@ use num::Zero;
 use num::bigint::{BigUint};
 
 /// Id trait must be implemented for viable id types
-pub trait DatabaseId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
+pub trait DatabaseId: Hash + Default + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
     /// Exclusive or two IDs to calculate distance
     fn xor(a: &Self, b: &Self) -> Self;
     /// Calculate number of bits to express a given ID
@@ -25,6 +25,7 @@ pub trait DatabaseId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug 
 
 /// DatabaseId implementation for u64
 /// This is only for testing use
+#[cfg(nope)]
 impl DatabaseId for u64 {
     fn xor(a: &u64, b: &u64) -> u64 {
         a ^ b
@@ -39,57 +40,39 @@ impl DatabaseId for u64 {
     }
 }
 
-/// DatabaseId implementation for arbitrary Vectors
-impl DatabaseId for Vec<u8> {
-    fn xor(a: &Vec<u8>, b: &Vec<u8>) -> Vec<u8> {
-        let a = BigUint::from_bytes_le(&a);
-        let b = BigUint::from_bytes_le(&b);
-        let c = a ^ b;
-        c.to_bytes_le()
+/// DatabaseId implementation for arbitrary types around &[u8]
+impl <T> DatabaseId for T
+where 
+    T: AsRef<[u8]> + AsMut<[u8]> + Hash + Default + PartialEq + Eq + Ord + Clone + Sync + Send + Debug,
+{
+    fn xor(a: &T, b: &T) -> Self 
+    {
+        let a = a.as_ref();
+        let b = b.as_ref();
+        let mut c = T::default();
+
+        {
+            let c = c.as_mut();
+            assert!(a.len() == b.len() && a.len() == c.len(), "dht IDs must be the same length");
+
+            for i in 0..a.len() {
+                c[i] = a[i] ^ b[i];
+            };
+        }
+        
+        c
     }
 
     fn bits(&self) -> usize {
-        let a = BigUint::from_bytes_le(self);
+        let a = BigUint::from_bytes_le(self.as_ref());
         a.bits()
     }
 
     fn is_zero(&self) -> bool {
-        let a = BigUint::from_bytes_le(self);
+        let a = BigUint::from_bytes_le(self.as_ref());
         Zero::is_zero(&a)
     }
 }
-
-/// helper macro to generate DatabaseId impl over [u8; N] types
-macro_rules! database_id_slice {
-    ($N: expr) => (
-        impl super::id::DatabaseId for [u8; $N] {
-            fn xor(a: &Self, b: &Self) -> Self {
-                let mut c: Self = [0u8; $N];
-                for i in 0..c.len() {
-                    c[i] = a[i] ^ b[i];
-                }
-                c
-            }
-
-            fn bits(&self) -> usize {
-                let a = num::bigint::BigUint::from_bytes_le(self);
-                a.bits()
-            }
-
-            fn is_zero(&self) -> bool {
-                let a = BigUint::from_bytes_le(self);
-                Zero::is_zero(&a)
-            }
-        }
-    )
-}
-
-// Generate implementations for common sizes
-database_id_slice!(32 / 8);
-database_id_slice!(64 / 8);
-database_id_slice!(128 / 8);
-database_id_slice!(256 / 8);
-
 
 pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
     fn generate() -> Self;

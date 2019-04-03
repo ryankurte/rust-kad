@@ -120,12 +120,12 @@ fn integration() {
     // Build basic nodes
     let mut nodes = Vec::new();
     for i in 0..16 {
-        nodes.push(Entry::new(i * 16, i));
+        nodes.push(Entry::<[u8; 1], u64>::new([i * 16], i as u64));
     }
     let n0 = &nodes[0];
 
     // Create mock network
-    let mgr = MockNetwork::<u64, u64, u64>::new(config, &nodes);
+    let mgr = MockNetwork::<[u8; 1], u64, u64>::new(config, &nodes);
 
     println!("Bootstrapping Network");
     for n in nodes.iter().skip(1) {
@@ -153,7 +153,7 @@ fn integration() {
     }
 
     println!("Testing store");
-    let addr = 132;
+    let addr = [132];
     let val = vec![112];
     {
         let mut peer = { mgr.peers.lock().unwrap().remove(n0.id()).unwrap() };

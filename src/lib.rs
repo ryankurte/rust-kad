@@ -42,7 +42,7 @@ pub struct Config {
     /// Length of the hash used (in bits) 
     pub hash_size: usize,
 
-    #[structopt(long = "dht-k")]
+    #[structopt(long = "dht-bucket-size")]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
     #[structopt(long = "dht-concurrency")]
@@ -100,7 +100,7 @@ mod tests {
     use rr_mux::mock::{MockTransaction, MockConnector};
 
     type RequestId = u64;
-    type NodeId = u64;
+    type NodeId = [u8; 1];
     type Info = u64;
     type Data = u64;
 
@@ -111,16 +111,16 @@ mod tests {
         let dht_mux = Mux::<RequestId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, Error, ()>::new();
 
         // Bind it to the DHT instance
-        let n1 = Entry::new(0b0001, 100);
+        let n1 = Entry::new([0b0001], 100);
         let dht = Dht::<NodeId, Info, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]
     fn test_connect() {
-        let n1 = Entry::new(0b0001, 100);
-        let n2 = Entry::new(0b0010, 200);
-        let n3 = Entry::new(0b0011, 300);
-        let n4 = Entry::new(0b1000, 400);
+        let n1 = Entry::new([0b0001], 100);
+        let n2 = Entry::new([0b0010], 200);
+        let n3 = Entry::new([0b0011], 300);
+        let n4 = Entry::new([0b1000], 400);
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
@@ -139,8 +139,8 @@ mod tests {
         let knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Instantiated DHT
-        let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
+        let store: HashMapStore<NodeId, u64> = HashMapStore::new();
+        let mut dht = Dht::<NodeId, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping
@@ -159,11 +159,11 @@ mod tests {
 
    #[test]
     fn test_lookup() {
-        let n1 = Entry::new(0b1000, 100);
-        let n2 = Entry::new(0b0011, 200);
-        let n3 = Entry::new(0b0010, 300);
-        let n4 = Entry::new(0b1001, 400);
-        let n5 = Entry::new(0b1010, 400);
+        let n1 = Entry::new([0b1000], 100);
+        let n2 = Entry::new([0b0011], 200);
+        let n3 = Entry::new([0b0010], 300);
+        let n4 = Entry::new([0b1001], 400);
+        let n5 = Entry::new([0b1010], 400);
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
@@ -188,8 +188,8 @@ mod tests {
         knodetable.update(&n3);
 
         // Instantiated DHT
-        let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
+        let store: HashMapStore<NodeId, u64> = HashMapStore::new();
+        let mut dht = Dht::<NodeId, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
 
         // Perform search
@@ -200,13 +200,13 @@ mod tests {
 
        #[test]
     fn test_store() {
-        let n1 = Entry::new(0b1000, 100);
-        let n2 = Entry::new(0b0011, 200);
-        let n3 = Entry::new(0b0010, 300);
-        let n4 = Entry::new(0b1001, 400);
-        let n5 = Entry::new(0b1010, 500);
+        let n1 = Entry::new([0b1000], 100);
+        let n2 = Entry::new([0b0011], 200);
+        let n3 = Entry::new([0b0010], 300);
+        let n4 = Entry::new([0b1001], 400);
+        let n5 = Entry::new([0b1010], 500);
 
-        let id = 0b1011;
+        let id: [u8; 1] = [0b1011];
         let val = vec![1234];
 
         // Build expectations
@@ -236,8 +236,8 @@ mod tests {
         knodetable.update(&n3);
 
         // Instantiated DHT
-        let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
+        let store: HashMapStore<NodeId, u64> = HashMapStore::new();
+        let mut dht = Dht::<NodeId, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
 
         // Perform store
@@ -249,13 +249,13 @@ mod tests {
 
     #[test]
     fn test_find() {
-        let n1 = Entry::new(0b1000, 100);
-        let n2 = Entry::new(0b0011, 200);
-        let n3 = Entry::new(0b0010, 300);
-        let n4 = Entry::new(0b1001, 400);
-        let n5 = Entry::new(0b1010, 500);
+        let n1 = Entry::new([0b1000], 100);
+        let n2 = Entry::new([0b0011], 200);
+        let n3 = Entry::new([0b0010], 300);
+        let n4 = Entry::new([0b1001], 400);
+        let n5 = Entry::new([0b1010], 500);
 
-        let id = 0b1011;
+        let id: [u8; 1] = [0b1011];
         let val = vec![1234];
 
         // Build expectations
@@ -281,8 +281,8 @@ mod tests {
         knodetable.update(&n3);
 
         // Instantiated DHT
-        let store: HashMapStore<u64, u64> = HashMapStore::new();
-        let mut dht = Dht::<u64, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
+        let store: HashMapStore<NodeId, u64> = HashMapStore::new();
+        let mut dht = Dht::<NodeId, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
 
         // Perform store

@@ -61,7 +61,7 @@ pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
 impl <Id, Info, Data, Table, Conn, ReqId, Ctx> Search <Id, Info, Data, Table, Conn, ReqId, Ctx> 
 where
-    Id: DatabaseId + Clone + Send + 'static,
+    Id: DatabaseId + Default + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Send + Debug + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
@@ -249,15 +249,15 @@ mod tests {
 
     #[test]
     fn test_search_nodes() {
-        let root = Entry::new(0, 001);
-        let target = Entry::new(10, 600);
+        let root = Entry::new([0], 001);
+        let target = Entry::new([10], 600);
 
         let nodes = vec![
-            Entry::new(1, 100),
-            Entry::new(2, 200),
-            Entry::new(3, 300),
-            Entry::new(4, 400),
-            Entry::new(5, 500),
+            Entry::new([1], 100),
+            Entry::new([2], 200),
+            Entry::new([3], 300),
+            Entry::new([4], 400),
+            Entry::new([5], 500),
         ];
 
         // Build expectations

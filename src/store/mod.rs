@@ -26,5 +26,5 @@ where
     // Store data by Id
     // This should add any new entries to the store and update
     // any matching / existing entries
-    fn store(&mut self, id: &Id, data: &Vec<Data>);
+    fn store(&mut self, id: &Id, data: &Vec<Data>) -> Vec<Data>;
 }

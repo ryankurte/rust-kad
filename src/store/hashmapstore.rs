@@ -45,16 +45,25 @@ where
     
     fn find(&self, id: &Id) -> Option<Vec<Data>> {
         let data = self.data.lock().unwrap();
-        data.get(id).map(|d| d.clone() )
+        let d = match data.get(id).map(|d| d.clone() ) {
+            Some(d) => d,
+            None => return None,
+        };
+        if d.len() == 0 {
+            return None
+        }
+        Some(d)
     }
 
-    fn store(&mut self, id: &Id, new: &Vec<Data>) {
+    fn store(&mut self, id: &Id, new: &Vec<Data>) -> Vec<Data> {
         let mut new = new.clone();
         let mut data = self.data.lock().unwrap();
         
         match data.entry(id.clone()) {
             Entry::Vacant(v) => {
-                v.insert(new.clone()); 
+                v.insert(new.clone());
+
+                new.clone()
             },
             Entry::Occupied(o) => {
                 // Add new entry
@@ -66,7 +75,9 @@ where
                     let reducer = reducer.lock().unwrap();
                     (reducer)(&mut existing);
                 }
+
+                existing.clone()
             }
-        };
+        }
     }
 }

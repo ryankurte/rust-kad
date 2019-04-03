@@ -193,7 +193,7 @@ where
         .and_then(move |r| {
             // Send store request to found nodes
             let known = r.completed(0..k);
-            debug!("sending store to: {:?}", known);
+            info!("sending store to: {:?}", known);
             request_all(conn, ctx, &Request::Store(target, data), &known)
         }).and_then(|_| {
             // TODO: should we process success here?
@@ -223,22 +223,30 @@ where
             },
             Request::FindNode(id) => {
                 let nodes = self.table.nearest(id, 0..self.config.k);
-                Response::NodesFound(id.clone(), nodes)
+                if nodes.len() != 0 {
+                    Response::NodesFound(id.clone(), nodes)
+                } else {
+                    Response::NoResult
+                }
             },
             Request::FindValue(id) => {
-                // Lockup the value
+                // Lookup the value
                 if let Some(values) = self.datastore.find(id) {
                     Response::ValuesFound(id.clone(), values)
                 } else {
                     let nodes = self.table.nearest(id, 0..self.config.k);
-                    Response::NodesFound(id.clone(), nodes)
+                    if nodes.len() != 0 {
+                        Response::NodesFound(id.clone(), nodes)
+                    } else {
+                        Response::NoResult
+                    }
                 }                
             },
             Request::Store(id, value) => {
                 // Write value to local storage
-                self.datastore.store(id, value);
+                let stored = self.datastore.store(id, value);
                 // Reply to confirm write was completed
-                Response::NoResult
+                Response::ValuesFound(id.clone(), stored)
             },
         };
 

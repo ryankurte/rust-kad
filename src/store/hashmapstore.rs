@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use crate::common::DatabaseId;
 use crate::store::Datastore;
 
-pub type Reducer<Data> = Fn(&mut Vec<Data>) + Send + 'static;
+pub type Reducer<Data> = Fn(&[Data]) -> Vec<Data> + Send + 'static;
 
 #[derive(Clone)]
 pub struct HashMapStore<Id, Data> {
@@ -73,7 +73,8 @@ where
                 // Reduce if provided
                 if let Some(reducer) = self.reducer.clone() {
                     let reducer = reducer.lock().unwrap();
-                    (reducer)(&mut existing);
+                    let filtered = (reducer)(&existing);
+                    *existing = filtered;
                 }
 
                 existing.clone()

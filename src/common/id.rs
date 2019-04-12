@@ -78,6 +78,24 @@ pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
     fn generate() -> Self;
 }
 
+impl RequestId for u8 {
+    fn generate()-> Self {
+        rand::random()
+    }
+}
+
+impl RequestId for u16 {
+    fn generate()-> Self {
+        rand::random()
+    }
+}
+
+impl RequestId for u32 {
+    fn generate()-> Self {
+        rand::random()
+    }
+}
+
 impl RequestId for u64 {
     fn generate()-> Self {
         rand::random()

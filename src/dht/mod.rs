@@ -11,7 +11,7 @@ use std::marker::{PhantomData};
 use std::fmt::{Debug};
 
 use futures::prelude::*;
-use futures::future;
+use futures::{future, future::Either};
 
 use rr_mux::{Connector};
 
@@ -69,47 +69,63 @@ where
     }
 
     /// Connect to a known node
-    /// This is used for bootstrapping onto the DHT
-    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=(), Error=Error> {
-        let table = self.table.clone();
-        let conn_mgr = self.conn_mgr.clone();
+    /// This is used for bootstrapping onto the DHT, however requires a complete Entry
+    /// due to limitations of the underlying connector abstraction.
+    /// If this is unsuitable, manually issue an initial FindNode request and use the 
+    /// handle_connect_response method to complete the connection.
+    pub fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> impl Future<Item=Vec<Entry<Id, Info>>, Error=Error> {
         let id = self.id.clone();
-        let config = self.config.clone();
+        let mut s = self.clone();
 
         info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.info());
 
         // Launch request
         self.conn_mgr.clone().request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone()))
-            .and_then(move |(resp, _ctx)| {
-                // Check for correct response
-                match resp {
-                    Response::NodesFound(_id, nodes) => future::ok((target, nodes)),
-                    _ => {
-                        warn!("[DHT connect] invalid response from: {:?}", target.id());
-                        future::err(Error::InvalidResponse)
-                    },
-                }
-            }).and_then(move |(target, found)| {
-                // Add responding target to table
-                // This only occurs after a response as there's no point adding a non-responding
-                // node to the DHT
-                table.clone().update(&target);
-
-                debug!("[DHT connect] response received, searching {} nodes", found.len());
-
-                // Perform FIND_NODE on own id with responded nodes to register self
-                let mut search = Search::new(id.clone(), id, Operation::FindNode, config.clone(), table, conn_mgr, ctx);
-                search.seed(&found);
-
-                search.execute()
-            }).and_then(|_s| {
-                // We don't care about the search result here
-                // Generally it should be that discovered nodes > 0, however not for the first bootstrapping...
-
-                // TODO: Refresh all k-buckets further away than our nearest neighbor
-
-                future::ok(())
+            .and_then(move |(resp, ctx)| {
+                s.handle_connect_response(target, resp, ctx)
             })
+    }
+
+    /// Handle the response to an initial FindNodes request.
+    /// This is used to bootstrap a connection where the `.connect` method is unsuitable.
+    pub fn handle_connect_response(&mut self, target: Entry<Id, Info>, resp: Response<Id, Info, Data>, ctx: Ctx) -> impl Future<Item=Vec<Entry<Id, Info>>, Error=Error> {
+        let (id, found) = match resp {
+            Response::NodesFound(id, nodes) => (id, nodes),
+            Response::NoResult => {
+                warn!("[DHT connect] Received NoResult response from {:?}", target.id());
+                return Either::A(future::ok(vec![]))
+            },
+            _ => {
+                warn!("[DHT connect] invalid response from: {:?}", target.id());
+                return Either::A(future::err(Error::InvalidResponse))
+            },
+        };
+
+        // Check ID matches self 
+        if id != self.id {
+            return Either::A(future::err(Error::InvalidResponseId))
+        }
+
+        // Add responding target to table
+        // This only occurs after a response as there's no point adding a non-responding
+        // node to the DHT
+        let mut table = self.table.clone();
+        self.table.update(&target);
+
+        debug!("[DHT connect] response received, searching {} nodes", found.len());
+
+        // Create a FIND_NODE search on own id with responded nodes
+        // This both registers this node with peers, and finds and relevant closer peers
+        Either::B(self.search(id, Operation::FindNode, &found, ctx)
+        .and_then(|search| {
+            // We don't care about the search result here
+            // Generally it should be that discovered nodes > 0, however not for the first bootstrapping...
+
+            // TODO: Refresh all k-buckets further away than our nearest neighbor
+
+            // Return newly discovered nodes
+            future::ok(search.all_completed())
+        }))
     }
 
     /// Look up a node in the database by Id

@@ -146,17 +146,22 @@ where
 
     /// Fetch completed known nodes ordered by distance
     pub(crate) fn completed(&self, range: Range<usize>) -> Vec<Entry<Id, Info>> {
-        let mut chunk: Vec<_> = self.known.iter()
-                .filter(|(_k, (_n, s))| *s == RequestState::Complete )
-                .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
-        
+        let mut completed = self.all_completed();
+
         // Limit to count or total found
         let mut range = range;
-        range.end = usize::min(chunk.len(), range.end);
+        range.end = usize::min(completed.len(), range.end);
 
-        let filtered = chunk.drain(range).collect();
+        let filtered = completed.drain(range).collect();
         filtered
+    }
+
+    pub(crate) fn all_completed(&self) -> Vec<Entry<Id, Info>> {
+        let mut chunk: Vec<_> = self.known.iter()
+            .filter(|(_k, (_n, s))| *s == RequestState::Complete )
+            .map(|(_k, (n, _s))| n.clone() ).collect();
+        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
+        chunk
     }
 
     /// Execute a single search round.

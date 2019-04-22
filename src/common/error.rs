@@ -13,6 +13,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 pub enum Error {
     Unimplemented,
     InvalidResponse,
+    InvalidResponseId,
     Timeout,
     NotFound,
     Io(IoErrorKind),

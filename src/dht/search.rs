@@ -125,7 +125,7 @@ where
                 
                 if pending == 0 {
                     let mut table = s.table.clone();
-                    let nearest: Vec<_> = table.nearest(s.target(), concurrency..concurrency*2);
+                    let nearest: Vec<_> = table.nearest(s.target(), 0..concurrency*2);
                     s.seed(&nearest);
                 }
                 

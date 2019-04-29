@@ -158,6 +158,8 @@ where
 
     /// Find a value from the DHT
     pub fn find(&mut self, target: Id, ctx: Ctx) -> impl Future<Item=Vec<Data>, Error=Error> {
+        let mut existing = self.datastore.find(&target);
+
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -167,7 +169,7 @@ where
 
         // Execute the recursive search
         search.execute()
-        .then(|r| {
+        .then(move |r| {
             // Handle internal search errors
             let s = match r {
                 Err(e) => return Err(e),
@@ -183,6 +185,13 @@ where
             // TODO: Reduce data before returning? (should be done on insertion anyway..?)
             let mut flat_data: Vec<Data> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
 
+            // Append existing data (non-flattened atm)
+            if let Some(existing) = &mut existing {
+                flat_data.append(existing)
+            }
+
+            // TODO: cache data locally for next search
+
             // TODO: Send updates to any peers that returned outdated data?
 
             // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
@@ -194,6 +203,9 @@ where
 
     /// Store a value in the DHT
     pub fn store(&mut self, target: Id, data: Vec<Data>, ctx: Ctx) -> impl Future<Item=(), Error=Error> {
+        // Update local data
+        let _values = self.datastore.store(&target, &data);
+
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx.clone());
 
@@ -209,7 +221,7 @@ where
         .and_then(move |r| {
             // Send store request to found nodes
             let known = r.completed(0..k);
-            debug!("sending store to: {:?}", known);
+            info!("sending store to: {:?}", known);
             request_all(conn, ctx, &Request::Store(target, data), &known)
         }).and_then(|_| {
             // TODO: should we process success here?

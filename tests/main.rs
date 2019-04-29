@@ -30,13 +30,13 @@ type MockPeer<Id, Info, Data> = Dht<Id, Info, Data, u64, MockConnector<Id, Info,
 
 type PeerMap<Id, Info, Data> = HashMap<Id, MockPeer<Id, Info, Data>>;
 
-struct MockNetwork <Id, Info, Data> {
+struct MockNetwork <Id: Debug, Info, Data: Debug> {
     peers: Arc<Mutex<PeerMap<Id, Info, Data>>>, 
 }
 
 impl <Id, Info, Data> MockNetwork < Id, Info, Data> 
 where
-    Id: DatabaseId + 'static,
+    Id: DatabaseId + Debug + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Debug + Clone + PartialEq + Send + 'static,
     
@@ -62,17 +62,17 @@ where
 }
 
 #[derive(Clone)]
-struct MockConnector<Id, Info, Data, ReqId, Ctx> {
+struct MockConnector<Id: Debug, Info, Data: Debug, ReqId, Ctx> {
     id: Id,
     addr: Info,
-    peers: Arc<Mutex<PeerMap<Id, Info,Data>>>, 
+    peers: Arc<Mutex<PeerMap<Id, Info, Data>>>, 
     _req_id: PhantomData<ReqId>,
     _ctx: PhantomData<Ctx>,
 }
 
 impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx> 
 where
-    Id: DatabaseId + 'static,
+    Id: DatabaseId + Debug + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Debug + Clone + PartialEq + Send + 'static,
     
@@ -84,7 +84,7 @@ where
 
 impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
-    Id: DatabaseId + 'static,
+    Id: DatabaseId + Debug + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Debug + Clone + PartialEq + Send + 'static,
     Ctx: Debug + Clone + Send + 'static,

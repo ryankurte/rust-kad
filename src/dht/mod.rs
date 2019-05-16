@@ -109,7 +109,7 @@ where
         // Add responding target to table
         // This only occurs after a response as there's no point adding a non-responding
         // node to the DHT
-        let mut table = self.table.clone();
+        let _table = self.table.clone();
         self.table.update(&target);
 
         debug!("[DHT connect] response received, searching {} nodes", found.len());

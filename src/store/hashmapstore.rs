@@ -85,7 +85,7 @@ where
             },
             Entry::Occupied(o) => {
                 // Add new entry
-                let mut existing = o.into_mut();
+                let existing = o.into_mut();
                 existing.append(&mut new);
 
                 // Reduce if provided

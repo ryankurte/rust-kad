@@ -22,7 +22,7 @@ use crate::common::*;
 use crate::table::{NodeTable};
 
 use rr_mux::{Connector};
-use crate::connector::{Connector as DhtConnector, request_all};
+use crate::connector::{request_all};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]

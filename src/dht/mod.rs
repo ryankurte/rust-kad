@@ -202,7 +202,7 @@ where
 
 
     /// Store a value in the DHT
-    pub fn store(&mut self, target: Id, data: Vec<Data>, ctx: Ctx) -> impl Future<Item=(), Error=Error> {
+    pub fn store(&mut self, target: Id, data: Vec<Data>, ctx: Ctx) -> impl Future<Item=usize, Error=Error> {
         // Update local data
         let _values = self.datastore.store(&target, &data);
 
@@ -221,11 +221,11 @@ where
         .and_then(move |r| {
             // Send store request to found nodes
             let known = r.completed(0..k);
-            info!("sending store to: {:?}", known);
+            debug!("sending store to: {:?}", known);
             request_all(conn, ctx, &Request::Store(target, data), &known)
-        }).and_then(|_| {
+        }).and_then(|resp| {
             // TODO: should we process success here?
-            Ok(())
+            Ok(resp.len())
         })
     }
 

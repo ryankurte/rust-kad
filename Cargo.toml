@@ -7,8 +7,6 @@ keywords = ["kademlia", "dht", "distributed", "hash", "table"]
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
 license = "MIT / Apache-2.0"
 
-travis-ci = { repository = "https://github.com/ryankurte/rust-kad" }
-
 [dependencies]
 futures = "0.1.25"
 futures-timer = "0.1.1"

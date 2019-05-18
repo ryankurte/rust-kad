@@ -75,6 +75,16 @@ where
         self.nodes.lock().unwrap().iter().map(|n| n.clone()).collect()
     }
 
+    /// Fetch last updated time
+    pub fn updated(&self) -> Option<Instant> {
+        self.updated
+    }
+
+    /// Fetch number of nodes in bucket
+    pub fn node_count(&self) -> usize {
+        self.nodes.lock().unwrap().len()
+    }
+
     /// Fetch the oldest node in the bucket
     pub fn oldest(&self) -> Option<Entry<Id, Info>> {
         let nodes = self.nodes.lock().unwrap();

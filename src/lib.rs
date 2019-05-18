@@ -39,7 +39,7 @@ pub mod connector;
 
 pub mod prelude;
 
-
+/// DHT Configuration object
 #[derive(PartialEq, Clone, Debug, StructOpt)]
 pub struct Config {
     /// Length of the hash used (in bits) 
@@ -58,6 +58,7 @@ pub struct Config {
     pub max_recursion: usize,
 
     #[structopt(long = "dht-node-timeout", parse(try_from_str = "parse_duration"))]
+    /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
 }
 

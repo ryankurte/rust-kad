@@ -7,6 +7,7 @@
  */
 
 use std::ops::Range;
+use std::time::Instant;
 
 use crate::common::{DatabaseId, Entry};
 
@@ -19,14 +20,14 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
 
     /// Find nearest nodes
     /// Returns a list of the nearest nodes to the provided id
-    fn nearest(&mut self, id: &Id, range: Range<usize>) -> Vec<Entry<Id, Info>>;
+    fn nearest(&self, id: &Id, range: Range<usize>) -> Vec<Entry<Id, Info>>;
 
     /// Find an exact node
     /// This is used to fetch a node from the node table
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>>;
 
     /// Iterate through the oldest nodes in each bucket
-    fn iter_oldest(&mut self) -> Box<Iterator<Item=Entry<Id, Info>>>;
+    fn iter_oldest(&self) -> Box<Iterator<Item=Entry<Id, Info>>>;
 
     /// Update an entry in the bucket by ID
     /// Returns true if update function has been executed, false if no entry was found
@@ -35,5 +36,14 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
 
     /// Remove an entry in the bucket by ID
     fn remove_entry(&mut self, id: &Id);
+
+    /// Fetch information from each bucket
+    fn bucket_info(&self) -> Vec<BucketInfo>;
 }
 
+// BucketInfo contains information about a given bucket
+pub struct BucketInfo {
+    pub index: usize,
+    pub nodes: usize,
+    pub updated: Option<Instant>,
+}

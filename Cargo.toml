@@ -2,9 +2,12 @@
 name = "kad"
 version = "0.4.0"
 repository = "https://github.com/ryankurte/rust-kad"
-description = "A generic / futures based implementation of the Kademlia DHT"
+description = "A generic / futures based implementation of the Kademlia Distributed Hash Table (DHT)"
+keywords = ["kademlia", "dht", "distributed", "hash", "table"]
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
 license = "MIT / Apache-2.0"
+
+travis-ci = { repository = "https://github.com/ryankurte/rust-kad" }
 
 [dependencies]
 futures = "0.1.25"
@@ -14,10 +17,11 @@ structopt = "0.2.14"
 rand = "0.5.5"
 
 rr-mux = "0.7.0"
+humantime = "1.2.0"
 
 [dependencies.log]
 version = "0.4.6"
-features = ["max_level_info"]
+features = ["max_level_debug"]
 
 #[patch.crates-io]
 #rr-mux = { path = "../rr-mux" }

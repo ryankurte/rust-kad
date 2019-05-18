@@ -37,7 +37,8 @@ where
     }
 
     /// Update a node in the bucket
-    pub fn update(&mut self, node: &Entry<Id, Info>) -> bool {
+    /// TODO: positional updating seems inefficient and complex vs. just sorting by last_seen..?
+    pub fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
         let mut nodes = self.nodes.lock().unwrap();
 
         let res = if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
@@ -48,7 +49,7 @@ where
         } else if nodes.len() < self.bucket_size {
             // If there's space in the bucket, add it
             trace!(target: "dht", "[KBucket] Adding node {:?}", node);
-            nodes.push_back(node.clone());
+            nodes.push_front(node.clone());
             true
         } else {
             // If there's no space, discard it
@@ -70,13 +71,16 @@ where
     }
 
     /// Clone the list of nodes currently in the bucket
-    pub(crate) fn nodes(&self) -> Vec<Entry<Id, Info>> {
+    pub fn nodes(&self) -> Vec<Entry<Id, Info>> {
         self.nodes.lock().unwrap().iter().map(|n| n.clone()).collect()
     }
 
     /// Fetch the oldest node in the bucket
-    pub(crate) fn oldest(&self) -> Option<Entry<Id, Info>> {
+    pub fn oldest(&self) -> Option<Entry<Id, Info>> {
         let nodes = self.nodes.lock().unwrap();
+        if nodes.len() == 0 {
+            return None
+        }
         nodes.get(nodes.len()-1).map(|n| n.clone())
     }
 
@@ -87,7 +91,31 @@ where
             // Update node array
             *nodes = nodes.iter().filter(|n| n.id() != node.id()).map(|n| n.clone()).collect();
             // Push node to front
-            nodes.push_back(node.clone());
+            nodes.push_front(node.clone());
+        }
+    }
+
+    /// Update an entry by ID
+    pub fn update_entry<F>(&mut self, id: &Id, f: F) -> bool
+    where F: Fn(&mut Entry<Id, Info>)
+    {
+        if let Some(ref mut n) = self.nodes.lock().unwrap().iter_mut().find(|n| n.id() == id) {
+            (f)(n);
+            return true
+        }
+        false
+    }
+
+    /// Remove an entry from the bucket
+    pub fn remove_entry(&mut self, id: &Id, replace: bool) {
+        let mut nodes = self.nodes.lock().unwrap();
+
+        // Filter nodes from existing
+        *nodes = nodes.iter().filter(|n| n.id() != id).map(|n| n.clone()).collect();
+
+        // Replace with pending node if enabled and found
+        if replace && nodes.len() < self.bucket_size && self.pending.is_some() {
+            nodes.push_back(self.pending.take().unwrap());
         }
     }
 }
@@ -107,27 +135,46 @@ mod test {
         let n2 = Entry::new([0b0001], 2);
         let n3 = Entry::new([0b0010], 3);
         let n4 = Entry::new([0b0011], 4);
+        let n5 = Entry::new([0b0100], 5);
 
         // Fill KBucket
-        assert_eq!(true, b.update(&n1));
+        assert_eq!(true, b.create_or_update(&n1));
         assert_eq!(n1, b.find(n1.id()).unwrap());
         
-        assert_eq!(true, b.update(&n2));
+        assert_eq!(true, b.create_or_update(&n2));
         assert_eq!(n2, b.find(n2.id()).unwrap());
         
-        assert_eq!(true, b.update(&n3));
+        assert_eq!(true, b.create_or_update(&n3));
         assert_eq!(n3, b.find(n3.id()).unwrap());
 
-        assert_eq!(true, b.update(&n4));
+        assert_eq!(true, b.create_or_update(&n4));
         assert_eq!(n4, b.find(n4.id()).unwrap());
 
         // Attempt to add to full KBucket
-        assert_eq!(false, b.update(&Entry::new([0b100], 5)));
+        assert_eq!(false, b.create_or_update(&n5));
+
+        // Check ordering
+        assert_eq!(b.nodes(), vec![n4.clone(), n3.clone(), n2.clone(), n1.clone()]);
+
+        // Update node
+        assert_eq!(true, b.create_or_update(&n1));
+
+        // Check new ordering
+        assert_eq!(b.nodes(), vec![n1.clone(), n4.clone(), n3.clone(), n2.clone()]);
 
         // Update existing item
         let mut n4a = n4.clone();
         n4a.set_info(&5);
-        assert_eq!(true, b.update(&n4a));
+        assert_eq!(true, b.create_or_update(&n4a));
         assert_eq!(n4a, b.find(n4.id()).unwrap());
+
+        // Check new ordering
+        assert_eq!(b.nodes(), vec![n4a.clone(), n1.clone(), n3.clone(), n2.clone()]);
+
+        // Remote node and replace with pending
+        b.remove_entry(n1.id(), true);
+
+        // Check new ordering
+        assert_eq!(b.nodes(), vec![n4a.clone(), n3.clone(), n2.clone(), n5.clone()]);
     }
 }

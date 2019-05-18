@@ -9,6 +9,8 @@
 
 use std::marker::{PhantomData};
 use std::fmt::{Debug};
+use std::time::Instant;
+use std::ops::Add;
 
 use futures::prelude::*;
 use futures::{future, future::Either};
@@ -110,7 +112,7 @@ where
         // This only occurs after a response as there's no point adding a non-responding
         // node to the DHT
         let _table = self.table.clone();
-        self.table.update(&target);
+        self.table.create_or_update(&target);
 
         debug!("[DHT connect] response received, searching {} nodes", found.len());
 
@@ -230,16 +232,51 @@ where
     }
 
 
-    /// Refresh node table
-    pub fn refresh(&mut self) -> impl Future<Item=(), Error=Error> {
+    /// Refresh buckets and node table entries
+    pub fn refresh(&mut self, ctx: Ctx) -> impl Future<Item=(), Error=()> {
+        
         // TODO: send refresh to buckets that haven't been looked up recently
         // How to track recently looked up / contacted buckets..?
 
-        // TODO: evict "expired" nodes from buckets
+        // Evict "expired" nodes from buckets
         // Message oldest node, if no response evict
         // Maybe this could be implemented as a periodic ping and timeout instead?
+        let timeout = self.config.node_timeout;
+        let oldest: Vec<_> = self.table.iter_oldest().filter(move |o| {
+            if let Some(seen) = o.seen() {
+                seen.add(timeout) < Instant::now()
+            } else {
+                true
+            }            
+        }).collect();
 
-        future::err(Error::Unimplemented)
+        let mut pings = Vec::with_capacity(oldest.len());
+
+        for o in oldest {
+            let mut t = self.table.clone();
+            let mut o = o.clone();
+
+            let req = self.conn_mgr.clone().request(ctx.clone(), ReqId::generate(), o.clone(), Request::Ping)
+            .then(move |res| {
+                match res {
+                    Ok((_resp, _ctx)) => {
+                        debug!("[DHT refresh] updating node: {:?}", o);
+                        o.set_seen(Instant::now());
+                        t.create_or_update(&o);
+                    },
+                    Err(_e) => {
+                        debug!("[DHT refresh] expiring node: {:?}", o);
+                        t.remove_entry(o.id());
+                    },
+                }
+
+                Ok(())
+            });
+            pings.push(req);
+        }
+
+        future::join_all(pings)
+            .map(|_| () ).map_err(|_: ()| () )
     }
 
     /// Receive and reply to requests
@@ -275,7 +312,7 @@ where
         };
 
         // Update record for sender
-        self.table.update(from);
+        self.table.create_or_update(from);
 
         future::ok(resp)
     }
@@ -332,12 +369,13 @@ impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Future for Dht <Id, Info, 
 #[cfg(test)]
 mod tests {
     use std::clone::Clone;
+    use std::time::Duration;
 
     use super::*;
     use crate::store::{HashMapStore, Datastore};
     use crate::table::{NodeTable, KNodeTable};
 
-    use rr_mux::mock::{MockConnector};
+    use rr_mux::mock::{MockConnector, MockTransaction as Mt};
 
     #[test]
     fn test_receive_common() {
@@ -404,7 +442,7 @@ mod tests {
         mock_dht!(connector, root, dht);
 
         // Add friend to known table
-        dht.table.update(&friend);
+        dht.table.create_or_update(&friend);
 
         // FindNodes
         assert_eq!(
@@ -427,7 +465,7 @@ mod tests {
         mock_dht!(connector, root, dht);
 
         // Add friend to known table
-        dht.table.update(&friend);
+        dht.table.create_or_update(&friend);
 
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
@@ -471,6 +509,57 @@ mod tests {
     }
 
     #[test]
+    fn test_expire() {
+        let mut config = Config::default();
+        config.node_timeout = Duration::from_millis(200);
+
+        let root = Entry::new([0], 001);
+        let n1 = Entry::new([1], 002);
+        let n2 = Entry::new([2], 003);
+
+        let mut connector = MockConnector::new().expect(vec![]);
+        let c = config.clone();
+        mock_dht!(connector, root, dht, c);
+
+        // Add known nodes
+        dht.table.create_or_update(&n1);
+        dht.table.create_or_update(&n2);
+
+        // No timed out nodes
+        dht.refresh(()).wait().unwrap();
+        connector.finalise();
+
+        std::thread::sleep(config.node_timeout * 2);
+
+        // Ok response
+        connector.expect(vec![
+            Mt::request(n1.clone(), Request::Ping, Ok((Response::NoResult, ()))),
+            Mt::request(n2.clone(), Request::Ping, Ok((Response::NoResult, ()))),
+        ]);
+        dht.refresh(()).wait().unwrap();
+
+        assert!(dht.table.contains(n1.id()).is_some());
+        assert!(dht.table.contains(n2.id()).is_some());
+
+        connector.finalise();
+
+        std::thread::sleep(config.node_timeout * 2);
+
+        // No response (evict)
+        connector.expect(vec![
+            Mt::request(n1.clone(), Request::Ping, Ok((Response::NoResult, ()))),
+            Mt::request(n2.clone(), Request::Ping, Err(Error::Timeout) ),
+        ]);
+        dht.refresh(()).wait().unwrap();
+
+        assert!(dht.table.contains(n1.id()).is_some());
+        assert!(dht.table.contains(n2.id()).is_none());
+
+        // Check expectations are done
+        connector.finalise();
+    }
+
+    #[test]
     fn test_clone() {
 
         let root = Entry::new([0], 001);
@@ -478,6 +567,8 @@ mod tests {
 
         let connector = MockConnector::new().expect(vec![]);
         mock_dht!(connector, root, dht);
+
+        let _ = &mut dht;
 
         let _ = dht.clone();
     }

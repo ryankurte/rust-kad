@@ -26,6 +26,39 @@ pub struct KNodeTable<Id, Info> {
     buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>
 }
 
+#[derive(Clone)]
+pub struct KNodeTableIterOldest<Id, Info> {
+    index: usize,
+    buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>,
+}
+
+impl <Id, Info> Iterator for KNodeTableIterOldest<Id, Info> 
+where
+    Id: DatabaseId + Clone + 'static,
+    Info: Clone + Debug + 'static,
+{
+    type Item = Entry<Id, Info>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let buckets = self.buckets.lock().unwrap();
+        let mut r = None;
+
+        while self.index < buckets.len() {
+            let bucket = buckets[self.index].lock().unwrap();
+            r = bucket.oldest();
+
+            self.index += 1;
+
+            if let Some(_) = &r {
+                break
+            }
+        }
+
+        return r
+    }
+}
+
+
 impl <Id, Info> KNodeTable<Id, Info> 
 where
     Id: DatabaseId + Clone + 'static,
@@ -68,8 +101,8 @@ where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
 {
-    /// Update a node in the NodeTable
-    fn update(&mut self, node: &Entry<Id, Info>) -> bool {
+    /// Create or update a node in the NodeTable
+    fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
         if node.id() == &self.id {
             return false
         }
@@ -78,7 +111,7 @@ where
         let mut bucket = bucket.lock().unwrap();
         let mut node = node.clone();
         node.set_seen(Instant::now());
-        bucket.update(&node)
+        bucket.create_or_update(&node)
     }
 
     /// Find the nearest nodes to the provided Id in the given range
@@ -100,26 +133,32 @@ where
         limited
     }
 
-    /// Peek at the oldest node in the bucket associated with a given Id
-    fn peek_oldest(&mut self, id: &Id) -> Option<Entry<Id, Info>> {
-        let bucket = self.bucket(id);
-        let bucket = bucket.lock().unwrap();
-        bucket.oldest()
-    }
-
-    fn replace(&mut self, node: &Entry<Id, Info>, _replacement: &Entry<Id, Info>) {
-        let bucket = self.bucket(node.id());
-        let mut _bucket = bucket.lock().unwrap();
-
-
-    }
-
     /// Check if the node NodeTable contains a given node by Id
     /// This returns the node object if found
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>> {
         let bucket = self.bucket(id);
         let bucket = bucket.lock().unwrap();
         bucket.find(id)
+    }
+
+    /// Peek at the oldest node in the bucket associated with a given Id
+    fn iter_oldest(&mut self) -> Box<Iterator<Item=Entry<Id, Info>>> {
+        Box::new(KNodeTableIterOldest{index: 0, buckets: self.buckets.clone() })
+    }
+
+    /// Update an entry by ID
+    fn update_entry<F>(&mut self, id: &Id, f: F) -> bool 
+    where F: Fn(&mut Entry<Id, Info>)
+    {
+        let bucket = self.bucket(id);
+        let mut bucket = bucket.lock().unwrap();
+        bucket.update_entry(id, f)
+    }
+
+    fn remove_entry(&mut self, id: &Id) {
+        let bucket = self.bucket(id);
+        let mut bucket = bucket.lock().unwrap();
+        bucket.remove_entry(id, false);
     }
 }
 
@@ -146,7 +185,7 @@ mod test {
         // Add some nodes
         for n in &nodes {
             assert_eq!(true, t.contains(n.id()).is_none());
-            assert_eq!(true, t.update(&n));
+            assert_eq!(true, t.create_or_update(&n));
             assert_eq!(*n, t.contains(n.id()).unwrap());
         }
         

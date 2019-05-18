@@ -12,12 +12,23 @@ use std::fmt::Debug;
 
 use super::id::DatabaseId;
 
-#[derive(Clone, Debug, Hash, Eq)]
+/// Entry is a node entry in the DHT
+/// This is generic over Id and Info and intended to be cheaply cloned
+/// as a container for unique information
+#[derive(Clone, Debug)]
 pub struct Entry<Id, Info> {
     id: Id,
     info: Info,
     seen: Option<Instant>,
+    state: EntryState,
     frozen: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum EntryState {
+    Ok,
+    Expiring,
+    Expired,
 }
 
 impl <Id, Info> PartialEq for Entry<Id, Info> 
@@ -36,7 +47,7 @@ where
     Info: Clone + Debug + 'static,
 {
     pub fn new(id: Id, info: Info) -> Entry<Id, Info> {
-        Entry{id, info, seen: None, frozen: false}
+        Entry{id, info, seen: None, frozen: false, state: EntryState::Ok}
     }
 
     pub fn id(&self) -> &Id {

@@ -26,7 +26,7 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
 - [ ] Receive message
   - [x] Update appropriate k-bucket
     - [x] Add node if bucket not full
-    - [ ] Store pending if bucket full and ping oldest (if > seen time)
+    - [x] Store pending if bucket full and ping oldest (if > seen time)
   - [x] Respond to Ping with NoResult
   - [x] Respond to FindNodes with NodesFound
   - [x] Respond to FindValues with NodesFound or ValuesFound
@@ -57,7 +57,7 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
   - [ ] Refresh all k-buckets further than the closest neighbor
 
 - [ ] Maintanence
-  - [ ] Remove non-responsive / old contacts
+  - [x] Remove non-responsive / old contacts
   - [ ] Expire values
     - [ ] Basic expiry after defined time
     - [ ] Cache expiry exponentially inversely proportional to number of nodes between current node and closest to key ID node
@@ -69,8 +69,8 @@ A generic / futures based implementation of the Kademlia DHT, heavily inspired b
 
 - [ ] Buckets
   - [ ] Implement bucket splitting (if it can be done more efficiently than existing?)
-    - Useful for maintanence / don't need to message unused buckets
-  - [ ] Reverse / generate random IDs in bucket for maintanence purposes
+    - Useful for maintenance / don't need to message unused buckets
+  - [ ] Reverse / generate random IDs in bucket for maintenance purposes
 
 ### Questions
 

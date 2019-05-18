@@ -225,7 +225,7 @@ where
                 }
 
                 // Update node table
-                self.table.update(&resp_entry);
+                self.table.create_or_update(&resp_entry);
             }
             // Update depth limit
             self.depth -= 1;

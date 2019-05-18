@@ -5,6 +5,7 @@
 //! Copyright 2018 Ryan Kurte
 
 use std::fmt::Debug;
+use std::time::Duration;
 
 extern crate futures;
 
@@ -16,6 +17,8 @@ extern crate futures_timer;
 
 extern crate num;
 extern crate rand;
+
+extern crate humantime;
 
 extern crate rr_mux;
 use rr_mux::{Connector};
@@ -45,12 +48,23 @@ pub struct Config {
     #[structopt(long = "dht-bucket-size")]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
+
     #[structopt(long = "dht-concurrency")]
     /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
+    
     #[structopt(long = "dht-recursion-limit")]
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
+
+    #[structopt(long = "dht-node-timeout", parse(try_from_str = "parse_duration"))]
+    pub node_timeout: Duration,
+}
+
+fn parse_duration(s: &str) -> Result<Duration, humantime::DurationError> {
+    use std::str::FromStr;
+    let d = humantime::Duration::from_str(s)?;
+    Ok(d.into())
 }
 
 impl Default for Config {
@@ -60,6 +74,7 @@ impl Default for Config {
                 k: 20, 
                 concurrency: 3,
                 max_recursion: 10,
+                node_timeout: Duration::from_secs(15 * 60 * 60),
             }
     }
 }
@@ -112,7 +127,7 @@ mod tests {
 
         // Bind it to the DHT instance
         let n1 = Entry::new([0b0001], 100);
-        let dht = Dht::<NodeId, Info, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
+        let _dht = Dht::<NodeId, Info, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]
@@ -184,8 +199,8 @@ mod tests {
         let mut knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Inject initial nodes into the table
-        knodetable.update(&n2);
-        knodetable.update(&n3);
+        knodetable.create_or_update(&n2);
+        knodetable.create_or_update(&n3);
 
         // Instantiated DHT
         let store: HashMapStore<NodeId, u64> = HashMapStore::new();
@@ -232,8 +247,8 @@ mod tests {
         let mut knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Inject initial nodes into the table
-        knodetable.update(&n2);
-        knodetable.update(&n3);
+        knodetable.create_or_update(&n2);
+        knodetable.create_or_update(&n3);
 
         // Instantiated DHT
         let store: HashMapStore<NodeId, u64> = HashMapStore::new();
@@ -277,8 +292,8 @@ mod tests {
         let mut knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Inject initial nodes into the table
-        knodetable.update(&n2);
-        knodetable.update(&n3);
+        knodetable.create_or_update(&n2);
+        knodetable.create_or_update(&n3);
 
         // Instantiated DHT
         let store: HashMapStore<NodeId, u64> = HashMapStore::new();

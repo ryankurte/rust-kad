@@ -14,7 +14,7 @@ num = { version = "0.2.0", features = ["rand"]}
 structopt = "0.2.14"
 rand = "0.5.5"
 
-rr-mux = "0.7.0"
+rr-mux = "0.7.1"
 humantime = "1.2.0"
 
 [dependencies.log]

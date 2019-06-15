@@ -115,7 +115,7 @@ where
         let _table = self.table.clone();
         self.table.create_or_update(&target);
 
-        debug!("[DHT connect] response received, searching {} nodes", found.len());
+        trace!("[DHT connect] response received, searching {} nodes", found.len());
 
         // Create a FIND_NODE search on own id with responded nodes
         // This both registers this node with peers, and finds and relevant closer peers
@@ -224,7 +224,7 @@ where
         .and_then(move |r| {
             // Send store request to found nodes
             let known = r.completed(0..k);
-            debug!("sending store to: {:?}", known);
+            trace!("sending store to: {:?}", known);
             request_all(conn, ctx, &Request::Store(target, data), &known)
         }).and_then(|resp| {
             // TODO: should we process success here?

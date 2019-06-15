@@ -104,7 +104,7 @@ where
                 
                 // Exit at max recursive depth
                 if s.depth == 0 {
-                    debug!("[search] break, reached max recursive depth");
+                    trace!("[search] break, reached max recursive depth");
                     return Loop::Break(s);
                 }
 
@@ -116,7 +116,7 @@ where
                 let pending = &known[0..usize::min(known.len(), k)].iter()
                         .find(|(_key, status)| *status == RequestState::Pending );
                 if pending.is_none() {
-                    debug!("[search] break, found k closest nodes");
+                    trace!("[search] break, found k closest nodes");
                     return Loop::Break(s);
                 }
 
@@ -175,7 +175,7 @@ where
         let pending = self.pending();
         let chunk = &pending[0..usize::min(self.config.concurrency, pending.len())];
 
-        debug!("[search] iteration {:?}/{:?} over: {:?}", 
+        trace!("[search] iteration {:?}/{:?} over: {:?}", 
             self.config.max_recursion - self.depth, self.config.max_recursion, chunk);
 
         // Update nodes in the chunk to active state

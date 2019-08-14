@@ -170,8 +170,12 @@ where
         let nearest: Vec<_> = self.table.nearest(&target, 0..self.config.concurrency);
         search.seed(&nearest);
 
+        if nearest.len() == 0 {
+            return Either::A(future::err(Error::NoPeers))
+        }
+
         // Execute the recursive search
-        search.execute()
+        Either::B(search.execute()
         .then(move |r| {
             // Handle internal search errors
             let s = match r {
@@ -200,7 +204,7 @@ where
             // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
 
             Ok(flat_data)
-        })
+        }))
     }
 
 

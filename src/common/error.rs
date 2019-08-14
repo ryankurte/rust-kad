@@ -15,6 +15,7 @@ pub enum Error {
     InvalidResponse,
     InvalidResponseId,
     Timeout,
+    NoPeers,
     NotFound,
     Io(IoErrorKind),
     Cancelled,

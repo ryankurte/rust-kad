@@ -21,7 +21,6 @@ extern crate rand;
 extern crate humantime;
 
 extern crate rr_mux;
-use rr_mux::{Connector};
 
 pub mod common;
 use crate::common::*;
@@ -36,6 +35,7 @@ pub mod dht;
 use dht::Dht;
 
 pub mod connector;
+pub use connector::Connector;
 
 pub mod prelude;
 
@@ -89,7 +89,7 @@ where
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Send  + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Send + Clone + 'static,
+    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Send + Clone + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 
 {

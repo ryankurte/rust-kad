@@ -15,8 +15,6 @@ use std::ops::Add;
 use futures::prelude::*;
 use futures::{future};
 
-use rr_mux::{Connector};
-
 use crate::{Config};
 
 use crate::common::*;
@@ -24,7 +22,7 @@ use crate::common::*;
 use crate::table::NodeTable;
 use crate::store::{Datastore};
 
-use crate::connector::{request_all};
+use crate::connector::{Connector, request_all};
 
 pub mod search;
 pub use self::search::{Search, Operation};
@@ -46,11 +44,11 @@ pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
 
 impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
 where 
-    Id: DatabaseId + Clone + Send + 'static,
-    Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: PartialEq + Clone + Send + Debug + 'static,
-    ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Clone + Send + 'static,
+    Id: DatabaseId + Clone + Sized + Send + 'static,
+    Info: PartialEq + Clone + Sized +  Send + Debug+ 'static,
+    Data: PartialEq + Clone + Sized + Send + Debug + 'static,
+    ReqId: RequestId + Clone + Sized + Send + 'static,
+    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Clone + Send + 'static,
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
@@ -83,9 +81,9 @@ where
         info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.info());
 
         // Launch request
-        let conn = Box::pin(self.conn_mgr.clone());
+        let mut conn = self.conn_mgr.clone();
 
-        let resp = conn.request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone())).await;
+        let (resp, _ctx) = conn.request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone())).await?;
 
         s.handle_connect_response(target, resp, ctx).await
     }
@@ -151,8 +149,8 @@ where
         };
 
         // Return node if found
-        let known = s.known();
-        if let Some((n, _s)) = known.get(s.target()) {
+        let known = search.known();
+        if let Some((n, _s)) = known.get(search.target()) {
             Ok(n.clone())
         } else {
             Err(Error::NotFound)
@@ -185,7 +183,7 @@ where
         };
 
         // Return data if found
-        let data = s.data();
+        let data = search.data();
         if data.len() == 0 {
             return Err(Error::NotFound)
         }
@@ -220,14 +218,14 @@ where
         let nearest: Vec<_> = self.table.nearest(&target, 0..self.config.concurrency);
         search.seed(&nearest);
 
-        let conn = Box::pin(self.conn_mgr.clone());
+        let conn = self.conn_mgr.clone();
         let k = self.config.k;
 
         // Search for K closest nodes to value
-        let r = search.execute().await;
+        let r = search.execute().await?;
 
         // Send store request to found nodes
-        let known = r.completed(0..k);
+        let known = search.completed(0..k);
         trace!("sending store to: {:?}", known);
         let resp = request_all(conn, ctx, &Request::Store(target, data), &known).await?;
 
@@ -262,10 +260,11 @@ where
             let mut t = self.table.clone();
             let mut o = o.clone();
 
-            let conn = Box::pin(self.conn_mgr.clone());
+            let mut conn = self.conn_mgr.clone();
+            let ctx_ = ctx.clone();
 
-            let req = conn.request(ctx.clone(), ReqId::generate(), o.clone(), Request::Ping)
-            .then(move |res| {
+            let p = async move {
+                let res = conn.request(ctx_, ReqId::generate(), o.clone(), Request::Ping).await;
                 match res {
                     Ok((_resp, _ctx)) => {
                         debug!("[DHT refresh] updating node: {:?}", o);
@@ -278,13 +277,15 @@ where
                     },
                 }
 
-                Ok(())
-            });
-            pings.push(req);
+                ()
+            };
+
+            pings.push(p);
         }
 
-        future::join_all(pings)
-            .map(|_| () ).map_err(|_: ()| () )
+        future::join_all(pings).await;
+
+        Ok(())
     }
 
     /// Receive and reply to requests
@@ -341,7 +342,9 @@ where
             trace!("    {:?} - {:?}", e.id(), e.info());
         }
 
-        search.execute().await
+        search.execute().await?;
+
+        Ok(search)
     }
 }
 

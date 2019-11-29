@@ -82,6 +82,7 @@ where
     }
 }
 
+#[async_trait]
 impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
     Id: DatabaseId + Debug + 'static,
@@ -89,21 +90,23 @@ where
     Data: Debug + Clone + PartialEq + Send + 'static,
     Ctx: Debug + Clone + Send + 'static,
 {
-    fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
-            Box<Future<Item=(Response<Id, Info, Data>, Ctx), Error=Error> + Send + 'static> {
+    async fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
+            Result<(Response<Id, Info, Data>, Ctx), Error> + Send + 'static {
 
         // Fetch peer instance
         let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
 
+        // Update peer with request
         let resp = peer.handle(&Entry::new(self.id.clone(), self.addr.clone()), &req).unwrap();
 
+        // Re-insert peer into database
         self.peers.lock().unwrap().insert(to.id().clone(), peer);
 
-        Box::new(future::ok((resp, ctx)))
+        Ok((resp, ctx))
     }
 
-    fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Box<Future<Item=(), Error=Error> + Send + 'static> {
-        Box::new(future::ok(()))
+    async fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Result<(), Error> + Send + 'static {
+        Ok(())
     }
 }
 

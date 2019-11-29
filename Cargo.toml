@@ -25,5 +25,5 @@ humantime = "1.2.0"
 version = "0.4.6"
 features = ["max_level_debug"]
 
-#[patch.crates-io]
-#rr-mux = { path = "../rr-mux" }
+[patch.crates-io]
+rr-mux = { path = "../rr-mux" }

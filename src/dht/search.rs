@@ -19,8 +19,7 @@ use crate::common::*;
 
 use crate::table::{NodeTable};
 
-use rr_mux::{Connector};
-use crate::connector::{request_all};
+use crate::connector::{Connector, request_all};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -65,7 +64,7 @@ where
     Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info,Data>, Error, Ctx> + Clone + 'static,
+    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Send + Clone + 'static,
 {
     pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
         -> Search<Id, Info,Data, Table, Conn, ReqId, Ctx> {
@@ -92,12 +91,11 @@ where
         self.data.clone()
     }
 
-    pub async fn execute(self) -> Result<Self, Error> 
-    {
+    pub async fn execute(&mut self) -> Result<(), Error> {
         // Execute recursive search
         for _i in 0..self.config.max_recursion {
 
-            let res = self.recurse().await?;
+            self.recurse().await?;
 
             let concurrency = self.config.concurrency;
             let k = self.config.k;
@@ -105,7 +103,7 @@ where
             // Exit at max recursive depth
             if self.depth == 0 {
                 trace!("[search] break, reached max recursive depth");
-                return Ok(self);
+                return Ok(());
             }
 
             // Exit once we've got no more pending in the first k closest known nodes
@@ -117,7 +115,7 @@ where
                     .find(|(_key, status)| *status == RequestState::Pending );
             if pending.is_none() {
                 trace!("[search] break, found k closest nodes");
-                return Ok(self);
+                return Ok(());
             }
 
             // If no nodes are pending, add another set of nearest nodes
@@ -130,7 +128,7 @@ where
             }
         }
         
-        Ok(self)
+        Ok(())
     }
 
     /// Fetch pending known nodes ordered by distance
@@ -167,7 +165,7 @@ where
     /// And collects the results into the known node and data maps.
     ///
     /// This is intended to be called using loop_fn for recursion.
-    pub(crate) async fn recurse(mut self) -> Result<Self, Error> {
+    pub(crate) async fn recurse(&mut self) -> Result<(), Error> {
 
         // Fetch a section of known nodes to process
         let pending = self.pending();
@@ -228,7 +226,7 @@ where
         // Update depth limit
         self.depth -= 1;
 
-        Ok(self)
+        Ok(())
     }
 
     /// Seed the search with nearest nodes in addition to those provided in initialisation

@@ -27,7 +27,7 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>>;
 
     /// Iterate through the oldest nodes in each bucket
-    fn iter_oldest(&self) -> Box<Iterator<Item=Entry<Id, Info>>>;
+    fn iter_oldest(&self) -> Box<dyn Iterator<Item=Entry<Id, Info>>>;
 
     /// Update an entry in the bucket by ID
     /// Returns true if update function has been executed, false if no entry was found

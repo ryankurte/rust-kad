@@ -13,8 +13,6 @@ use std::ops::Range;
 use std::marker::PhantomData;
 
 use futures::prelude::*;
-use futures::future;
-use futures::future::{Loop};
 
 use crate::Config;
 use crate::common::*;
@@ -94,45 +92,45 @@ where
         self.data.clone()
     }
 
-    pub fn execute(self) -> impl Future<Item=Self, Error=Error> 
+    pub async fn execute(self) -> Result<Self, Error> 
     {
         // Execute recursive search
-        future::loop_fn(self, |s1| {
-            s1.recurse().map(|mut s| {
-                let concurrency = s.config.concurrency;
-                let k = s.config.k;
-                
-                // Exit at max recursive depth
-                if s.depth == 0 {
-                    trace!("[search] break, reached max recursive depth");
-                    return Loop::Break(s);
-                }
+        for _i in 0..self.config.max_recursion {
 
-                // Exit once we've got no more pending in the first k closest known nodes
-                let mut known: Vec<_> = s.known.iter()
-                        .map(|(key, (_node, status))| (key.clone(), status.clone()) )
-                        .collect();
-                known.sort_by_key(|(key, _status)| Id::xor(s.target(), key) );
-                let pending = &known[0..usize::min(known.len(), k)].iter()
-                        .find(|(_key, status)| *status == RequestState::Pending );
-                if pending.is_none() {
-                    trace!("[search] break, found k closest nodes");
-                    return Loop::Break(s);
-                }
+            let res = self.recurse().await?;
 
-                // If no nodes are pending, add another set of nearest nodes
-                let pending = s.pending().len();
-                
-                if pending == 0 {
-                    let mut table = s.table.clone();
-                    let nearest: Vec<_> = table.nearest(s.target(), 0..concurrency*2);
-                    s.seed(&nearest);
-                }
-                
-                // Continue otherwise
-                Loop::Continue(s)
-            })
-        })
+            let concurrency = self.config.concurrency;
+            let k = self.config.k;
+            
+            // Exit at max recursive depth
+            if self.depth == 0 {
+                trace!("[search] break, reached max recursive depth");
+                return Ok(self);
+            }
+
+            // Exit once we've got no more pending in the first k closest known nodes
+            let mut known: Vec<_> = self.known.iter()
+                    .map(|(key, (_node, status))| (key.clone(), status.clone()) )
+                    .collect();
+            known.sort_by_key(|(key, _status)| Id::xor(self.target(), key) );
+            let pending = &known[0..usize::min(known.len(), k)].iter()
+                    .find(|(_key, status)| *status == RequestState::Pending );
+            if pending.is_none() {
+                trace!("[search] break, found k closest nodes");
+                return Ok(self);
+            }
+
+            // If no nodes are pending, add another set of nearest nodes
+            let pending = self.pending().len();
+            
+            if pending == 0 {
+                let mut table = self.table.clone();
+                let nearest: Vec<_> = table.nearest(self.target(), 0..concurrency*2);
+                self.seed(&nearest);
+            }
+        }
+        
+        Ok(self)
     }
 
     /// Fetch pending known nodes ordered by distance
@@ -169,7 +167,7 @@ where
     /// And collects the results into the known node and data maps.
     ///
     /// This is intended to be called using loop_fn for recursion.
-    pub(crate) fn recurse(mut self) -> impl Future<Item=Self, Error=Error> {
+    pub(crate) async fn recurse(mut self) -> Result<Self, Error> {
 
         // Fetch a section of known nodes to process
         let pending = self.pending();
@@ -189,49 +187,48 @@ where
         };
 
         // Send requests and handle responses
-        request_all(self.conn.clone(), self.ctx.clone(), &req, chunk)
-        .map(move |res| {
-            for (resp_entry, resp_msg) in &res {
-                // Handle received responses
-                if let Some((resp, _ctx)) = resp_msg {
-                    match resp {
-                        Response::NodesFound(id, entries) => {
-                            // Ignore invalid response IDs
-                            if *id != self.target {
-                                self.known.entry(resp_entry.id().clone()).or_insert((resp_entry.clone(), RequestState::InvalidResponse));
-                                continue;
-                            }
+        let res = request_all(self.conn.clone(), self.ctx.clone(), &req, chunk).await?;
 
-                            // Add nodes to known list for further search iterations
-                            // TODO: check that these nodes are _closer_ than the responding entity?
-                            for e in entries {
-                                if e.id() != &self.origin {
-                                    self.known.entry(e.id().clone()).or_insert((e.clone(), RequestState::Pending));
-                                }
-                            }
-                        },
-                        Response::ValuesFound(id, values) => {
-                            // Add data to data list
-                            self.data.insert(id.clone(), values.clone());
-                        },
-                        Response::NoResult => { },
-                    }
+        for (resp_entry, resp_msg) in &res {
+            // Handle received responses
+            if let Some((resp, _ctx)) = resp_msg {
+                match resp {
+                    Response::NodesFound(id, entries) => {
+                        // Ignore invalid response IDs
+                        if *id != self.target {
+                            self.known.entry(resp_entry.id().clone()).or_insert((resp_entry.clone(), RequestState::InvalidResponse));
+                            continue;
+                        }
 
-                    // Update node state to completed
-                    self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
-                } else {
-                    // Update node state to timed out
-                    self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                        // Add nodes to known list for further search iterations
+                        // TODO: check that these nodes are _closer_ than the responding entity?
+                        for e in entries {
+                            if e.id() != &self.origin {
+                                self.known.entry(e.id().clone()).or_insert((e.clone(), RequestState::Pending));
+                            }
+                        }
+                    },
+                    Response::ValuesFound(id, values) => {
+                        // Add data to data list
+                        self.data.insert(id.clone(), values.clone());
+                    },
+                    Response::NoResult => { },
                 }
 
-                // Update node table
-                self.table.create_or_update(&resp_entry);
+                // Update node state to completed
+                self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+            } else {
+                // Update node state to timed out
+                self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
             }
-            // Update depth limit
-            self.depth -= 1;
 
-            self
-        })
+            // Update node table
+            self.table.create_or_update(&resp_entry);
+        }
+        // Update depth limit
+        self.depth -= 1;
+
+        Ok(self)
     }
 
     /// Seed the search with nearest nodes in addition to those provided in initialisation
@@ -284,7 +281,7 @@ mod tests {
         let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
-        s.seed(&nodes[0..2]);
+        self.seed(&nodes[0..2]);
         {
             // This should add the nearest nodes to the known map
             assert!(s.known.get(nodes[0].id()).is_some());
@@ -296,7 +293,7 @@ mod tests {
         }
         
         // Perform first iteration
-        s = s.recurse().wait().unwrap();
+        s = self.recurse().wait().unwrap();
         {
             // Responding nodes should be added to the node table
             let t = table.clone();
@@ -308,7 +305,7 @@ mod tests {
         }
 
         // Perform second iteration
-        s = s.recurse().wait().unwrap();
+        s = self.recurse().wait().unwrap();
         {
             // Responding nodes should be added to the node table
             let t = table.clone();

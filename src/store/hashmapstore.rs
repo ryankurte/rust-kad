@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use crate::common::DatabaseId;
 use crate::store::Datastore;
 
-pub type Reducer<Data> = Fn(&[Data]) -> Vec<Data> + Send + 'static;
+pub type Reducer<Data> = dyn Fn(&[Data]) -> Vec<Data> + Send + 'static;
 
 #[derive(Clone)]
 pub struct HashMapStore<Id: fmt::Debug, Data: fmt::Debug> {

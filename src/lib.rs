@@ -9,7 +9,7 @@ use std::time::Duration;
 
 extern crate futures;
 
-#[macro_use] extern crate log;
+#[macro_use] extern crate tracing;
 
 #[macro_use] extern crate structopt;
 

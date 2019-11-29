@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 
 use futures::prelude::*;
-use futures::future;
+use futures::future::join_all;
 
 #[cfg(tokio)]
 pub mod tokio;
@@ -19,11 +19,11 @@ pub type Mux<Id, Info, Data, ReqId, Ctx> =
 
 /// Connector defines an rr_mux::Connector impl over Dht types for convenience
 pub trait Connector<Id, Info, Data, ReqId, Ctx>: 
-    rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + 'static {}
+    rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Unpin + 'static {}
 
 
 /// Generic impl of Connector over matching rr_mux::Connector impls
-impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> 
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for dyn rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
@@ -45,8 +45,8 @@ where
 /// Send a request to a slice of nodes and collect the responses.
 /// This returns an array of Option<Responses>>'s corresponding to the nodes passed in.
 /// Timeouts result in a None return, any individual error condition will cause an error to be bubbled up.
-pub fn request_all<Id, Info, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[Entry<Id, Info>]) -> 
-        impl Future<Item=Vec<(Entry<Id, Info>, Option<(Response<Id, Info, Data>, Ctx)>)>, Error=Error> 
+pub async fn request_all<Id, Info, Data, Conn, ReqId, Ctx>(conn: Conn, ctx: Ctx, req: &Request<Id, Data>, nodes: &[Entry<Id, Info>]) -> 
+        Result<Vec<(Entry<Id, Info>, Option<(Response<Id, Info, Data>, Ctx)>)>, Error> 
 where
     Id: DatabaseId + Debug + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
@@ -62,6 +62,8 @@ where
         let n1 = n.clone();
         let n2 = n.clone();
         let mut c = conn.clone();
+
+
         let q = c.request(ctx.clone(), ReqId::generate(), n.clone(), req.clone())
             .map(|v| {
                 trace!("Response: '{:?}' from: '{:?}'", v, n1.id());
@@ -77,6 +79,6 @@ where
         queries.push(q);
     }
 
-    future::join_all(queries)
+    join_all(queries)
 }
 

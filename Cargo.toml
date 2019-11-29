@@ -6,13 +6,17 @@ description = "A generic / futures based implementation of the Kademlia Distribu
 keywords = ["kademlia", "dht", "distributed", "hash", "table"]
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
 license = "MIT / Apache-2.0"
+edition = "2018"
 
 [dependencies]
-futures = "0.1.25"
+futures = "0.3.1"
 futures-timer = "0.1.1"
 num = { version = "0.2.0", features = ["rand"]}
 structopt = "0.2.14"
 rand = "0.5.5"
+
+async-trait = "0.1.19"
+tracing = "0.1.10"
 
 rr-mux = "0.7.1"
 humantime = "1.2.0"

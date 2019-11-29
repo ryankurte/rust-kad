@@ -117,7 +117,7 @@ where
     }
 
     /// Peek at the oldest node in the bucket associated with a given Id
-    fn iter_oldest(&self) -> Box<Iterator<Item=Entry<Id, Info>>> {
+    fn iter_oldest(&self) -> Box<dyn Iterator<Item=Entry<Id, Info>>> {
         Box::new(KNodeTableIterOldest{index: 0, buckets: self.buckets.clone() })
     }
 

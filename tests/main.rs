@@ -21,7 +21,6 @@ use kad::store::{HashMapStore};
 use kad::connector::Connector;
 
 extern crate futures;
-use futures::prelude::*;
 use futures::executor::block_on;
 
 extern crate async_trait;
@@ -40,8 +39,8 @@ struct MockNetwork <Id: Debug, Info, Data: Debug> {
 impl <Id, Info, Data> MockNetwork < Id, Info, Data> 
 where
     Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Debug + Clone + PartialEq + Send + 'static,
+    Info: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Data: Debug + Clone + PartialEq + Sync + Send + 'static,
     
 {
     pub fn new(config: Config, nodes: &[Entry<Id, Info>]) -> MockNetwork<Id, Info,Data> {
@@ -76,8 +75,9 @@ struct MockConnector<Id: Debug, Info, Data: Debug, ReqId, Ctx> {
 impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx> 
 where
     Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Debug + Clone + PartialEq + Send + 'static,
+    Info: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Data: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Ctx: Debug + Clone + Send + 'static,
     
 {
     pub fn new( id: Id, addr: Info, peers: Arc<Mutex<PeerMap<Id, Info, Data>>>) -> Self {
@@ -88,11 +88,11 @@ where
 #[async_trait]
 impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
-    ReqId: Debug + Send + 'static,
+    ReqId: Debug + Sync + Send + 'static,
     Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Debug + Clone + PartialEq + Send + 'static,
-    Ctx: Debug + Clone + Send + 'static,
+    Info: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Data: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Ctx: Debug + Clone + Sync + Send + 'static,
 {
     async fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
             Result<(Response<Id, Info, Data>, Ctx), Error> {
@@ -114,6 +114,26 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
+struct MockSync(Arc<Mutex<u64>>);
+
+impl MockSync {
+    pub fn new(v: u64) -> Self {
+        MockSync(Arc::new(Mutex::new(v)))
+    }
+}
+
+impl PartialEq for MockSync {
+    fn eq(&self, o: &Self) -> bool {
+        let v1 = { self.0.lock().unwrap().clone() };
+        let v2 = { o.0.lock().unwrap().clone() };
+        v1 == v2
+    }
+}
+
+unsafe impl Sync for MockSync {}
+
+
 
 #[test]
 fn integration() {
@@ -127,12 +147,12 @@ fn integration() {
     // Build basic nodes
     let mut nodes = Vec::new();
     for i in 0..16 {
-        nodes.push(Entry::<[u8; 1], u64>::new([i * 16], i as u64));
+        nodes.push(Entry::<[u8; 1], MockSync>::new([i * 16], MockSync::new(i as u64)));
     }
     let n0 = &nodes[0];
 
     // Create mock network
-    let mgr = MockNetwork::<[u8; 1], u64, u64>::new(config, &nodes);
+    let mgr = MockNetwork::<[u8; 1], MockSync, u64>::new(config, &nodes);
 
     println!("Bootstrapping Network");
     for n in nodes.iter().skip(1) {

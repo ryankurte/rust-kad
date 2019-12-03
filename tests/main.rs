@@ -18,13 +18,16 @@ use kad::common::*;
 use kad::dht::Dht;
 use kad::table::KNodeTable;
 use kad::store::{HashMapStore};
+use kad::connector::Connector;
 
 extern crate futures;
 use futures::prelude::*;
 use futures::future;
 
+extern crate async_trait;
+use async_trait::async_trait;
+
 extern crate rr_mux;
-use rr_mux::Connector;
 
 type MockPeer<Id, Info, Data> = Dht<Id, Info, Data, u64, MockConnector<Id, Info, Data, u64, ()>, KNodeTable<Id, Info>, HashMapStore<Id, Data>, ()>;
 
@@ -72,9 +75,9 @@ struct MockConnector<Id: Debug, Info, Data: Debug, ReqId, Ctx> {
 
 impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx> 
 where
-    Id: DatabaseId + Debug + 'static,
-    Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Debug + Clone + PartialEq + Send + 'static,
+    Id: DatabaseId + Debug + Send + Sync + 'static,
+    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
     
 {
     pub fn new( id: Id, addr: Info, peers: Arc<Mutex<PeerMap<Id, Info, Data>>>) -> Self {
@@ -83,15 +86,16 @@ where
 }
 
 #[async_trait]
-impl <Id, Info, Data, ReqId, Ctx> Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
-    Id: DatabaseId + Debug + 'static,
-    Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Debug + Clone + PartialEq + Send + 'static,
-    Ctx: Debug + Clone + Send + 'static,
+    ReqId: Debug + Send + Sync + 'static,
+    Id: DatabaseId + Debug + Send + Sync + 'static,
+    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Ctx: Debug + Clone + Send + Sync + 'static,
 {
     async fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
-            Result<(Response<Id, Info, Data>, Ctx), Error> + Send + 'static {
+            Result<(Response<Id, Info, Data>, Ctx), Error> {
 
         // Fetch peer instance
         let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
@@ -105,7 +109,7 @@ where
         Ok((resp, ctx))
     }
 
-    async fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Result<(), Error> + Send + 'static {
+    async fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Result<(), Error> {
         Ok(())
     }
 }

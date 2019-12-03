@@ -27,29 +27,55 @@ pub trait Connector<Id, Info, Data, ReqId, Ctx>: Sync + Send {
     async fn respond(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, resp: Response<Id, Info, Data>) -> Result<(), Error>;
 }
 
-#[cfg(feature = "nope")]
 
 /// Generic impl of Connector over matching rr_mux::Connector impls
-#[cfg(feature = "nope")]
-impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for dyn rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> 
+#[async_trait]
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for (dyn rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Send + Sync)
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
-{}
+{
+    async fn request(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, req: Request<Id, Data>) -> Result<(Response<Id, Info, Data>, Ctx), Error> {
+        let res = rr_mux::Connector::request(self, ctx, req_id, target, req).await;
+
+        res
+    }
+
+    // Send a response message
+    async fn respond(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, resp: Response<Id, Info, Data>) -> Result<(), Error> {
+        let res = rr_mux::Connector::respond(self, ctx, req_id, target, resp).await;
+        
+        res
+    }
+}
 
 /// Generic impl of Connector over matching rr_mux::mock::MockConnector impls
-#[cfg(feature = "nope")]
-impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> 
+#[async_trait]
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_mux::mock::MockConnector<Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx>
 where 
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Send + Debug + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Ctx: Clone + PartialEq + Debug + Send + 'static,
-{}
+    Ctx: Clone + PartialEq + Debug + Sync + Send + 'static,
+{
+    async fn request(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, req: Request<Id, Data>) -> Result<(Response<Id, Info, Data>, Ctx), Error> {
+        let res = rr_mux::Connector::request(self, ctx, req_id, target, req).await;
+
+        res
+    }
+
+    // Send a response message
+    async fn respond(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, resp: Response<Id, Info, Data>) -> Result<(), Error> {
+        let res = rr_mux::Connector::respond(self, ctx, req_id, target, resp).await;
+        
+        res
+    }
+
+}
 
 
 /// Send a request to a slice of nodes and collect the responses.

@@ -20,8 +20,6 @@ extern crate rand;
 
 extern crate humantime;
 
-extern crate rr_mux;
-
 pub mod common;
 use crate::common::*;
 

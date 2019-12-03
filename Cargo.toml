@@ -18,12 +18,9 @@ rand = "0.5.5"
 async-trait = "0.1.19"
 tracing = "0.1.10"
 
-rr-mux = "0.7.1"
+rr-mux = "0.8.0"
 humantime = "1.2.0"
 
 [dependencies.log]
 version = "0.4.6"
 features = ["max_level_debug"]
-
-[patch.crates-io]
-rr-mux = { path = "../rr-mux" }

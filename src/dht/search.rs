@@ -241,6 +241,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::clone::Clone;
+    use futures::executor::block_on;
 
     use super::*;
     use crate::table::{NodeTable, KNodeTable};
@@ -279,7 +280,7 @@ mod tests {
         let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
 
         // Seed search with known nearest nodes
-        self.seed(&nodes[0..2]);
+        s.seed(&nodes[0..2]);
         {
             // This should add the nearest nodes to the known map
             assert!(s.known.get(nodes[0].id()).is_some());
@@ -291,7 +292,7 @@ mod tests {
         }
         
         // Perform first iteration
-        s = self.recurse().wait().unwrap();
+        block_on( s.recurse() ).unwrap();
         {
             // Responding nodes should be added to the node table
             let t = table.clone();
@@ -303,7 +304,7 @@ mod tests {
         }
 
         // Perform second iteration
-        s = self.recurse().wait().unwrap();
+        block_on( s.recurse() ).unwrap();
         {
             // Responding nodes should be added to the node table
             let t = table.clone();

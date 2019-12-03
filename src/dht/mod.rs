@@ -372,6 +372,9 @@ mod tests {
     use std::clone::Clone;
     use std::time::Duration;
 
+    extern crate futures;
+    use futures::executor::block_on;
+
     use super::*;
     use crate::store::{HashMapStore, Datastore};
     use crate::table::{NodeTable, KNodeTable};
@@ -527,7 +530,7 @@ mod tests {
         dht.table.create_or_update(&n2);
 
         // No timed out nodes
-        dht.refresh(()).wait().unwrap();
+        block_on( dht.refresh(()) ).unwrap();
         connector.finalise();
 
         std::thread::sleep(config.node_timeout * 2);
@@ -537,7 +540,7 @@ mod tests {
             Mt::request(n1.clone(), Request::Ping, Ok((Response::NoResult, ()))),
             Mt::request(n2.clone(), Request::Ping, Ok((Response::NoResult, ()))),
         ]);
-        dht.refresh(()).wait().unwrap();
+        block_on( dht.refresh(()) ).unwrap();
 
         assert!(dht.table.contains(n1.id()).is_some());
         assert!(dht.table.contains(n2.id()).is_some());
@@ -551,7 +554,7 @@ mod tests {
             Mt::request(n1.clone(), Request::Ping, Ok((Response::NoResult, ()))),
             Mt::request(n2.clone(), Request::Ping, Err(Error::Timeout) ),
         ]);
-        dht.refresh(()).wait().unwrap();
+        block_on( dht.refresh(()) ).unwrap();
 
         assert!(dht.table.contains(n1.id()).is_some());
         assert!(dht.table.contains(n2.id()).is_none());

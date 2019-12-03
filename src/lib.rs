@@ -103,7 +103,8 @@ where
 #[cfg(test)]
 mod tests {
     use std::clone::Clone;
-    use futures::{Future};
+    use futures::prelude::*;
+    use futures::executor::block_on;
 
     use super::*;
 
@@ -158,7 +159,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping
-        dht.connect(n2.clone(), ()).wait().unwrap();
+        block_on( dht.connect(n2.clone(), ()) ).unwrap();
 
         // Check bootstrapped node is added to db
         assert_eq!(Some(n2.clone()), dht.contains(n2.id()));
@@ -207,7 +208,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform search
-        dht.lookup(n4.id().clone(), ()).wait().expect("lookup failed");
+        block_on( dht.lookup(n4.id().clone(), ()) ).expect("lookup failed");
 
         connector.finalise();
     }
@@ -255,7 +256,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform store
-        dht.store(id, val, ()).wait().expect("store failed");
+        block_on( dht.store(id, val, ()) ).expect("store failed");
 
         connector.finalise();
     }
@@ -300,7 +301,7 @@ mod tests {
                 config, knodetable, connector.clone(), store);
 
         // Perform store
-        dht.find(id, ()).wait().expect("find failed");
+        block_on( dht.find(id, ()) ).expect("find failed");
 
         connector.finalise();
     }

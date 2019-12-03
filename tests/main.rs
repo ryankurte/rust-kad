@@ -22,7 +22,7 @@ use kad::connector::Connector;
 
 extern crate futures;
 use futures::prelude::*;
-use futures::future;
+use futures::executor::block_on;
 
 extern crate async_trait;
 use async_trait::async_trait;
@@ -39,7 +39,7 @@ struct MockNetwork <Id: Debug, Info, Data: Debug> {
 
 impl <Id, Info, Data> MockNetwork < Id, Info, Data> 
 where
-    Id: DatabaseId + Debug + 'static,
+    Id: DatabaseId + Debug + Send + 'static,
     Info: Debug + Clone + PartialEq + Send + 'static,
     Data: Debug + Clone + PartialEq + Send + 'static,
     
@@ -75,9 +75,9 @@ struct MockConnector<Id: Debug, Info, Data: Debug, ReqId, Ctx> {
 
 impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx> 
 where
-    Id: DatabaseId + Debug + Send + Sync + 'static,
-    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
-    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Id: DatabaseId + Debug + Send + 'static,
+    Info: Debug + Clone + PartialEq + Send + 'static,
+    Data: Debug + Clone + PartialEq + Send + 'static,
     
 {
     pub fn new( id: Id, addr: Info, peers: Arc<Mutex<PeerMap<Id, Info, Data>>>) -> Self {
@@ -88,11 +88,11 @@ where
 #[async_trait]
 impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
-    ReqId: Debug + Send + Sync + 'static,
-    Id: DatabaseId + Debug + Send + Sync + 'static,
-    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
-    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
-    Ctx: Debug + Clone + Send + Sync + 'static,
+    ReqId: Debug + Send + 'static,
+    Id: DatabaseId + Debug + Send + 'static,
+    Info: Debug + Clone + PartialEq + Send + 'static,
+    Data: Debug + Clone + PartialEq + Send + 'static,
+    Ctx: Debug + Clone + Send + 'static,
 {
     async fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
             Result<(Response<Id, Info, Data>, Ctx), Error> {
@@ -138,7 +138,7 @@ fn integration() {
     for n in nodes.iter().skip(1) {
         let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-        peer.connect(n0.clone(), ()).wait().expect("Error connecting to network");
+        block_on( peer.connect(n0.clone(), ()) ).expect("Error connecting to network");
 
         mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
     }
@@ -153,7 +153,7 @@ fn integration() {
             
             let mut peer = { mgr.peers.lock().unwrap().remove(n1.id()).unwrap() };
 
-            let _node = peer.lookup(n2.id().clone(), ()).wait().expect("Error finding node in network");
+            let _node = block_on( peer.lookup(n2.id().clone(), ()) ).expect("Error finding node in network");
 
             mgr.peers.lock().unwrap().insert(n1.id().clone(), peer);
         }
@@ -165,7 +165,7 @@ fn integration() {
     {
         let mut peer = { mgr.peers.lock().unwrap().remove(n0.id()).unwrap() };
 
-        let _res = peer.store(addr, val, ()).wait().expect("Error storing value");
+        let _res = block_on( peer.store(addr, val, ()) ).expect("Error storing value");
 
         mgr.peers.lock().unwrap().insert(n0.id().clone(), peer);
     }
@@ -176,7 +176,7 @@ fn integration() {
             
         let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-        let val = peer.find(addr, ()).wait().expect("Error finding values");
+        let val = block_on( peer.find(addr, ()) ).expect("Error finding values");
         assert!(val.len() > 0);
 
         mgr.peers.lock().unwrap().insert(n.id().clone(), peer);

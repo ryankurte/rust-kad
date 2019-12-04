@@ -33,8 +33,8 @@ pub trait Connector<Id, Info, Data, ReqId, Ctx>: Sync + Send {
 impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for (dyn rr_mux::Connector<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx> + Send + Sync)
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: PartialEq + Clone + Send + Debug + 'static,
+    Info: PartialEq + Clone + Debug + Sync + Send + 'static,
+    Data: PartialEq + Clone + Debug + Sync + Send + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 {
@@ -50,6 +50,30 @@ where
         
         res
     }
+}
+
+#[async_trait]
+impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for rr_mux::mux::Mux<ReqId, Entry<Id, Info>, Request<Id, Data>, Response<Id, Info, Data>, Error, Ctx>
+where 
+    Id: DatabaseId + Clone + Send + 'static,
+    Info: PartialEq + Clone + Debug + Sync + Send + 'static,
+    Data: PartialEq + Clone + Debug + Sync + Send + 'static,
+    ReqId: RequestId + Clone + Send + 'static,
+    Ctx: Clone + PartialEq + Debug + Sync + Send + 'static,
+{
+    async fn request(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, req: Request<Id, Data>) -> Result<(Response<Id, Info, Data>, Ctx), Error> {
+        let res = rr_mux::Connector::request(self, ctx, req_id, target, req).await;
+
+        res
+    }
+
+    // Send a response message
+    async fn respond(&mut self, ctx: Ctx, req_id: ReqId, target: Entry<Id, Info>, resp: Response<Id, Info, Data>) -> Result<(), Error> {
+        let res = rr_mux::Connector::respond(self, ctx, req_id, target, resp).await;
+        
+        res
+    }
+
 }
 
 /// Generic impl of Connector over matching rr_mux::mock::MockConnector impls

@@ -37,6 +37,8 @@ pub use connector::Connector;
 
 pub mod prelude;
 
+pub mod mock;
+
 /// DHT Configuration object
 #[derive(PartialEq, Clone, Debug, StructOpt)]
 pub struct Config {
@@ -109,14 +111,15 @@ mod tests {
 
     use crate::table::{NodeTable, KNodeTable};
     use crate::store::{HashMapStore};
-    
+    use crate::mock::MockSync;
+
     use rr_mux::Mux;
     use rr_mux::mock::{MockTransaction, MockConnector};
 
     type RequestId = u64;
     type NodeId = [u8; 1];
-    type Info = u64;
-    type Data = u64;
+    type Info = MockSync;
+    type Data = MockSync;
 
 
     #[test]
@@ -125,16 +128,16 @@ mod tests {
         let dht_mux = Mux::<RequestId, Entry<NodeId, Info>, Request<NodeId, Data>, Response<NodeId, Info, Data>, Error, ()>::new();
 
         // Bind it to the DHT instance
-        let n1 = Entry::new([0b0001], 100);
+        let n1 = Entry::new([0b0001], MockSync::new(100));
         let _dht = Dht::<NodeId, Info, Data, RequestId, _, _, _, _>::standard(n1.id().clone(), Config::default(), dht_mux);
     }
 
     #[test]
     fn test_connect() {
-        let n1 = Entry::new([0b0001], 100);
-        let n2 = Entry::new([0b0010], 200);
-        let n3 = Entry::new([0b0011], 300);
-        let n4 = Entry::new([0b1000], 400);
+        let n1 = Entry::new([0b0001], MockSync::new(100));
+        let n2 = Entry::new([0b0010], MockSync::new(200));
+        let n3 = Entry::new([0b0011], MockSync::new(300));
+        let n4 = Entry::new([0b1000], MockSync::new(400));
 
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
@@ -153,8 +156,8 @@ mod tests {
         let knodetable = KNodeTable::new(n1.id().clone(), 2, 4);
         
         // Instantiated DHT
-        let store: HashMapStore<NodeId, u64> = HashMapStore::new();
-        let mut dht = Dht::<NodeId, u64, _, u64, _, _, _, _>::new(n1.id().clone(), 
+        let store: HashMapStore<NodeId, MockSync> = HashMapStore::new();
+        let mut dht = Dht::<NodeId, MockSync, _, u64, _, _, _, _>::new(n1.id().clone(), 
                 config, knodetable, connector.clone(), store);
     
         // Attempt initial bootstrapping

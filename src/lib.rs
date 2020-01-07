@@ -57,7 +57,7 @@ pub struct Config {
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
-    #[structopt(long = "dht-node-timeout", parse(try_from_str = "parse_duration"))]
+    #[structopt(long = "dht-node-timeout", parse(try_from_str = parse_duration))]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
 }

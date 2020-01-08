@@ -9,6 +9,6 @@ pub use crate::common::{Error as DhtError};
 
 pub use crate::common::{Request as DhtRequest, Response as DhtResponse};
 
-
-
+pub use crate::store::HashMapStore;
+pub use crate::table::KNodeTable;
 

@@ -14,7 +14,7 @@ use num::Zero;
 use num::bigint::{BigUint};
 
 /// Id trait must be implemented for viable id types
-pub trait DatabaseId: Hash + Default + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
+pub trait DatabaseId: Hash + Default + PartialEq + Eq + Ord + Clone + Send + Debug {
     /// Exclusive or two IDs to calculate distance
     fn xor(a: &Self, b: &Self) -> Self;
     /// Calculate number of bits to express a given ID
@@ -74,7 +74,7 @@ where
     }
 }
 
-pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Sync + Debug {
+pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Debug {
     fn generate() -> Self;
 }
 

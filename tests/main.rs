@@ -27,7 +27,6 @@ use futures::executor::block_on;
 extern crate async_trait;
 use async_trait::async_trait;
 
-extern crate rr_mux;
 
 type MockPeer<Id, Info, Data> = Dht<Id, Info, Data, u64, MockConnector<Id, Info, Data, u64, ()>, KNodeTable<Id, Info>, HashMapStore<Id, Data>, ()>;
 
@@ -39,9 +38,9 @@ struct MockNetwork <Id: Debug, Info, Data: Debug> {
 
 impl <Id, Info, Data> MockNetwork < Id, Info, Data> 
 where
-    Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Sync + Send + 'static,
-    Data: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Id: DatabaseId + Debug + Send + Sync + 'static,
+    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
     
 {
     pub fn new(config: Config, nodes: &[Entry<Id, Info>]) -> MockNetwork<Id, Info,Data> {
@@ -76,8 +75,8 @@ struct MockConnector<Id: Debug, Info, Data: Debug, ReqId, Ctx> {
 impl <Id, Info, Data, ReqId, Ctx> MockConnector <Id, Info, Data, ReqId, Ctx> 
 where
     Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Sync + Send + 'static,
-    Data: Debug + Clone + PartialEq + Sync + Send + 'static,
+    Info: Debug + Clone + PartialEq + Send + 'static,
+    Data: Debug + Clone + PartialEq + Send + 'static,
     Ctx: Debug + Clone + Send + 'static,
     
 {
@@ -89,25 +88,29 @@ where
 #[async_trait]
 impl <Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx> for MockConnector <Id, Info, Data, ReqId, Ctx>
 where
-    ReqId: Debug + Sync + Send + 'static,
-    Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Sync + Send + 'static,
-    Data: Debug + Clone + PartialEq + Sync + Send + 'static,
-    Ctx: Debug + Clone + Sync + Send + 'static,
+    ReqId: Debug + Send + Sync + 'static,
+    Id: DatabaseId + Debug + Send + Sync + 'static,
+    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
+    Ctx: Debug + Clone + Send + Sync + 'static,
 {
     async fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
-            Result<(Response<Id, Info, Data>, Ctx), Error> {
+            Result<Response<Id, Info, Data>, Error> {
+
+        let peers = self.peers.clone();
+        let id = self.id.clone();
+        let addr = self.addr.clone();
 
         // Fetch peer instance
-        let mut peer = { self.peers.lock().unwrap().remove(to.id()).unwrap() };
-
+        let mut peer = { peers.lock().unwrap().remove(to.id()).unwrap() };
+        
         // Update peer with request
-        let resp = peer.handle(&Entry::new(self.id.clone(), self.addr.clone()), &req).unwrap();
+        let resp = peer.handle(&Entry::new(id, addr), &req).unwrap();
 
         // Re-insert peer into database
-        self.peers.lock().unwrap().insert(to.id().clone(), peer);
+        peers.lock().unwrap().insert(to.id().clone(), peer);
 
-        Ok((resp, ctx))
+        Ok(resp)
     }
 
     async fn respond(&mut self, _ctx: Ctx, _req_id: ReqId, _to: Entry<Id, Info>, _resp: Response<Id, Info, Data>) -> Result<(), Error> {

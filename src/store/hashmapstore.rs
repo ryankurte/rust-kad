@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::fmt;
+use std::fmt::{self, Debug};
 use std::sync::{Arc, Mutex};
 
 
@@ -11,7 +11,7 @@ use crate::store::Datastore;
 pub type Reducer<Data> = dyn Fn(&[Data]) -> Vec<Data> + Send + 'static;
 
 #[derive(Clone)]
-pub struct HashMapStore<Id: fmt::Debug, Data: fmt::Debug> {
+pub struct HashMapStore<Id: Debug, Data: Debug> {
     data: Arc<Mutex<HashMap<Id, Vec<Data>>>>,
     reducer: Option<Arc<Mutex<Box<Reducer<Data>>>>>,
 }
@@ -24,8 +24,8 @@ pub struct DataEntry<Data, Meta> {
 
 impl <Id, Data> HashMapStore<Id, Data>
 where
-    Id: DatabaseId + fmt::Debug,
-    Data: PartialEq + Clone + fmt::Debug,
+    Id: DatabaseId + Debug,
+    Data: PartialEq + Clone + Debug,
 {
     /// Create a new HashMapStore without a reducer
     pub fn new() -> HashMapStore<Id, Data> {
@@ -44,10 +44,10 @@ where
     }
 }
 
-impl <Id, Data> fmt::Debug for HashMapStore<Id, Data> 
+impl <Id, Data> Debug for HashMapStore<Id, Data> 
 where 
-    Id: DatabaseId + fmt::Debug,
-    Data: PartialEq + Clone + fmt::Debug,
+    Id: DatabaseId + Debug,
+    Data: PartialEq + Clone + Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let data = self.data.lock().unwrap();
@@ -58,7 +58,7 @@ where
 impl <Id, Data> Datastore<Id, Data> for HashMapStore<Id, Data>
 where
     Id: DatabaseId,
-    Data: PartialEq + Clone + fmt::Debug,
+    Data: PartialEq + Clone + Debug,
 {
     
     fn find(&self, id: &Id) -> Option<Vec<Data>> {

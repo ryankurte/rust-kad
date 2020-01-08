@@ -60,11 +60,11 @@ impl <Id, Info, Data, Table, Conn, ReqId, Ctx> Search <Id, Info, Data, Table, Co
 where
     Id: DatabaseId + Default + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: PartialEq + Clone + Send + Debug + 'static,
-    Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
+    Data: PartialEq + Clone + Debug + Send + 'static,
+    Table: NodeTable<Id, Info> + Clone + Send + 'static,
     ReqId: RequestId + Clone + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Send + Clone + 'static,
+    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Clone + Send + 'static,
 {
     pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
         -> Search<Id, Info,Data, Table, Conn, ReqId, Ctx> {
@@ -185,11 +185,14 @@ where
         };
 
         // Send requests and handle responses
-        let res = request_all(self.conn.clone(), self.ctx.clone(), &req, chunk).await?;
+        let conn = self.conn.clone();
+        let ctx = self.ctx.clone();
+
+        let res = request_all(conn, ctx, &req, chunk).await?;
 
         for (resp_entry, resp_msg) in &res {
             // Handle received responses
-            if let Some((resp, _ctx)) = resp_msg {
+            if let Some(resp) = resp_msg {
                 match resp {
                     Response::NodesFound(id, entries) => {
                         // Ignore invalid response IDs

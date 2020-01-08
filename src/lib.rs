@@ -86,10 +86,10 @@ pub type StandardDht<Id, Info, Data, ReqId, Conn, Ctx> = Dht<Id, Info, Data, Req
 impl <Id, Info, Data, ReqId, Conn, Ctx> StandardDht<Id, Info, Data, ReqId, Conn, Ctx> 
 where 
     Id: DatabaseId + Clone + Send + 'static,
-    Info: PartialEq + Clone + Debug + Sync + Send + 'static,
-    Data: PartialEq + Clone + Debug + Sync + Send + 'static,
+    Info: PartialEq + Clone + Debug + Send + 'static,
+    Data: PartialEq + Clone + Debug + Send + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Sync + Send + Clone + 'static,
+    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Send + Clone + 'static,
     Ctx: Clone + PartialEq + Debug + Send + 'static,
 
 {

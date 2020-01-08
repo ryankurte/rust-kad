@@ -45,12 +45,12 @@ pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
 impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
 where 
     Id: DatabaseId + Clone + Sized + Send + 'static,
-    Info: PartialEq + Clone + Sized +  Send + Debug+ 'static,
-    Data: PartialEq + Clone + Sized + Send + Debug + 'static,
-    ReqId: RequestId + Clone + Sized + Send + 'static,
+    Info: PartialEq + Clone + Sized  + Debug+ Send + 'static,
+    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
+    ReqId: RequestId + Clone + Sized + Debug + Send + 'static,
     Conn: Connector<Id, Info, Data, ReqId, Ctx> + Clone + Send + 'static,
-    Table: NodeTable<Id, Info> + Clone + Sync + Send + 'static,
-    Store: Datastore<Id, Data> + Clone + Sync + Send + 'static,
+    Table: NodeTable<Id, Info> + Clone + Send + 'static,
+    Store: Datastore<Id, Data> + Clone + Send + 'static,
     Ctx: Clone + Debug + PartialEq + Send + 'static,
 {
     /// Create a new generic DHT
@@ -83,7 +83,7 @@ where
         // Launch request
         let mut conn = self.conn_mgr.clone();
 
-        let (resp, _ctx) = conn.request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone())).await?;
+        let resp = conn.request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone())).await?;
 
         s.handle_connect_response(target, resp, ctx).await
     }
@@ -266,7 +266,7 @@ where
             let p = async move {
                 let res = conn.request(ctx_, ReqId::generate(), o.clone(), Request::Ping).await;
                 match res {
-                    Ok((_resp, _ctx)) => {
+                    Ok(_resp) => {
                         debug!("[DHT refresh] updating node: {:?}", o);
                         o.set_seen(Instant::now());
                         t.create_or_update(&o);

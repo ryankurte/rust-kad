@@ -1,6 +1,6 @@
 
 pub use crate::{dht::Dht, StandardDht, Config as DhtConfig};
-pub use crate::connector::{Mux as DhtMux, Connector as DhtConnector};
+pub use crate::connector::{Connector as DhtConnector};
 pub use crate::dht::{Search as DhtSearch, Operation as DhtOperation};
 
 pub use crate::common::{DatabaseId as DhtDatabaseId, RequestId as DhtRequestId};

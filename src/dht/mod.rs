@@ -358,7 +358,7 @@ where
         mock_dht!($connector, $root, $dht, config);
     };
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
-        let table = KNodeTable::new($root.id().clone(), $config.k, $config.hash_size);
+        let table = KNodeTable::new($root.id().clone(), $config.k, $root.id().max_bits());
         
         let store: HashMapStore<[u8; 1], u64> = HashMapStore::new();
         

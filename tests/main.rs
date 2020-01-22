@@ -49,7 +49,7 @@ where
         for n in nodes {
             let config = config.clone();
 
-            let table = KNodeTable::<Id, Info>::new(n.id().clone(), config.k, config.hash_size);
+            let table = KNodeTable::<Id, Info>::new(n.id().clone(), config.k, n.id().max_bits());
             let store = HashMapStore::<Id, Data>::new();
 
             let conn = MockConnector::new(n.id().clone(), n.info().clone(), m.peers.clone());
@@ -125,7 +125,6 @@ fn integration() {
     // Setup config
     let mut config = Config::default();
     config.k = 2;
-    config.hash_size = 8;
 
     // Build basic nodes
     let mut nodes = Vec::new();

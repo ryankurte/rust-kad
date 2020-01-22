@@ -21,6 +21,9 @@ pub trait DatabaseId: Hash + Default + PartialEq + Eq + Ord + Clone + Send + Deb
     fn bits(&self) -> usize;
     /// Check if a hash is zero
     fn is_zero(&self) -> bool;
+
+    /// Bit length of the ID type
+    fn max_bits(&self) -> usize;
 }
 
 /// DatabaseId implementation for u64
@@ -37,6 +40,10 @@ impl DatabaseId for u64 {
 
     fn is_zero(&self) -> bool {
         Zero::is_zero(self)
+    }
+
+    fn max_bits(&self) -> usize {
+        64
     }
 }
 
@@ -71,6 +78,10 @@ where
     fn is_zero(&self) -> bool {
         let a = BigUint::from_bytes_le(self.as_ref());
         Zero::is_zero(&a)
+    }
+
+    fn max_bits(&self) -> usize {
+        self.as_ref().len() * 8
     }
 }
 

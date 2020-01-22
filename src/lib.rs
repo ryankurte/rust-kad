@@ -42,22 +42,19 @@ pub mod mock;
 /// DHT Configuration object
 #[derive(PartialEq, Clone, Debug, StructOpt)]
 pub struct Config {
-    /// Length of the hash used (in bits) 
-    pub hash_size: usize,
-
-    #[structopt(long = "dht-bucket-size")]
+    #[structopt(long = "dht-bucket-size", default_value = "20")]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
 
-    #[structopt(long = "dht-concurrency")]
+    #[structopt(long = "dht-concurrency", default_value = "4")]
     /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
     
-    #[structopt(long = "dht-recursion-limit")]
+    #[structopt(long = "dht-recursion-limit", default_value = "10")]
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
-    #[structopt(long = "dht-node-timeout", parse(try_from_str = parse_duration))]
+    #[structopt(long = "dht-node-timeout", parse(try_from_str = parse_duration), default_value = "15m")]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
 }
@@ -71,9 +68,8 @@ fn parse_duration(s: &str) -> Result<Duration, humantime::DurationError> {
 impl Default for Config {
     fn default() -> Config {
             Config {
-                hash_size: 512, 
                 k: 20, 
-                concurrency: 3,
+                concurrency: 4,
                 max_recursion: 10,
                 node_timeout: Duration::from_secs(15 * 60 * 60),
             }
@@ -95,7 +91,7 @@ where
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
     pub fn standard(id: Id, config: Config, conn: Conn) -> StandardDht<Id, Info,Data, ReqId, Conn, Ctx> {
-        let table = KNodeTable::new(id.clone(), config.k, config.hash_size);
+        let table = KNodeTable::new(id.clone(), config.k, id.max_bits());
         let store = HashMapStore::new();
         Dht::new(id, config, table, conn, store)
     }

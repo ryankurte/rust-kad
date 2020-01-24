@@ -94,7 +94,7 @@ where
     Data: Debug + Clone + PartialEq + Send + Sync + 'static,
     Ctx: Debug + Clone + Send + Sync + 'static,
 {
-    async fn request(&mut self, ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
+    async fn request(&mut self, _ctx: Ctx, _req_id: ReqId, to: Entry<Id, Info>, req: Request<Id, Data>) -> 
             Result<Response<Id, Info, Data>, Error> {
 
         let peers = self.peers.clone();

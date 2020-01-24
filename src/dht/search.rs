@@ -12,8 +12,6 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::marker::PhantomData;
 
-use futures::prelude::*;
-
 use crate::Config;
 use crate::common::*;
 
@@ -122,7 +120,7 @@ where
             let pending = self.pending().len();
             
             if pending == 0 {
-                let mut table = self.table.clone();
+                let table = self.table.clone();
                 let nearest: Vec<_> = table.nearest(self.target(), 0..concurrency*2);
                 self.seed(&nearest);
             }

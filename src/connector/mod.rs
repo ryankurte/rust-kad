@@ -1,7 +1,6 @@
 
 use std::fmt::Debug;
 
-use futures::prelude::*;
 use futures::future::join_all;
 use async_trait::async_trait;
 
@@ -45,7 +44,7 @@ where
             trace!("Response: '{:?}' from: '{:?}'", v, n1.id());
             match v {
                 Ok(v) => (n1, Some(v)),
-                Err(e) => (n1, None),
+                Err(_e) => (n1, None),
             }
         };
 

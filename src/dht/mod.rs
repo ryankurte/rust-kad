@@ -12,7 +12,6 @@ use std::fmt::{Debug};
 use std::time::Instant;
 use std::ops::Add;
 
-use futures::prelude::*;
 use futures::{future};
 
 use crate::{Config};
@@ -143,7 +142,7 @@ where
         let r = search.execute().await;
         
         // Handle internal search errors
-        let s = match r {
+        let _s = match r {
             Err(e) => return Err(e),
             Ok(s) => s,
         };
@@ -177,7 +176,7 @@ where
         let r = search.execute().await;
 
         // Handle internal search errors
-        let s = match r {
+        let _s = match r {
             Err(e) => return Err(e),
             Ok(s) => s,
         };
@@ -222,7 +221,7 @@ where
         let k = self.config.k;
 
         // Search for K closest nodes to value
-        let r = search.execute().await?;
+        let _r = search.execute().await?;
 
         // Send store request to found nodes
         let known = search.completed(0..k);

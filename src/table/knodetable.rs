@@ -64,10 +64,11 @@ where
         index
     }
 
+    #[allow(dead_code)]
     fn update_buckets(&self) {
-        let buckets = self.buckets.lock().unwrap();
+        let _buckets = self.buckets.lock().unwrap();
 
-
+        unimplemented!()
     }
 }
 

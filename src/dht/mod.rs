@@ -90,7 +90,7 @@ where
     /// Handle the response to an initial FindNodes request.
     /// This is used to bootstrap a connection where the `.connect` method is unsuitable.
     pub async fn handle_connect_response(&mut self, target: Entry<Id, Info>, resp: Response<Id, Info, Data>, ctx: Ctx) -> Result<Vec<Entry<Id, Info>>, Error> {
-        let (id, found) = match resp {
+        let (id, mut found) = match resp {
             Response::NodesFound(id, nodes) => (id, nodes),
             Response::NoResult => {
                 warn!("[DHT connect] Received NoResult response from {:?}", target.id());
@@ -106,6 +106,10 @@ where
         if id != self.id {
             return Err(Error::InvalidResponseId)
         }
+
+        // Filter self from response
+        let our_id = self.id.clone();
+        let found: Vec<_> = found.drain(..).filter(|e| e.id() != &our_id).collect();
 
         // Add responding target to table
         // This only occurs after a response as there's no point adding a non-responding
@@ -301,8 +305,10 @@ where
             Request::FindValue(id) => {
                 // Lockup the value
                 if let Some(values) = self.datastore.find(id) {
+                    debug!("Found {} values for id: {:?}", values.len(), id);
                     Response::ValuesFound(id.clone(), values)
                 } else {
+                    debug!("No values found, returning closer nodes for id: {:?}", id);
                     let nodes = self.table.nearest(id, 0..self.config.k);
                     Response::NodesFound(id.clone(), nodes)
                 }                
@@ -312,8 +318,10 @@ where
                 let values = self.datastore.store(id, value);
                 // Reply to confirm write was completed
                 if values.len() != 0 {
+                    debug!("Stored {} values for id: {:?}", values.len(), id);
                     Response::ValuesFound(id.clone(), values)
                 } else {
+                    debug!("Ignored values for id: {:?}", id);
                     Response::NoResult
                 }
             },

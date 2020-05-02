@@ -165,6 +165,8 @@ where
     pub async fn find(&mut self, target: Id, ctx: Ctx) -> Result<Vec<Data>, Error> {
         let mut existing = self.datastore.find(&target);
 
+        warn!("Existing data: {:?}", existing);
+
         // Create a search instance
         let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
 
@@ -185,11 +187,8 @@ where
             Ok(s) => s,
         };
 
-        // Return data if found
+        // Retrieve search data
         let data = search.data();
-        if data.len() == 0 {
-            return Err(Error::NotFound)
-        }
 
         // TODO: Reduce data before returning? (should be done on insertion anyway..?)
         let mut flat_data: Vec<Data> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
@@ -204,6 +203,11 @@ where
         // TODO: Send updates to any peers that returned outdated data?
 
         // TODO: forward reduced k:v pairs to closest node in map (that did not return value)
+
+        // Error out if no data found
+        if flat_data.len() == 0 {
+            return Err(Error::NotFound)
+        }
 
         Ok(flat_data)
     }

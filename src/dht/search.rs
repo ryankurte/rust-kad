@@ -6,18 +6,17 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::ops::Range;
 use std::marker::PhantomData;
+use std::ops::Range;
 
-use crate::Config;
 use crate::common::*;
+use crate::Config;
 
-use crate::table::{NodeTable};
+use crate::table::NodeTable;
 
-use crate::connector::{Connector, request_all};
+use crate::connector::{request_all, Connector};
 
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
@@ -37,7 +36,7 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search <Id, Info, Data, Table, Conn, ReqId, Ctx> {
+pub struct Search<Id, Info, Data, Table, Conn, ReqId, Ctx> {
     origin: Id,
     target: Id,
     op: Operation,
@@ -54,7 +53,7 @@ pub struct Search <Id, Info, Data, Table, Conn, ReqId, Ctx> {
 pub type KnownMap<Id, Info> = HashMap<Id, (Entry<Id, Info>, RequestState)>;
 pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
-impl <Id, Info, Data, Table, Conn, ReqId, Ctx> Search <Id, Info, Data, Table, Conn, ReqId, Ctx> 
+impl<Id, Info, Data, Table, Conn, ReqId, Ctx> Search<Id, Info, Data, Table, Conn, ReqId, Ctx>
 where
     Id: DatabaseId + Default + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
@@ -64,14 +63,33 @@ where
     Ctx: Clone + Debug + PartialEq + Send + 'static,
     Conn: Connector<Id, Info, Data, ReqId, Ctx> + Clone + Send + 'static,
 {
-    pub fn new(origin: Id, target: Id, op: Operation, config: Config, table: Table, conn: Conn, ctx: Ctx) 
-        -> Search<Id, Info,Data, Table, Conn, ReqId, Ctx> {
+    pub fn new(
+        origin: Id,
+        target: Id,
+        op: Operation,
+        config: Config,
+        table: Table,
+        conn: Conn,
+        ctx: Ctx,
+    ) -> Search<Id, Info, Data, Table, Conn, ReqId, Ctx> {
         let known = HashMap::<Id, (Entry<Id, Info>, RequestState)>::new();
         let data = HashMap::<Id, Vec<Data>>::new();
 
         let depth = config.max_recursion;
 
-        Search{origin, target, op, config, depth, known, table, data, conn, ctx, _req_id: PhantomData}
+        Search {
+            origin,
+            target,
+            op,
+            config,
+            depth,
+            known,
+            table,
+            data,
+            conn,
+            ctx,
+            _req_id: PhantomData,
+        }
     }
 
     /// Fetch a pointer to the search target Id
@@ -92,12 +110,11 @@ where
     pub async fn execute(&mut self) -> Result<(), Error> {
         // Execute recursive search
         for _i in 0..self.config.max_recursion {
-
             self.recurse().await?;
 
             let concurrency = self.config.concurrency;
             let k = self.config.k;
-            
+
             // Exit at max recursive depth
             if self.depth == 0 {
                 trace!("[search] break, reached max recursive depth");
@@ -105,12 +122,15 @@ where
             }
 
             // Exit once we've got no more pending in the first k closest known nodes
-            let mut known: Vec<_> = self.known.iter()
-                    .map(|(key, (_node, status))| (key.clone(), status.clone()) )
-                    .collect();
-            known.sort_by_key(|(key, _status)| Id::xor(self.target(), key) );
-            let pending = &known[0..usize::min(known.len(), k)].iter()
-                    .find(|(_key, status)| *status == RequestState::Pending );
+            let mut known: Vec<_> = self
+                .known
+                .iter()
+                .map(|(key, (_node, status))| (key.clone(), status.clone()))
+                .collect();
+            known.sort_by_key(|(key, _status)| Id::xor(self.target(), key));
+            let pending = &known[0..usize::min(known.len(), k)]
+                .iter()
+                .find(|(_key, status)| *status == RequestState::Pending);
             if pending.is_none() {
                 trace!("[search] break, found k closest nodes");
                 return Ok(());
@@ -118,23 +138,26 @@ where
 
             // If no nodes are pending, add another set of nearest nodes
             let pending = self.pending().len();
-            
+
             if pending == 0 {
                 let table = self.table.clone();
-                let nearest: Vec<_> = table.nearest(self.target(), 0..concurrency*2);
+                let nearest: Vec<_> = table.nearest(self.target(), 0..concurrency * 2);
                 self.seed(&nearest);
             }
         }
-        
+
         Ok(())
     }
 
     /// Fetch pending known nodes ordered by distance
     fn pending(&self) -> Vec<Entry<Id, Info>> {
-        let mut chunk: Vec<_> = self.known.iter()
-                .filter(|(k, (_n, s))| (*s == RequestState::Pending) & (*k != &self.origin) )
-                .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
+        let mut chunk: Vec<_> = self
+            .known
+            .iter()
+            .filter(|(k, (_n, s))| (*s == RequestState::Pending) & (*k != &self.origin))
+            .map(|(_k, (n, _s))| n.clone())
+            .collect();
+        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()));
         chunk
     }
 
@@ -151,10 +174,13 @@ where
     }
 
     pub(crate) fn all_completed(&self) -> Vec<Entry<Id, Info>> {
-        let mut chunk: Vec<_> = self.known.iter()
-            .filter(|(_k, (_n, s))| *s == RequestState::Complete )
-            .map(|(_k, (n, _s))| n.clone() ).collect();
-        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()) );
+        let mut chunk: Vec<_> = self
+            .known
+            .iter()
+            .filter(|(_k, (_n, s))| *s == RequestState::Complete)
+            .map(|(_k, (n, _s))| n.clone())
+            .collect();
+        chunk.sort_by_key(|n| Id::xor(&self.target, n.id()));
         chunk
     }
 
@@ -164,17 +190,22 @@ where
     ///
     /// This is intended to be called using loop_fn for recursion.
     pub(crate) async fn recurse(&mut self) -> Result<(), Error> {
-
         // Fetch a section of known nodes to process
         let pending = self.pending();
         let chunk = &pending[0..usize::min(self.config.concurrency, pending.len())];
 
-        trace!("[search] iteration {:?}/{:?} over: {:?}", 
-            self.config.max_recursion - self.depth, self.config.max_recursion, chunk);
+        trace!(
+            "[search] iteration {:?}/{:?} over: {:?}",
+            self.config.max_recursion - self.depth,
+            self.config.max_recursion,
+            chunk
+        );
 
         // Update nodes in the chunk to active state
         for target in chunk {
-            self.known.entry(target.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+            self.known
+                .entry(target.id().clone())
+                .and_modify(|(_n, s)| *s = RequestState::Active);
         }
 
         let req = match self.op {
@@ -195,7 +226,9 @@ where
                     Response::NodesFound(id, entries) => {
                         // Ignore invalid response IDs
                         if *id != self.target {
-                            self.known.entry(resp_entry.id().clone()).or_insert((resp_entry.clone(), RequestState::InvalidResponse));
+                            self.known
+                                .entry(resp_entry.id().clone())
+                                .or_insert((resp_entry.clone(), RequestState::InvalidResponse));
                             continue;
                         }
 
@@ -203,22 +236,28 @@ where
                         // TODO: check that these nodes are _closer_ than the responding entity?
                         for e in entries {
                             if e.id() != &self.origin {
-                                self.known.entry(e.id().clone()).or_insert((e.clone(), RequestState::Pending));
+                                self.known
+                                    .entry(e.id().clone())
+                                    .or_insert((e.clone(), RequestState::Pending));
                             }
                         }
-                    },
+                    }
                     Response::ValuesFound(id, values) => {
                         // Add data to data list
                         self.data.insert(id.clone(), values.clone());
-                    },
-                    Response::NoResult => { },
+                    }
+                    Response::NoResult => {}
                 }
 
                 // Update node state to completed
-                self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Complete );
+                self.known
+                    .entry(resp_entry.id().clone())
+                    .and_modify(|(_n, s)| *s = RequestState::Complete);
             } else {
                 // Update node state to timed out
-                self.known.entry(resp_entry.id().clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                self.known
+                    .entry(resp_entry.id().clone())
+                    .and_modify(|(_n, s)| *s = RequestState::Timeout);
             }
 
             // Update node table
@@ -233,21 +272,22 @@ where
     /// Seed the search with nearest nodes in addition to those provided in initialisation
     pub fn seed(&mut self, known: &[Entry<Id, Info>]) {
         for n in known {
-            self.known.entry(n.id().clone()).or_insert((n.clone(), RequestState::Pending));
+            self.known
+                .entry(n.id().clone())
+                .or_insert((n.clone(), RequestState::Pending));
         }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::clone::Clone;
     use futures::executor::block_on;
+    use std::clone::Clone;
 
     use super::*;
-    use crate::table::{NodeTable, KNodeTable};
+    use crate::table::{KNodeTable, NodeTable};
 
-    use rr_mux::mock::{MockTransaction, MockConnector};
+    use rr_mux::mock::{MockConnector, MockTransaction};
 
     #[test]
     fn test_search_nodes() {
@@ -265,12 +305,39 @@ mod tests {
         // Build expectations
         let mut connector = MockConnector::new().expect(vec![
             // First execution
-            MockTransaction::request(nodes[1].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(target.id().clone(), vec![nodes[3].clone()]), () ))),
-            MockTransaction::request(nodes[0].clone(), Request::FindNode(target.id().clone()), Ok((Response::NodesFound(target.id().clone(), vec![nodes[2].clone()]), () ))),
-            
+            MockTransaction::request(
+                nodes[1].clone(),
+                Request::FindNode(target.id().clone()),
+                Ok((
+                    Response::NodesFound(target.id().clone(), vec![nodes[3].clone()]),
+                    (),
+                )),
+            ),
+            MockTransaction::request(
+                nodes[0].clone(),
+                Request::FindNode(target.id().clone()),
+                Ok((
+                    Response::NodesFound(target.id().clone(), vec![nodes[2].clone()]),
+                    (),
+                )),
+            ),
             // Second execution
-            MockTransaction::request(nodes[2].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(target.id().clone(), vec![target.clone()]), () ))),
-            MockTransaction::request(nodes[3].clone(), Request::FindNode(target.id().clone()), Ok(( Response::NodesFound(target.id().clone(), vec![nodes[4].clone()]), () ))), 
+            MockTransaction::request(
+                nodes[2].clone(),
+                Request::FindNode(target.id().clone()),
+                Ok((
+                    Response::NodesFound(target.id().clone(), vec![target.clone()]),
+                    (),
+                )),
+            ),
+            MockTransaction::request(
+                nodes[3].clone(),
+                Request::FindNode(target.id().clone()),
+                Ok((
+                    Response::NodesFound(target.id().clone(), vec![nodes[4].clone()]),
+                    (),
+                )),
+            ),
         ]);
 
         // Create search object
@@ -278,7 +345,15 @@ mod tests {
         config.k = 2;
 
         let table = KNodeTable::new(root.id().clone(), 2, 8);
-        let mut s = Search::<_, _, u64, _, _, u64, _>::new(root.id().clone(), target.id().clone(), Operation::FindNode, config, table.clone(), connector.clone(), ());
+        let mut s = Search::<_, _, u64, _, _, u64, _>::new(
+            root.id().clone(),
+            target.id().clone(),
+            Operation::FindNode,
+            config,
+            table.clone(),
+            connector.clone(),
+            (),
+        );
 
         // Seed search with known nearest nodes
         s.seed(&nodes[0..2]);
@@ -291,9 +366,9 @@ mod tests {
             assert!(t.contains(nodes[0].id()).is_none());
             assert!(t.contains(nodes[1].id()).is_none());
         }
-        
+
         // Perform first iteration
-        block_on( s.recurse() ).unwrap();
+        block_on(s.recurse()).unwrap();
         {
             // Responding nodes should be added to the node table
             let t = table.clone();
@@ -305,7 +380,7 @@ mod tests {
         }
 
         // Perform second iteration
-        block_on( s.recurse() ).unwrap();
+        block_on(s.recurse()).unwrap();
         {
             // Responding nodes should be added to the node table
             let t = table.clone();

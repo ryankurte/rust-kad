@@ -1,9 +1,7 @@
-
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::{Arc, Mutex};
-
 
 use crate::common::DatabaseId;
 use crate::store::Datastore;
@@ -22,19 +20,25 @@ pub struct DataEntry<Data, Meta> {
     meta: Meta,
 }
 
-impl <Id, Data> HashMapStore<Id, Data>
+impl<Id, Data> HashMapStore<Id, Data>
 where
     Id: DatabaseId + Debug,
     Data: PartialEq + Clone + Debug,
 {
     /// Create a new HashMapStore without a reducer
     pub fn new() -> HashMapStore<Id, Data> {
-        HashMapStore{ data: Arc::new(Mutex::new(HashMap::new())), reducer: None }
+        HashMapStore {
+            data: Arc::new(Mutex::new(HashMap::new())),
+            reducer: None,
+        }
     }
 
     /// Create a new HashMapStore with the provided reducer
     pub fn new_with_reducer(reducer: Box<Reducer<Data>>) -> HashMapStore<Id, Data> {
-        HashMapStore{ data: Arc::new(Mutex::new(HashMap::new())), reducer: Some(Arc::new(Mutex::new(reducer))) }
+        HashMapStore {
+            data: Arc::new(Mutex::new(HashMap::new())),
+            reducer: Some(Arc::new(Mutex::new(reducer))),
+        }
     }
 
     /// Dump all data in the store
@@ -44,8 +48,8 @@ where
     }
 }
 
-impl <Id, Data> Debug for HashMapStore<Id, Data> 
-where 
+impl<Id, Data> Debug for HashMapStore<Id, Data>
+where
     Id: DatabaseId + Debug,
     Data: PartialEq + Clone + Debug,
 {
@@ -55,20 +59,19 @@ where
     }
 }
 
-impl <Id, Data> Datastore<Id, Data> for HashMapStore<Id, Data>
+impl<Id, Data> Datastore<Id, Data> for HashMapStore<Id, Data>
 where
     Id: DatabaseId,
     Data: PartialEq + Clone + Debug,
 {
-    
     fn find(&self, id: &Id) -> Option<Vec<Data>> {
         let data = self.data.lock().unwrap();
-        let d = match data.get(id).map(|d| d.clone() ) {
+        let d = match data.get(id).map(|d| d.clone()) {
             Some(d) => d,
             None => return None,
         };
         if d.len() == 0 {
-            return None
+            return None;
         }
         Some(d)
     }
@@ -76,13 +79,13 @@ where
     fn store(&mut self, id: &Id, new: &Vec<Data>) -> Vec<Data> {
         let mut new = new.clone();
         let mut data = self.data.lock().unwrap();
-        
+
         match data.entry(id.clone()) {
             Entry::Vacant(v) => {
                 v.insert(new.clone());
 
                 new.clone()
-            },
+            }
             Entry::Occupied(o) => {
                 // Add new entry
                 let existing = o.into_mut();

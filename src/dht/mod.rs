@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 /**
  * rust-kad
  * Kademlia core implementation
@@ -5,31 +6,28 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
-use std::marker::{PhantomData};
-use std::fmt::{Debug};
-use std::time::Instant;
+use std::marker::PhantomData;
 use std::ops::Add;
+use std::time::Instant;
 
-use futures::{future};
+use futures::future;
 
-use crate::{Config};
+use crate::Config;
 
 use crate::common::*;
 
+use crate::store::Datastore;
 use crate::table::NodeTable;
-use crate::store::{Datastore};
 
-use crate::connector::{Connector, request_all};
+use crate::connector::{request_all, Connector};
 
 pub mod search;
-pub use self::search::{Search, Operation};
+pub use self::search::{Operation, Search};
 
 #[derive(Clone)]
 pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     id: Id,
-    
+
     config: Config,
     table: Table,
     conn_mgr: Conn,
@@ -41,10 +39,11 @@ pub struct Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
     _ctx: PhantomData<Ctx>,
 }
 
-impl <Id, Info, Data, ReqId, Conn, Table, Store, Ctx> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> 
-where 
+impl<Id, Info, Data, ReqId, Conn, Table, Store, Ctx>
+    Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx>
+where
     Id: DatabaseId + Clone + Sized + Send + 'static,
-    Info: PartialEq + Clone + Sized  + Debug+ Send + 'static,
+    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
     Data: PartialEq + Clone + Sized + Debug + Send + 'static,
     ReqId: RequestId + Clone + Sized + Debug + Send + 'static,
     Conn: Connector<Id, Info, Data, ReqId, Ctx> + Clone + Send + 'static,
@@ -53,17 +52,23 @@ where
     Ctx: Clone + Debug + PartialEq + Send + 'static,
 {
     /// Create a new generic DHT
-    pub fn new(id: Id, config: Config, table: Table, conn_mgr: Conn, datastore: Store) -> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
-        Dht{
+    pub fn new(
+        id: Id,
+        config: Config,
+        table: Table,
+        conn_mgr: Conn,
+        datastore: Store,
+    ) -> Dht<Id, Info, Data, ReqId, Conn, Table, Store, Ctx> {
+        Dht {
             id,
-            config, 
-            table, 
-            conn_mgr, 
-            datastore, 
+            config,
+            table,
+            conn_mgr,
+            datastore,
 
-            _addr: PhantomData, 
-            _data: PhantomData, 
-            _req_id: PhantomData, 
+            _addr: PhantomData,
+            _data: PhantomData,
+            _req_id: PhantomData,
             _ctx: PhantomData,
         }
     }
@@ -71,9 +76,13 @@ where
     /// Connect to a known node
     /// This is used for bootstrapping onto the DHT, however requires a complete Entry
     /// due to limitations of the underlying connector abstraction.
-    /// If this is unsuitable, manually issue an initial FindNode request and use the 
+    /// If this is unsuitable, manually issue an initial FindNode request and use the
     /// handle_connect_response method to complete the connection.
-    pub async fn connect(&mut self, target: Entry<Id, Info>, ctx: Ctx) -> Result<Vec<Entry<Id, Info>>, Error> {
+    pub async fn connect(
+        &mut self,
+        target: Entry<Id, Info>,
+        ctx: Ctx,
+    ) -> Result<Vec<Entry<Id, Info>>, Error> {
         let id = self.id.clone();
         let mut s = self.clone();
 
@@ -82,29 +91,44 @@ where
         // Launch request
         let mut conn = self.conn_mgr.clone();
 
-        let resp = conn.request(ctx.clone(), ReqId::generate(), target.clone(), Request::FindNode(self.id.clone())).await?;
+        let resp = conn
+            .request(
+                ctx.clone(),
+                ReqId::generate(),
+                target.clone(),
+                Request::FindNode(self.id.clone()),
+            )
+            .await?;
 
         s.handle_connect_response(target, resp, ctx).await
     }
 
     /// Handle the response to an initial FindNodes request.
     /// This is used to bootstrap a connection where the `.connect` method is unsuitable.
-    pub async fn handle_connect_response(&mut self, target: Entry<Id, Info>, resp: Response<Id, Info, Data>, ctx: Ctx) -> Result<Vec<Entry<Id, Info>>, Error> {
+    pub async fn handle_connect_response(
+        &mut self,
+        target: Entry<Id, Info>,
+        resp: Response<Id, Info, Data>,
+        ctx: Ctx,
+    ) -> Result<Vec<Entry<Id, Info>>, Error> {
         let (id, mut found) = match resp {
             Response::NodesFound(id, nodes) => (id, nodes),
             Response::NoResult => {
-                warn!("[DHT connect] Received NoResult response from {:?}", target.id());
-                return Ok(vec![])
-            },
+                warn!(
+                    "[DHT connect] Received NoResult response from {:?}",
+                    target.id()
+                );
+                return Ok(vec![]);
+            }
             _ => {
                 warn!("[DHT connect] invalid response from: {:?}", target.id());
-                return Err(Error::InvalidResponse)
-            },
+                return Err(Error::InvalidResponse);
+            }
         };
 
-        // Check ID matches self 
+        // Check ID matches self
         if id != self.id {
-            return Err(Error::InvalidResponseId)
+            return Err(Error::InvalidResponseId);
         }
 
         // Filter self from response
@@ -117,7 +141,10 @@ where
         let _table = self.table.clone();
         self.table.create_or_update(&target);
 
-        trace!("[DHT connect] response received, searching {} nodes", found.len());
+        trace!(
+            "[DHT connect] response received, searching {} nodes",
+            found.len()
+        );
 
         // Create a FIND_NODE search on own id with responded nodes
         // This both registers this node with peers, and finds and relevant closer peers
@@ -130,13 +157,20 @@ where
 
         // Return newly discovered nodes
         Ok(search.all_completed())
-
     }
 
     /// Look up a node in the database by Id
     pub async fn lookup(&mut self, target: Id, ctx: Ctx) -> Result<Entry<Id, Info>, Error> {
         // Create a search instance
-        let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
+        let mut search = Search::new(
+            self.id.clone(),
+            target.clone(),
+            Operation::FindNode,
+            self.config.clone(),
+            self.table.clone(),
+            self.conn_mgr.clone(),
+            ctx,
+        );
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.nearest(&target, 0..self.config.concurrency);
@@ -144,7 +178,7 @@ where
 
         // Execute the recursive search
         let r = search.execute().await;
-        
+
         // Handle internal search errors
         let _s = match r {
             Err(e) => return Err(e),
@@ -160,7 +194,6 @@ where
         }
     }
 
-
     /// Find a value from the DHT
     pub async fn find(&mut self, target: Id, ctx: Ctx) -> Result<Vec<Data>, Error> {
         let mut existing = self.datastore.find(&target);
@@ -168,14 +201,22 @@ where
         warn!("Existing data: {:?}", existing);
 
         // Create a search instance
-        let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindValue, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
+        let mut search = Search::new(
+            self.id.clone(),
+            target.clone(),
+            Operation::FindValue,
+            self.config.clone(),
+            self.table.clone(),
+            self.conn_mgr.clone(),
+            ctx,
+        );
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.nearest(&target, 0..self.config.concurrency);
         search.seed(&nearest);
 
         if nearest.len() == 0 {
-            return Err(Error::NoPeers)
+            return Err(Error::NoPeers);
         }
 
         // Execute the recursive search
@@ -191,7 +232,7 @@ where
         let data = search.data();
 
         // TODO: Reduce data before returning? (should be done on insertion anyway..?)
-        let mut flat_data: Vec<Data> = data.iter().flat_map(|(_k, v)| v.clone() ).collect();
+        let mut flat_data: Vec<Data> = data.iter().flat_map(|(_k, v)| v.clone()).collect();
 
         // Append existing data (non-flattened atm)
         if let Some(existing) = &mut existing {
@@ -206,12 +247,11 @@ where
 
         // Error out if no data found
         if flat_data.len() == 0 {
-            return Err(Error::NotFound)
+            return Err(Error::NotFound);
         }
 
         Ok(flat_data)
     }
-
 
     /// Store a value in the DHT
     pub async fn store(&mut self, target: Id, data: Vec<Data>, ctx: Ctx) -> Result<usize, Error> {
@@ -219,7 +259,15 @@ where
         let _values = self.datastore.store(&target, &data);
 
         // Create a search instance
-        let mut search = Search::new(self.id.clone(), target.clone(), Operation::FindNode, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx.clone());
+        let mut search = Search::new(
+            self.id.clone(),
+            target.clone(),
+            Operation::FindNode,
+            self.config.clone(),
+            self.table.clone(),
+            self.conn_mgr.clone(),
+            ctx.clone(),
+        );
 
         // Execute across K nearest nodes
         let nearest: Vec<_> = self.table.nearest(&target, 0..self.config.concurrency);
@@ -240,10 +288,8 @@ where
         Ok(resp.len())
     }
 
-
     /// Refresh buckets and node table entries
     pub async fn refresh(&mut self, ctx: Ctx) -> Result<(), ()> {
-        
         // TODO: send refresh to buckets that haven't been looked up recently
         // How to track recently looked up / contacted buckets..?
 
@@ -251,17 +297,19 @@ where
         // Message oldest node, if no response evict
         // Maybe this could be implemented as a periodic ping and timeout instead?
         let timeout = self.config.node_timeout;
-        let oldest: Vec<_> = self.table.iter_oldest().filter(move |o| {
-            if let Some(seen) = o.seen() {
-                seen.add(timeout) < Instant::now()
-            } else {
-                true
-            }            
-        }).collect();
+        let oldest: Vec<_> = self
+            .table
+            .iter_oldest()
+            .filter(move |o| {
+                if let Some(seen) = o.seen() {
+                    seen.add(timeout) < Instant::now()
+                } else {
+                    true
+                }
+            })
+            .collect();
 
         let mut pings = Vec::with_capacity(oldest.len());
-
-        
 
         for o in oldest {
             let mut t = self.table.clone();
@@ -271,17 +319,19 @@ where
             let ctx_ = ctx.clone();
 
             let p = async move {
-                let res = conn.request(ctx_, ReqId::generate(), o.clone(), Request::Ping).await;
+                let res = conn
+                    .request(ctx_, ReqId::generate(), o.clone(), Request::Ping)
+                    .await;
                 match res {
                     Ok(_resp) => {
                         debug!("[DHT refresh] updating node: {:?}", o);
                         o.set_seen(Instant::now());
                         t.create_or_update(&o);
-                    },
+                    }
                     Err(_e) => {
                         debug!("[DHT refresh] expiring node: {:?}", o);
                         t.remove_entry(o.id());
-                    },
+                    }
                 }
 
                 ()
@@ -296,16 +346,18 @@ where
     }
 
     /// Receive and reply to requests
-    pub fn handle(&mut self, from: &Entry<Id, Info>, req: &Request<Id, Data>) -> Result<Response<Id, Info, Data>, Error> {
+    pub fn handle(
+        &mut self,
+        from: &Entry<Id, Info>,
+        req: &Request<Id, Data>,
+    ) -> Result<Response<Id, Info, Data>, Error> {
         // Build response
         let resp = match req {
-            Request::Ping => {
-                Response::NoResult
-            },
+            Request::Ping => Response::NoResult,
             Request::FindNode(id) => {
                 let nodes = self.table.nearest(id, 0..self.config.k);
                 Response::NodesFound(id.clone(), nodes)
-            },
+            }
             Request::FindValue(id) => {
                 // Lockup the value
                 if let Some(values) = self.datastore.find(id) {
@@ -315,8 +367,8 @@ where
                     debug!("No values found, returning closer nodes for id: {:?}", id);
                     let nodes = self.table.nearest(id, 0..self.config.k);
                     Response::NodesFound(id.clone(), nodes)
-                }                
-            },
+                }
+            }
             Request::Store(id, value) => {
                 // Write value to local storage
                 let values = self.datastore.store(id, value);
@@ -328,7 +380,7 @@ where
                     debug!("Ignored values for id: {:?}", id);
                     Response::NoResult
                 }
-            },
+            }
         };
 
         // Update record for sender
@@ -344,8 +396,22 @@ where
 
     /// Create a basic search using the DHT
     /// This is provided for integration of the Dht with other components
-    pub async fn search(&mut self, id: Id, op: Operation, seed: &[Entry<Id, Info>], ctx: Ctx) -> Result<Search<Id, Info, Data, Table, Conn, ReqId, Ctx>, Error> {
-        let mut search = Search::new(self.id.clone(), id, op, self.config.clone(), self.table.clone(), self.conn_mgr.clone(), ctx);
+    pub async fn search(
+        &mut self,
+        id: Id,
+        op: Operation,
+        seed: &[Entry<Id, Info>],
+        ctx: Ctx,
+    ) -> Result<Search<Id, Info, Data, Table, Conn, ReqId, Ctx>, Error> {
+        let mut search = Search::new(
+            self.id.clone(),
+            id,
+            op,
+            self.config.clone(),
+            self.table.clone(),
+            self.conn_mgr.clone(),
+            ctx,
+        );
         search.seed(seed);
 
         trace!("Starting search with nodes: ");
@@ -359,10 +425,11 @@ where
     }
 }
 
-
 /// Helper macro to setup DHT instances for testing
-#[cfg(test)] #[macro_export]
-#[cfg(test)] macro_rules! mock_dht {
+#[cfg(test)]
+#[macro_export]
+#[cfg(test)]
+macro_rules! mock_dht {
     ($connector: ident, $root: ident, $dht:ident) => {
         let mut config = Config::default();
         config.concurrency = 2;
@@ -370,12 +437,17 @@ where
     };
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
         let table = KNodeTable::new($root.id().clone(), $config.k, $root.id().max_bits());
-        
+
         let store: HashMapStore<[u8; 1], u64> = HashMapStore::new();
-        
-        let mut $dht = Dht::<[u8; 1], u64, _, u64, _, _, _, ()>::new($root.id().clone(), 
-                $config, table, $connector.clone(), store);
-    }
+
+        let mut $dht = Dht::<[u8; 1], u64, _, u64, _, _, _, ()>::new(
+            $root.id().clone(),
+            $config,
+            table,
+            $connector.clone(),
+            store,
+        );
+    };
 }
 
 #[cfg(test)]
@@ -387,14 +459,13 @@ mod tests {
     use futures::executor::block_on;
 
     use super::*;
-    use crate::store::{HashMapStore, Datastore};
-    use crate::table::{NodeTable, KNodeTable};
+    use crate::store::{Datastore, HashMapStore};
+    use crate::table::{KNodeTable, NodeTable};
 
     use rr_mux::mock::{MockConnector, MockTransaction as Mt};
 
     #[test]
     fn test_receive_common() {
-
         let root = Entry::new([0], 001);
         let friend = Entry::new([1], 002);
 
@@ -429,7 +500,6 @@ mod tests {
 
     #[test]
     fn test_receive_ping() {
-
         let root = Entry::new([0], 001);
         let friend = Entry::new([1], 002);
 
@@ -448,7 +518,6 @@ mod tests {
 
     #[test]
     fn test_receive_find_nodes() {
-
         let root = Entry::new([0], 001);
         let friend = Entry::new([1], 002);
         let other = Entry::new([2], 003);
@@ -461,17 +530,17 @@ mod tests {
 
         // FindNodes
         assert_eq!(
-            dht.handle(&friend, &Request::FindNode(other.id().clone())).unwrap(),
-            Response::NodesFound(other.id().clone(), vec![friend.clone()]), 
+            dht.handle(&friend, &Request::FindNode(other.id().clone()))
+                .unwrap(),
+            Response::NodesFound(other.id().clone(), vec![friend.clone()]),
         );
 
         // Check expectations are done
         connector.finalise();
     }
 
-        #[test]
+    #[test]
     fn test_receive_find_values() {
-
         let root = Entry::new([0], 001);
         let friend = Entry::new([1], 002);
         let other = Entry::new([2], 003);
@@ -485,16 +554,16 @@ mod tests {
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
             dht.handle(&other, &Request::FindValue([201])).unwrap(),
-            Response::NodesFound([201], vec![friend.clone()]), 
+            Response::NodesFound([201], vec![friend.clone()]),
         );
 
         // Add value to store
         dht.datastore.store(&[201], &vec![1337]);
-        
+
         // FindValues
         assert_eq!(
             dht.handle(&other, &Request::FindValue([201])).unwrap(),
-            Response::ValuesFound([201], vec![1337]), 
+            Response::ValuesFound([201], vec![1337]),
         );
 
         // Check expectations are done
@@ -503,7 +572,6 @@ mod tests {
 
     #[test]
     fn test_receive_store() {
-
         let root = Entry::new([0], 001);
         let friend = Entry::new([1], 002);
 
@@ -512,7 +580,8 @@ mod tests {
 
         // Store
         assert_eq!(
-            dht.handle(&friend, &Request::Store([2], vec![1234])).unwrap(),
+            dht.handle(&friend, &Request::Store([2], vec![1234]))
+                .unwrap(),
             Response::ValuesFound([2], vec![1234]),
         );
 
@@ -541,7 +610,7 @@ mod tests {
         dht.table.create_or_update(&n2);
 
         // No timed out nodes
-        block_on( dht.refresh(()) ).unwrap();
+        block_on(dht.refresh(())).unwrap();
         connector.finalise();
 
         std::thread::sleep(config.node_timeout * 2);
@@ -551,7 +620,7 @@ mod tests {
             Mt::request(n1.clone(), Request::Ping, Ok((Response::NoResult, ()))),
             Mt::request(n2.clone(), Request::Ping, Ok((Response::NoResult, ()))),
         ]);
-        block_on( dht.refresh(()) ).unwrap();
+        block_on(dht.refresh(())).unwrap();
 
         assert!(dht.table.contains(n1.id()).is_some());
         assert!(dht.table.contains(n2.id()).is_some());
@@ -563,9 +632,9 @@ mod tests {
         // No response (evict)
         connector.expect(vec![
             Mt::request(n1.clone(), Request::Ping, Ok((Response::NoResult, ()))),
-            Mt::request(n2.clone(), Request::Ping, Err(Error::Timeout) ),
+            Mt::request(n2.clone(), Request::Ping, Err(Error::Timeout)),
         ]);
-        block_on( dht.refresh(()) ).unwrap();
+        block_on(dht.refresh(())).unwrap();
 
         assert!(dht.table.contains(n1.id()).is_some());
         assert!(dht.table.contains(n2.id()).is_none());
@@ -576,7 +645,6 @@ mod tests {
 
     #[test]
     fn test_clone() {
-
         let root = Entry::new([0], 001);
         let _friend = Entry::new([1], 002);
 
@@ -587,5 +655,4 @@ mod tests {
 
         let _ = dht.clone();
     }
-
 }

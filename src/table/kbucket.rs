@@ -5,12 +5,10 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
 use crate::common::{DatabaseId, Entry};
 
-use std::fmt::Debug;
 use std::collections::VecDeque;
+use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -23,17 +21,19 @@ pub struct KBucket<Id, Info> {
     updated: Option<Instant>,
 }
 
-impl <Id, Info> KBucket<Id, Info> 
+impl<Id, Info> KBucket<Id, Info>
 where
     Id: DatabaseId + 'static,
     Info: Clone + Debug + 'static,
 {
     /// Create a new KBucket with the given size
     pub fn new(bucket_size: usize) -> KBucket<Id, Info> {
-        KBucket{bucket_size, 
-            nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))), 
-            pending: None, 
-            updated: None}
+        KBucket {
+            bucket_size,
+            nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))),
+            pending: None,
+            updated: None,
+        }
     }
 
     /// Update a node in the bucket
@@ -67,12 +67,22 @@ where
 
     /// Find a node in the bucket
     pub fn find(&self, id: &Id) -> Option<Entry<Id, Info>> {
-        self.nodes.lock().unwrap().iter().find(|n| *n.id() == *id).map(|n| n.clone())
+        self.nodes
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|n| *n.id() == *id)
+            .map(|n| n.clone())
     }
 
     /// Clone the list of nodes currently in the bucket
     pub fn nodes(&self) -> Vec<Entry<Id, Info>> {
-        self.nodes.lock().unwrap().iter().map(|n| n.clone()).collect()
+        self.nodes
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|n| n.clone())
+            .collect()
     }
 
     /// Fetch last updated time
@@ -89,17 +99,25 @@ where
     pub fn oldest(&self) -> Option<Entry<Id, Info>> {
         let nodes = self.nodes.lock().unwrap();
         if nodes.len() == 0 {
-            return None
+            return None;
         }
-        nodes.get(nodes.len()-1).map(|n| n.clone())
+        nodes.get(nodes.len() - 1).map(|n| n.clone())
     }
 
     /// Move a node to the start of the bucket
     fn update_position(nodes: &mut VecDeque<Entry<Id, Info>>, node: &Entry<Id, Info>) {
         // Find the node to update
-        if let Some(_existing) = nodes.iter().find(|n| n.id() == node.id()).map(|n| n.clone()) {
+        if let Some(_existing) = nodes
+            .iter()
+            .find(|n| n.id() == node.id())
+            .map(|n| n.clone())
+        {
             // Update node array
-            *nodes = nodes.iter().filter(|n| n.id() != node.id()).map(|n| n.clone()).collect();
+            *nodes = nodes
+                .iter()
+                .filter(|n| n.id() != node.id())
+                .map(|n| n.clone())
+                .collect();
             // Push node to front
             nodes.push_front(node.clone());
         }
@@ -107,11 +125,12 @@ where
 
     /// Update an entry by ID
     pub fn update_entry<F>(&mut self, id: &Id, f: F) -> bool
-    where F: Fn(&mut Entry<Id, Info>)
+    where
+        F: Fn(&mut Entry<Id, Info>),
     {
         if let Some(ref mut n) = self.nodes.lock().unwrap().iter_mut().find(|n| n.id() == id) {
             (f)(n);
-            return true
+            return true;
         }
         false
     }
@@ -121,7 +140,11 @@ where
         let mut nodes = self.nodes.lock().unwrap();
 
         // Filter nodes from existing
-        *nodes = nodes.iter().filter(|n| n.id() != id).map(|n| n.clone()).collect();
+        *nodes = nodes
+            .iter()
+            .filter(|n| n.id() != id)
+            .map(|n| n.clone())
+            .collect();
 
         // Replace with pending node if enabled and found
         if replace && nodes.len() < self.bucket_size && self.pending.is_some() {
@@ -150,10 +173,10 @@ mod test {
         // Fill KBucket
         assert_eq!(true, b.create_or_update(&n1));
         assert_eq!(n1, b.find(n1.id()).unwrap());
-        
+
         assert_eq!(true, b.create_or_update(&n2));
         assert_eq!(n2, b.find(n2.id()).unwrap());
-        
+
         assert_eq!(true, b.create_or_update(&n3));
         assert_eq!(n3, b.find(n3.id()).unwrap());
 
@@ -164,13 +187,19 @@ mod test {
         assert_eq!(false, b.create_or_update(&n5));
 
         // Check ordering
-        assert_eq!(b.nodes(), vec![n4.clone(), n3.clone(), n2.clone(), n1.clone()]);
+        assert_eq!(
+            b.nodes(),
+            vec![n4.clone(), n3.clone(), n2.clone(), n1.clone()]
+        );
 
         // Update node
         assert_eq!(true, b.create_or_update(&n1));
 
         // Check new ordering
-        assert_eq!(b.nodes(), vec![n1.clone(), n4.clone(), n3.clone(), n2.clone()]);
+        assert_eq!(
+            b.nodes(),
+            vec![n1.clone(), n4.clone(), n3.clone(), n2.clone()]
+        );
 
         // Update existing item
         let mut n4a = n4.clone();
@@ -179,12 +208,18 @@ mod test {
         assert_eq!(n4a, b.find(n4.id()).unwrap());
 
         // Check new ordering
-        assert_eq!(b.nodes(), vec![n4a.clone(), n1.clone(), n3.clone(), n2.clone()]);
+        assert_eq!(
+            b.nodes(),
+            vec![n4a.clone(), n1.clone(), n3.clone(), n2.clone()]
+        );
 
         // Remote node and replace with pending
         b.remove_entry(n1.id(), true);
 
         // Check new ordering
-        assert_eq!(b.nodes(), vec![n4a.clone(), n3.clone(), n2.clone(), n5.clone()]);
+        assert_eq!(
+            b.nodes(),
+            vec![n4a.clone(), n3.clone(), n2.clone(), n5.clone()]
+        );
     }
 }

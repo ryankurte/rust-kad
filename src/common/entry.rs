@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 /**
  * rust-kad
  * Kademlia node type
@@ -5,10 +6,7 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
-use std::time::{Instant};
-use std::fmt::Debug;
+use std::time::Instant;
 
 use super::id::DatabaseId;
 
@@ -31,7 +29,7 @@ pub enum EntryState {
     Expired,
 }
 
-impl <Id, Info> PartialEq for Entry<Id, Info> 
+impl<Id, Info> PartialEq for Entry<Id, Info>
 where
     Id: PartialEq,
     Info: PartialEq,
@@ -41,13 +39,19 @@ where
     }
 }
 
-impl <Id, Info>Entry<Id, Info> 
-where 
+impl<Id, Info> Entry<Id, Info>
+where
     Id: DatabaseId + Clone + Debug + 'static,
     Info: Clone + Debug + 'static,
 {
     pub fn new(id: Id, info: Info) -> Entry<Id, Info> {
-        Entry{id, info, seen: None, frozen: false, state: EntryState::Ok}
+        Entry {
+            id,
+            info,
+            seen: None,
+            frozen: false,
+            state: EntryState::Ok,
+        }
     }
 
     pub fn id(&self) -> &Id {
@@ -71,8 +75,8 @@ where
     }
 }
 
-impl <Id, Info> From<(Id, Info)> for Entry<Id, Info> 
-where 
+impl<Id, Info> From<(Id, Info)> for Entry<Id, Info>
+where
     Id: DatabaseId + Clone + Debug + 'static,
     Info: Clone + Debug + 'static,
 {
@@ -81,8 +85,8 @@ where
     }
 }
 
-impl <Id, Info> Into<(Id, Info)> for Entry<Id, Info> 
-where 
+impl<Id, Info> Into<(Id, Info)> for Entry<Id, Info>
+where
     Id: DatabaseId + Clone + Debug + 'static,
     Info: Clone + Debug + 'static,
 {

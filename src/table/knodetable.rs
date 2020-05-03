@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 /**
  * rust-kad
  * Kademlia Node Table Implementation
@@ -5,17 +6,14 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
 use std::ops::Range;
-use std::fmt::Debug;
-use std::time::Instant;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::common::{DatabaseId, Entry};
 
-use super::nodetable::{NodeTable, BucketInfo};
 use super::kbucket::KBucket;
+use super::nodetable::{BucketInfo, NodeTable};
 
 /// KNodeTable Implementation
 /// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local Id
@@ -23,12 +21,10 @@ use super::kbucket::KBucket;
 #[derive(Clone)]
 pub struct KNodeTable<Id, Info> {
     id: Id,
-    buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>
+    buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>,
 }
 
-
-
-impl <Id, Info> KNodeTable<Id, Info> 
+impl<Id, Info> KNodeTable<Id, Info>
 where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
@@ -36,9 +32,14 @@ where
     /// Create a new KNodeTable with the provded bucket and hash sizes
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Info> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size).map(|_| Arc::new(Mutex::new(KBucket::new(bucket_size)))).collect();
+        let buckets = (0..hash_size)
+            .map(|_| Arc::new(Mutex::new(KBucket::new(bucket_size))))
+            .collect();
         // Generate KNodeTable object
-        KNodeTable{id, buckets: Arc::new(Mutex::new(buckets)) }
+        KNodeTable {
+            id,
+            buckets: Arc::new(Mutex::new(buckets)),
+        }
     }
 
     // Calculate the distance between two Ids.
@@ -72,7 +73,7 @@ where
     }
 }
 
-impl <Id, Info> NodeTable<Id, Info> for KNodeTable<Id, Info> 
+impl<Id, Info> NodeTable<Id, Info> for KNodeTable<Id, Info>
 where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
@@ -80,7 +81,7 @@ where
     /// Create or update a node in the NodeTable
     fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
         if node.id() == &self.id {
-            return false
+            return false;
         }
 
         let bucket = self.bucket(node.id());
@@ -95,11 +96,14 @@ where
         let buckets = self.buckets.lock().unwrap();
 
         // Create a list of all nodes
-        let mut all: Vec<_> = buckets.iter().flat_map(|b| b.lock().unwrap().nodes() ).collect();
+        let mut all: Vec<_> = buckets
+            .iter()
+            .flat_map(|b| b.lock().unwrap().nodes())
+            .collect();
         let count = all.len();
 
         // Sort by distance
-        all.sort_by_key(|n| { KNodeTable::<Id, Info>::distance(id, n.id()) } );
+        all.sort_by_key(|n| KNodeTable::<Id, Info>::distance(id, n.id()));
 
         // Limit to count or total found
         let mut range = range;
@@ -118,13 +122,17 @@ where
     }
 
     /// Peek at the oldest node in the bucket associated with a given Id
-    fn iter_oldest(&self) -> Box<dyn Iterator<Item=Entry<Id, Info>>> {
-        Box::new(KNodeTableIterOldest{index: 0, buckets: self.buckets.clone() })
+    fn iter_oldest(&self) -> Box<dyn Iterator<Item = Entry<Id, Info>>> {
+        Box::new(KNodeTableIterOldest {
+            index: 0,
+            buckets: self.buckets.clone(),
+        })
     }
 
     /// Update an entry by ID
-    fn update_entry<F>(&mut self, id: &Id, f: F) -> bool 
-    where F: Fn(&mut Entry<Id, Info>)
+    fn update_entry<F>(&mut self, id: &Id, f: F) -> bool
+    where
+        F: Fn(&mut Entry<Id, Info>),
     {
         let bucket = self.bucket(id);
         let mut bucket = bucket.lock().unwrap();
@@ -145,10 +153,10 @@ where
 
         for i in 0..buckets.len() {
             let b = buckets[i].lock().unwrap();
-            info.push(BucketInfo{
-                index: i, 
-                nodes: b.node_count(), 
-                updated: b.updated()
+            info.push(BucketInfo {
+                index: i,
+                nodes: b.node_count(),
+                updated: b.updated(),
             });
         }
         info
@@ -162,7 +170,7 @@ pub struct KNodeTableIterOldest<Id, Info> {
     buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>,
 }
 
-impl <Id, Info> Iterator for KNodeTableIterOldest<Id, Info> 
+impl<Id, Info> Iterator for KNodeTableIterOldest<Id, Info>
 where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
@@ -180,14 +188,13 @@ where
             self.index += 1;
 
             if let Some(_) = &r {
-                break
+                break;
             }
         }
 
-        return r
+        return r;
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -213,9 +220,15 @@ mod test {
             assert_eq!(true, t.create_or_update(&n));
             assert_eq!(*n, t.contains(n.id()).unwrap());
         }
-        
+
         // Find closest nodes
-        assert_eq!(vec![nodes[2].clone(), nodes[0].clone()], t.nearest(n.id(), 0..2));
-        assert_eq!(vec![nodes[0].clone(), nodes[1].clone()], t.nearest(&[0b0010], 0..2));
+        assert_eq!(
+            vec![nodes[2].clone(), nodes[0].clone()],
+            t.nearest(n.id(), 0..2)
+        );
+        assert_eq!(
+            vec![nodes[0].clone(), nodes[1].clone()],
+            t.nearest(&[0b0010], 0..2)
+        );
     }
 }

@@ -5,8 +5,6 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 
 #[derive(PartialEq, Clone, Debug)]

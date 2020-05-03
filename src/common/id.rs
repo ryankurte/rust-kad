@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 /**
  * rust-kad
  * Database ID definitions
@@ -5,13 +6,10 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
 use std::hash::Hash;
-use std::fmt::Debug;
 
+use num::bigint::BigUint;
 use num::Zero;
-use num::bigint::{BigUint};
 
 /// Id trait must be implemented for viable id types
 pub trait DatabaseId: Hash + Default + PartialEq + Eq + Ord + Clone + Send + Debug {
@@ -48,25 +46,37 @@ impl DatabaseId for u64 {
 }
 
 /// DatabaseId implementation for arbitrary types around &[u8]
-impl <T> DatabaseId for T
-where 
-    T: AsRef<[u8]> + AsMut<[u8]> + Hash + Default + PartialEq + Eq + Ord + Clone + Sync + Send + Debug,
+impl<T> DatabaseId for T
+where
+    T: AsRef<[u8]>
+        + AsMut<[u8]>
+        + Hash
+        + Default
+        + PartialEq
+        + Eq
+        + Ord
+        + Clone
+        + Sync
+        + Send
+        + Debug,
 {
-    fn xor(a: &T, b: &T) -> Self 
-    {
+    fn xor(a: &T, b: &T) -> Self {
         let a = a.as_ref();
         let b = b.as_ref();
         let mut c = T::default();
 
         {
             let c = c.as_mut();
-            assert!(a.len() == b.len() && a.len() == c.len(), "dht IDs must be the same length");
+            assert!(
+                a.len() == b.len() && a.len() == c.len(),
+                "dht IDs must be the same length"
+            );
 
             for i in 0..a.len() {
                 c[i] = a[i] ^ b[i];
-            };
+            }
         }
-        
+
         c
     }
 
@@ -90,33 +100,31 @@ pub trait RequestId: Hash + PartialEq + Eq + Ord + Clone + Send + Debug {
 }
 
 impl RequestId for u8 {
-    fn generate()-> Self {
+    fn generate() -> Self {
         rand::random()
     }
 }
 
 impl RequestId for u16 {
-    fn generate()-> Self {
+    fn generate() -> Self {
         rand::random()
     }
 }
 
 impl RequestId for u32 {
-    fn generate()-> Self {
+    fn generate() -> Self {
         rand::random()
     }
 }
 
 impl RequestId for u64 {
-    fn generate()-> Self {
+    fn generate() -> Self {
         rand::random()
     }
 }
-
 
 impl RequestId for [u8; 8] {
-    fn generate()-> Self {
+    fn generate() -> Self {
         rand::random()
     }
 }
-

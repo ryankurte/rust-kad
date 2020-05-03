@@ -5,7 +5,6 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
 use std::ops::Range;
 use std::time::Instant;
 
@@ -27,12 +26,13 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>>;
 
     /// Iterate through the oldest nodes in each bucket
-    fn iter_oldest(&self) -> Box<dyn Iterator<Item=Entry<Id, Info>>>;
+    fn iter_oldest(&self) -> Box<dyn Iterator<Item = Entry<Id, Info>>>;
 
     /// Update an entry in the bucket by ID
     /// Returns true if update function has been executed, false if no entry was found
     fn update_entry<F>(&mut self, id: &Id, f: F) -> bool
-    where F: Fn(&mut Entry<Id, Info>);
+    where
+        F: Fn(&mut Entry<Id, Info>);
 
     /// Remove an entry in the bucket by ID
     fn remove_entry(&mut self, id: &Id);

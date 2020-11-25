@@ -1,5 +1,4 @@
-pub use crate::connector::Connector as DhtConnector;
-pub use crate::dht::{Operation as DhtOperation, Search as DhtSearch};
+//pub use crate::dht::{Operation as DhtOperation, Search as DhtSearch};
 pub use crate::{dht::Dht, Config as DhtConfig, StandardDht};
 
 pub use crate::common::Entry as DhtEntry;

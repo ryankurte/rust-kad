@@ -16,8 +16,6 @@ use crate::Config;
 
 use crate::table::NodeTable;
 
-use crate::connector::{request_all, Connector};
-
 /// Search describes DHT search operations
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operation {
@@ -36,32 +34,29 @@ pub enum RequestState {
 }
 
 /// Search object provides the basis for executing searches on the DHT
-pub struct Search<Id, Info, Data, Table, Conn, ReqId, Ctx> {
+pub struct Search<Id, Info, Data, Table, ReqId> {
     origin: Id,
     target: Id,
     op: Operation,
+    conn: (),
     config: Config,
     depth: usize,
     table: Table,
     known: HashMap<Id, (Entry<Id, Info>, RequestState)>,
     data: HashMap<Id, Vec<Data>>,
-    conn: Conn,
-    ctx: Ctx,
     _req_id: PhantomData<ReqId>,
 }
 
 pub type KnownMap<Id, Info> = HashMap<Id, (Entry<Id, Info>, RequestState)>;
 pub type ValueMap<Id, Data> = HashMap<Id, Vec<Data>>;
 
-impl<Id, Info, Data, Table, Conn, ReqId, Ctx> Search<Id, Info, Data, Table, Conn, ReqId, Ctx>
+impl<Id, Info, Data, Table, ReqId> Search<Id, Info, Data, Table, ReqId>
 where
     Id: DatabaseId + Default + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Debug + Send + 'static,
     Table: NodeTable<Id, Info> + Clone + Send + 'static,
     ReqId: RequestId + Clone + Send + 'static,
-    Ctx: Clone + Debug + PartialEq + Send + 'static,
-    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Clone + Send + 'static,
 {
     pub fn new(
         origin: Id,
@@ -69,9 +64,8 @@ where
         op: Operation,
         config: Config,
         table: Table,
-        conn: Conn,
-        ctx: Ctx,
-    ) -> Search<Id, Info, Data, Table, Conn, ReqId, Ctx> {
+        conn: (),
+    ) -> Search<Id, Info, Data, Table, ReqId> {
         let known = HashMap::<Id, (Entry<Id, Info>, RequestState)>::new();
         let data = HashMap::<Id, Vec<Data>>::new();
 
@@ -87,7 +81,6 @@ where
             table,
             data,
             conn,
-            ctx,
             _req_id: PhantomData,
         }
     }
@@ -217,7 +210,7 @@ where
         let conn = self.conn.clone();
         let ctx = self.ctx.clone();
 
-        let res = request_all(conn, ctx, &req, chunk).await?;
+        let res = request_all(conn, &req, chunk).await?;
 
         for (resp_entry, resp_msg) in &res {
             // Handle received responses

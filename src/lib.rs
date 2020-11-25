@@ -4,23 +4,13 @@
 //! https://github.com/ryankurte/rust-kad
 //! Copyright 2018 Ryan Kurte
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::time::Duration;
 
-extern crate futures;
+use futures::channel::mpsc::Sender;
 
-#[macro_use]
-extern crate tracing;
+use structopt::StructOpt;
 
-#[macro_use]
-extern crate structopt;
-
-extern crate futures_timer;
-
-extern crate num;
-extern crate rand;
-
-extern crate humantime;
 
 pub mod common;
 use crate::common::*;
@@ -33,9 +23,6 @@ use store::HashMapStore;
 
 pub mod dht;
 use dht::Dht;
-
-pub mod connector;
-pub use connector::Connector;
 
 pub mod prelude;
 
@@ -79,30 +66,25 @@ impl Default for Config {
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<Id, Info, Data, ReqId, Conn, Ctx> =
-    Dht<Id, Info, Data, ReqId, Conn, KNodeTable<Id, Info>, HashMapStore<Id, Data>, Ctx>;
+pub type StandardDht<Id, Info, Data, ReqId> =
+    Dht<Id, Info, Data, ReqId, KNodeTable<Id, Info>, HashMapStore<Id, Data>>;
 
-impl<Id, Info, Data, ReqId, Conn, Ctx> StandardDht<Id, Info, Data, ReqId, Conn, Ctx>
+impl<Id, Info, Data, ReqId> StandardDht<Id, Info, Data, ReqId>
 where
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Debug + Send + 'static,
-    ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Send + Clone + 'static,
-    Ctx: Clone + PartialEq + Debug + Send + 'static,
+    ReqId: RequestId + Clone + Display + Send + 'static,
 {
     /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
-    pub fn standard(
-        id: Id,
-        config: Config,
-        conn: Conn,
-    ) -> StandardDht<Id, Info, Data, ReqId, Conn, Ctx> {
+    pub fn standard(id: Id, config: Config, req_sink: Sender<(Entry<Id, Info>, Request<Id, Data>)>) -> StandardDht<Id, Info, Data, ReqId> {
         let table = KNodeTable::new(id.clone(), config.k, id.max_bits());
         let store = HashMapStore::new();
-        Dht::new(id, config, table, conn, store)
+        Dht::new(id, config, table, req_sink, store)
     }
 }
 
+#[cfg(nope)]
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;

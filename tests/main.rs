@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 extern crate kad;
 
 use kad::common::*;
-use kad::connector::Connector;
 use kad::dht::Dht;
 use kad::mock::MockSync;
 use kad::store::HashMapStore;
@@ -22,24 +21,16 @@ use kad::Config;
 
 extern crate futures;
 use futures::executor::block_on;
+use futures::channel::mpsc;
 
-extern crate async_trait;
-use async_trait::async_trait;
 
-type MockPeer<Id, Info, Data> = Dht<
-    Id,
-    Info,
-    Data,
-    u64,
-    MockConnector<Id, Info, Data, u64, ()>,
-    KNodeTable<Id, Info>,
-    HashMapStore<Id, Data>,
-    (),
->;
+struct MockPeer<Id: Debug, Info: Debug, Data: Debug> {
+    dht: Dht<Id, Info, Data, u64, KNodeTable<Id, Info>, HashMapStore<Id, Data>>,
+}
 
 type PeerMap<Id, Info, Data> = HashMap<Id, MockPeer<Id, Info, Data>>;
 
-struct MockNetwork<Id: Debug, Info, Data: Debug> {
+struct MockNetwork<Id: Debug, Info: Debug, Data: Debug> {
     peers: Arc<Mutex<PeerMap<Id, Info, Data>>>,
 }
 
@@ -60,88 +51,23 @@ where
             let table = KNodeTable::<Id, Info>::new(n.id().clone(), config.k, n.id().max_bits());
             let store = HashMapStore::<Id, Data>::new();
 
-            let conn = MockConnector::new(n.id().clone(), n.info().clone(), m.peers.clone());
+            let (sink_tx, sink_rx) = mpsc::channel(10);
 
-            let dht = Dht::new(n.id().clone(), config, table, conn, store);
+            let dht = Dht::new(n.id().clone(), config, table, sink_tx, store);
 
-            m.peers.lock().unwrap().insert(n.id().clone(), dht);
+            let peer = MockPeer{
+                dht
+            };
+
+            m.peers.lock().unwrap().insert(n.id().clone(), peer);
         }
 
         m
     }
 }
 
-#[derive(Clone)]
-struct MockConnector<Id: Debug, Info, Data: Debug, ReqId, Ctx> {
-    id: Id,
-    addr: Info,
-    peers: Arc<Mutex<PeerMap<Id, Info, Data>>>,
-    _req_id: PhantomData<ReqId>,
-    _ctx: PhantomData<Ctx>,
-}
 
-impl<Id, Info, Data, ReqId, Ctx> MockConnector<Id, Info, Data, ReqId, Ctx>
-where
-    Id: DatabaseId + Debug + Send + 'static,
-    Info: Debug + Clone + PartialEq + Send + 'static,
-    Data: Debug + Clone + PartialEq + Send + 'static,
-    Ctx: Debug + Clone + Send + 'static,
-{
-    pub fn new(id: Id, addr: Info, peers: Arc<Mutex<PeerMap<Id, Info, Data>>>) -> Self {
-        MockConnector {
-            id,
-            addr,
-            peers,
-            _req_id: PhantomData,
-            _ctx: PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-impl<Id, Info, Data, ReqId, Ctx> Connector<Id, Info, Data, ReqId, Ctx>
-    for MockConnector<Id, Info, Data, ReqId, Ctx>
-where
-    ReqId: Debug + Send + Sync + 'static,
-    Id: DatabaseId + Debug + Send + Sync + 'static,
-    Info: Debug + Clone + PartialEq + Send + Sync + 'static,
-    Data: Debug + Clone + PartialEq + Send + Sync + 'static,
-    Ctx: Debug + Clone + Send + Sync + 'static,
-{
-    async fn request(
-        &mut self,
-        _ctx: Ctx,
-        _req_id: ReqId,
-        to: Entry<Id, Info>,
-        req: Request<Id, Data>,
-    ) -> Result<Response<Id, Info, Data>, Error> {
-        let peers = self.peers.clone();
-        let id = self.id.clone();
-        let addr = self.addr.clone();
-
-        // Fetch peer instance
-        let mut peer = { peers.lock().unwrap().remove(to.id()).unwrap() };
-
-        // Update peer with request
-        let resp = peer.handle(&Entry::new(id, addr), &req).unwrap();
-
-        // Re-insert peer into database
-        peers.lock().unwrap().insert(to.id().clone(), peer);
-
-        Ok(resp)
-    }
-
-    async fn respond(
-        &mut self,
-        _ctx: Ctx,
-        _req_id: ReqId,
-        _to: Entry<Id, Info>,
-        _resp: Response<Id, Info, Data>,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-}
-
+#[cfg(nope)]
 #[test]
 fn integration() {
     // TODO: split into separate tests, add benchmarks

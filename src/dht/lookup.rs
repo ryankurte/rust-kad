@@ -12,7 +12,7 @@ use crate::common::*;
 use crate::store::Datastore;
 use crate::table::NodeTable;
 
-use super::{Dht, OperationKind, OperationState};
+use super::{Dht, OperationKind};
 
 impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
 where
@@ -65,6 +65,7 @@ impl <Id, Info> Future for LocateFuture<Id, Info> {
 
 #[cfg(test)]
 mod tests {
+    use log::*;
     use simplelog::{SimpleLogger, LevelFilter, Config as LogConfig};
 
     use crate::{Dht, StandardDht, Config};
@@ -95,30 +96,44 @@ mod tests {
         table.create_or_update(&n3);
 
         // Instantiated DHT
-        let (mut tx, mut rx) = mpsc::channel(10);
+        let (tx, mut rx) = mpsc::channel(10);
         let mut dht: StandardDht<_, u32, u32, u16> = Dht::new([0u8], config, table, tx, store);
         
+        info!("Start locate");
         // Issue lookup
         let (lookup, req_id) = dht.locate(n4.id().clone()).expect("Error starting lookup");
 
-        // Check requests (query node 2, 3)
+        info!("Search round 0");
+        // Start the first search pass
         dht.update().await;
+
+        // Check requests (query node 2, 3), find node 4
         assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(n4.id().clone()))));
         assert_eq!(rx.try_next().unwrap() , Some((n3.clone(), Request::FindNode(n4.id().clone()))));
 
-        // Send responses (response from 2, 3)
+        // Handle responses (response from 2, 3), node 4, 5 known
         dht.handle_resp(req_id, &n2, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();
         dht.handle_resp(req_id, &n3, &Response::NodesFound(n4.id().clone(), vec![n5.clone()])).await.unwrap();
 
-        // Check requests (query node 4, 5)
+        info!("Search round 1");
+
+        // Update search state (re-start search)
         dht.update().await;
+        dht.update().await;
+
+        // Check requests (query node 4, 5)
         assert_eq!(rx.try_next().unwrap() , Some((n4.clone(), Request::FindNode(n4.id().clone()))));
         assert_eq!(rx.try_next().unwrap() , Some((n5.clone(), Request::FindNode(n4.id().clone()))));
 
-        // Send responses for node 4, 5
-        dht.handle_resp(req_id, &n2, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();
-        dht.handle_resp(req_id, &n3, &Response::NodesFound(n4.id().clone(), vec![n5.clone()])).await.unwrap();
+        // Handle responses for node 4, 5
+        dht.handle_resp(req_id, &n4, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n5, &Response::NodesFound(n4.id().clone(), vec![n5.clone()])).await.unwrap();
 
+        // Launch next search
+        dht.update().await;
+        // Detect completion
+        dht.update().await;
 
+        info!("Expecting completion");
     }
 }

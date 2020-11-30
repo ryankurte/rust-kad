@@ -15,8 +15,7 @@ ReqId: RequestId + Clone + Sized + Debug + Send + 'static,
 Table: NodeTable<Id, Info> + Clone + Send + 'static,
 Store: Datastore<Id, Data> + Clone + Send + 'static,
 {
-
-    /// Find a value from the DHT
+    /// Find value(s) in the DHT
     pub async fn find(&mut self, target: Id) -> Result<Vec<Data>, Error> {
         let mut existing = self.datastore.find(&target);
 

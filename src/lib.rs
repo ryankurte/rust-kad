@@ -43,6 +43,10 @@ pub struct Config {
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
+    #[structopt(long = "dht-search-timeout", parse(try_from_str = parse_duration), default_value = "10s")]
+    /// Timeout for search iterations with missing responses
+    pub search_timeout: Duration,
+
     #[structopt(long = "dht-node-timeout", parse(try_from_str = parse_duration), default_value = "15m")]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
@@ -60,6 +64,7 @@ impl Default for Config {
             k: 20,
             concurrency: 4,
             max_recursion: 10,
+            search_timeout: Duration::from_secs(10),
             node_timeout: Duration::from_secs(15 * 60 * 60),
         }
     }

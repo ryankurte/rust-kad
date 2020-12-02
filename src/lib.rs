@@ -74,18 +74,18 @@ impl Default for Config {
 pub type StandardDht<Id, Info, Data, ReqId> =
     Dht<Id, Info, Data, ReqId, KNodeTable<Id, Info>, HashMapStore<Id, Data>>;
 
-impl<Id, Info, Data, ReqId> StandardDht<Id, Info, Data, ReqId>
+impl<Id, Info, Data, ReqId> Dht<Id, Info, Data, ReqId>
 where
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Debug + Send + 'static,
     ReqId: RequestId + Clone + Display + Send + 'static,
 {
-    /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
+    /// Create a new DHT using the standard node table and data store implementations
     pub fn standard(id: Id, config: Config, req_sink: Sender<(Entry<Id, Info>, Request<Id, Data>)>) -> StandardDht<Id, Info, Data, ReqId> {
         let table = KNodeTable::new(id.clone(), config.k, id.max_bits());
         let store = HashMapStore::new();
-        Dht::new(id, config, table, req_sink, store)
+        Dht::custom(id, config, req_sink, table, store)
     }
 }
 

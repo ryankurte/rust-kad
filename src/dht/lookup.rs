@@ -14,6 +14,31 @@ use crate::table::NodeTable;
 
 use super::{Dht, OperationKind};
 
+/// Future returned by locate operation
+/// Resolves into node entry or error on completion
+pub struct LocateFuture<Id, Info> {
+    rx: mpsc::Receiver<Result<Entry<Id, Info>, Error>>,
+}
+
+#[cfg(nope)]
+impl <Id, Info, ReqId: Clone> LocateFuture<Id, Info> {
+    pub fn id(&self) -> ReqId {
+        self.req_id.clone()
+    }
+}
+
+impl <Id, Info> Future for LocateFuture<Id, Info> {
+    type Output = Result<Entry<Id, Info>, Error>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.rx.poll_next_unpin(ctx) {
+            Poll::Ready(Some(r)) => Poll::Ready(r),
+            _ => Poll::Pending,
+        }
+    }
+}
+
+
 impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
 where
     Id: DatabaseId + Clone + Sized + Send + 'static,
@@ -38,29 +63,6 @@ where
             rx: done_rx,
         }, req_id))
     }
-
-}
-
-pub struct LocateFuture<Id, Info> {
-    rx: mpsc::Receiver<Result<Entry<Id, Info>, Error>>,
-}
-
-#[cfg(nope)]
-impl <Id, Info, ReqId: Clone> LocateFuture<Id, Info> {
-    pub fn id(&self) -> ReqId {
-        self.req_id.clone()
-    }
-}
-
-impl <Id, Info> Future for LocateFuture<Id, Info> {
-    type Output = Result<Entry<Id, Info>, Error>;
-
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.rx.poll_next_unpin(ctx) {
-            Poll::Ready(Some(r)) => Poll::Ready(r),
-            _ => Poll::Pending,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -68,7 +70,7 @@ mod tests {
     use log::*;
     use simplelog::{SimpleLogger, LevelFilter, Config as LogConfig};
 
-    use crate::{Dht, StandardDht, Config};
+    use crate::{Dht, Config};
     use crate::store::HashMapStore;
     use crate::table::KNodeTable;
 
@@ -97,7 +99,7 @@ mod tests {
 
         // Instantiated DHT
         let (tx, mut rx) = mpsc::channel(10);
-        let mut dht: StandardDht<_, u32, u32, u16> = Dht::new([0u8], config, table, tx, store);
+        let mut dht: Dht<_, u32, u32, u16> = Dht::custom([0u8], config, tx, table, store);
         
         info!("Start locate");
         // Issue lookup
@@ -105,7 +107,7 @@ mod tests {
 
         info!("Search round 0");
         // Start the first search pass
-        dht.update().await;
+        dht.update().await.unwrap();
 
         // Check requests (query node 2, 3), find node 4
         assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(n4.id().clone()))));
@@ -118,8 +120,8 @@ mod tests {
         info!("Search round 1");
 
         // Update search state (re-start search)
-        dht.update().await;
-        dht.update().await;
+        dht.update().await.unwrap();
+        dht.update().await.unwrap();
 
         // Check requests (query node 4, 5)
         assert_eq!(rx.try_next().unwrap() , Some((n4.clone(), Request::FindNode(n4.id().clone()))));
@@ -130,10 +132,11 @@ mod tests {
         dht.handle_resp(req_id, &n5, &Response::NodesFound(n4.id().clone(), vec![n5.clone()])).await.unwrap();
 
         // Launch next search
-        dht.update().await;
+        dht.update().await.unwrap();
         // Detect completion
-        dht.update().await;
+        dht.update().await.unwrap();
 
         info!("Expecting completion");
+        assert_eq!(lookup.await, Ok(n4));
     }
 }

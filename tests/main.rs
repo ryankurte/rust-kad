@@ -25,7 +25,7 @@ use futures::channel::mpsc;
 
 
 struct MockPeer<Id: Debug, Info: Debug, Data: Debug> {
-    dht: Dht<Id, Info, Data, u64, KNodeTable<Id, Info>, HashMapStore<Id, Data>>,
+    dht: Dht<Id, Info, Data, u64>,
 }
 
 type PeerMap<Id, Info, Data> = HashMap<Id, MockPeer<Id, Info, Data>>;
@@ -48,12 +48,9 @@ where
         for n in nodes {
             let config = config.clone();
 
-            let table = KNodeTable::<Id, Info>::new(n.id().clone(), config.k, n.id().max_bits());
-            let store = HashMapStore::<Id, Data>::new();
-
             let (sink_tx, sink_rx) = mpsc::channel(10);
 
-            let dht = Dht::new(n.id().clone(), config, table, sink_tx, store);
+            let dht = Dht::standard(n.id().clone(), config, sink_tx);
 
             let peer = MockPeer{
                 dht

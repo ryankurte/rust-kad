@@ -1,6 +1,6 @@
 /**
  * rust-kad
- * Kademlia base operation, used in the implementation of locate / search / store functions
+ * Kademlia base operation, used in the implementation of connect / locate / search / store functions
  *
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
@@ -37,7 +37,7 @@ pub enum OperationKind<Id, Info, Data> {
     /// Find values at the specified ID
     FindValues(Sender<Result<Vec<Data>, Error>>),
     /// Store the provided value(s) at the specified ID
-    Store(Vec<Data>, Sender<Result<(), Error>>),
+    Store(Vec<Data>, Sender<Result<Vec<Entry<Id, Info>>, Error>>),
 }
 
 impl <Id, Info, Data> Display for OperationKind<Id, Info, Data> {
@@ -55,6 +55,8 @@ pub enum OperationState {
     Init,
     Search(usize),
     Searching(usize),
+    Request,
+    Pending,
     Done,
 }
 

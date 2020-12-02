@@ -24,8 +24,8 @@ use crate::Config;
 
 use crate::common::*;
 
-use crate::store::Datastore;
-use crate::table::NodeTable;
+use crate::store::{Datastore, HashMapStore};
+use crate::table::{NodeTable, KNodeTable};
 
 mod operation;
 pub use operation::*;
@@ -39,13 +39,13 @@ pub use operation::*;
 mod lookup;
 pub use lookup::*;
 
-//mod find;
-//pub use find::*;
+mod search;
+pub use search::*;
 
-//mod store;
-//pub use store::*;
+mod store;
+pub use store::*;
 
-pub struct Dht<Id, Info, Data, ReqId, Table, Store> {
+pub struct Dht<Id, Info, Data, ReqId, Table=KNodeTable<Id, Info>, Store=HashMapStore<Id, Data>> {
     id: Id,
 
     config: Config,
@@ -70,12 +70,12 @@ where
     Table: NodeTable<Id, Info> + Clone + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Send + 'static,
 {
-    /// Create a new generic DHT
-    pub fn new(
+    /// Create a new DHT with custom node table / data store implementation
+    pub fn custom(
         id: Id,
         config: Config,
-        table: Table,
         conn_mgr: Sender<(Entry<Id, Info>, Request<Id, Data>)>,
+        table: Table,
         datastore: Store,
     ) -> Dht<Id, Info, Data, ReqId, Table, Store> {
         Dht {
@@ -138,167 +138,6 @@ where
         Ok(resp)
     }
 
-    pub(crate) async fn request(
-        &self,
-        req_id: ReqId,
-        targets: &[Entry<Id, Info>],
-        req: Request<Id, Data>,
-    ) -> Result<(), Error> {
-        
-        trace!("Send req: {} ({:?}) to {:?}", req_id, req, targets);
-
-        for t in targets {
-            self.conn_mgr.clone().send((t.clone(), req.clone())).await;
-        }
-
-        Ok(())
-    }
-
-    // Create a new operation
-    pub(crate) fn exec(
-        &mut self,
-        req_id: ReqId,
-        target: Id,
-        kind: OperationKind<Id, Info, Data>,
-    ) -> Result<(), Error> {
-
-        debug!("Registering operation id: {}", req_id);
-
-        // Create operation object
-        let mut op = Operation::new(req_id.clone(), target.clone(), kind);
-
-        // Register operation in tracking
-        // Actual execution happens in `Dht::update` methods.
-        self.operations.insert(req_id.clone(), op);
-
-        // Return OK
-        Ok(())
-    }
-
-    pub async fn update(&mut self) {
-        debug!("Update");
-
-        let mut req_sink = self.conn_mgr.clone();
-
-        //  For each currently tracked operation
-        for (req_id, op) in self.operations.iter_mut() {
-
-            // Generate request objects
-            let req = match &op.kind {
-                OperationKind::FindNode(tx) => Request::FindNode(op.target.clone()),
-                OperationKind::FindValues(tx) => Request::FindValue(op.target.clone()),
-                OperationKind::Store(v, tx) => Request::Store(op.target.clone(), v.clone()),
-            };
-
-            // Match on states
-            match op.state.clone() {
-                // Initialise new operation
-                OperationState::Init => {
-                    let nearest: Vec<_> = self.table.nearest(&op.target, 0..self.config.concurrency);
-                    for e in &nearest {
-                        op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
-                    }
-
-                    debug!("Initiating operation {} ({})  sending {:?} request to: {:?}", &op.kind, req_id, req, nearest);
-
-                    // Issue appropriate request
-                    for n in &nearest {
-                        // TODO: handle sink errors?
-                        let _ = req_sink.send((n.clone(), req.clone())).await;
-                    }
-
-                    // Set to search state
-                    debug!("Operation {} entering searching state", req_id);
-                    op.state = OperationState::Searching(0)
-                },
-                // Currently searching / awaiting responses
-                OperationState::Searching(n) => {
-                    // Fetch known nodes 
-                    let mut known: Vec<_> = op.nodes.iter()
-                        .collect();
-                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
-
-                    // Short-circuit to next search if active nodes have completed operations
-                    let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
-                        .iter()
-                        .filter(|(_key, (_e, s))| *s == RequestState::Active)
-                        .collect();
-
-                    // Exit when no pending nodes remain within K bucket
-                    let pending: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
-                        .iter()
-                        .filter(|(_key, (_e, s))| *s == RequestState::Pending)
-                        .collect();
-
-                    let expired = Instant::now().checked_duration_since(op.last_update);
-
-                    debug!("active: {:?}", active);
-                    debug!("pending: {:?}", pending);
-
-                    match (active.len(), pending.len(), expired) {
-                        // No active or pending nodes, all complete (this will basically never happen)
-                        (0, 0, _) => {
-                            debug!("Operation {} complete!", req_id);
-                            op.state = OperationState::Done
-                        },
-                        // No active nodes, all replies received, re-start search
-                        (0, _, _) => {
-                            debug!("Operation {}, all responses received, re-starting search", req_id);
-                            op.state = OperationState::Search(n + 1);
-                        },
-                        // Search iteration timeout
-                        (_, _, Some(d)) if d > self.config.search_timeout => {
-                            debug!("Operation {} timeout at iteration {}", req_id, n);
-
-                            // TODO: Update active nodes to timed-out
-
-                            op.state = OperationState::Search(n + 1);
-                        },
-                        _ => (),
-                    }               
-                }
-                // Update a search iteration
-                OperationState::Search(n) => {
-                    // Check for max recursion
-                    if n > self.config.max_recursion {
-                        debug!("Reached recursion limit, aborting search {}", req_id);
-                        op.state = OperationState::Done;
-                        continue;
-                    }
-
-                    debug!("Operation {} search iteration {}", req_id, n);
-
-                    // Locate next nearest nodes
-                    let own_id = self.id.clone();
-                    let mut nearest: Vec<_> = op.nodes.iter()
-                        .filter(|(k, (_n, s))| (*s == RequestState::Pending) & (*k != &own_id))
-                        .map(|(_k, (n, _s))| n.clone())
-                        .collect();
-
-                    // Sort and limit
-                    nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
-                    let range = 0..usize::min(self.config.concurrency, nearest.len());
-
-                    // Launch next set of requests
-                    debug!("Operation {} issuing search request: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
-                    for n in &nearest[range] {
-                        op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
-
-                        // TODO: handle sink errors?
-                        let _ = req_sink.send((n.clone(), req.clone())).await;
-                    }
-
-                    // Update search state
-                    debug!("Operation {} entering searching state", req_id);
-                    op.state = OperationState::Searching(n);
-                },
-                // Update completion state
-                OperationState::Done => {
-
-                }
-            };
-        }
-    }
 
     // Receive responses and update internal state
     pub async fn handle_resp(
@@ -353,7 +192,7 @@ where
                 debug!("Operation {}, adding data to map: {:?}", req_id, values);
 
                 // Add data to data list
-                op.data.insert(id.clone(), values.clone());
+                op.data.insert(from.id().clone(), values.clone());
 
                 RequestState::Complete
             },
@@ -381,6 +220,265 @@ where
         self.operations.insert(req_id, op);
     
         return Ok(())
+    }
+
+
+    // Create a new operation
+    pub(crate) fn exec(
+        &mut self,
+        req_id: ReqId,
+        target: Id,
+        kind: OperationKind<Id, Info, Data>,
+    ) -> Result<(), Error> {
+
+        debug!("Registering operation id: {}", req_id);
+
+        // Create operation object
+        let op = Operation::new(req_id.clone(), target.clone(), kind);
+
+        // Register operation in tracking
+        // Actual execution happens in `Dht::update` methods.
+        self.operations.insert(req_id.clone(), op);
+
+        // Return OK
+        Ok(())
+    }
+
+    /// Update internal state
+    pub async fn update(&mut self) -> Result<(), Error> {
+        debug!("Update");
+
+        let mut req_sink = self.conn_mgr.clone();
+
+        //  For each currently tracked operation
+        for (req_id, op) in self.operations.iter_mut() {
+
+            // Generate request objects
+            let req = match &op.kind {
+                OperationKind::FindNode(_tx) => Request::FindNode(op.target.clone()),
+                OperationKind::FindValues(_tx) => Request::FindValue(op.target.clone()),
+                OperationKind::Store(_v, _tx) => Request::FindNode(op.target.clone()),
+            };
+
+            // Match on states
+            match op.state.clone() {
+                // Initialise new operation
+                OperationState::Init => {
+                    let nearest: Vec<_> = self.table.nearest(&op.target, 0..self.config.concurrency);
+                    for e in &nearest {
+                        op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
+                    }
+
+                    debug!("Initiating operation {} ({})  sending {:?} request to: {:?}", &op.kind, req_id, req, nearest);
+
+                    // Issue appropriate request
+                    for n in &nearest {
+                        // TODO: handle sink errors?
+                        let _ = req_sink.send((n.clone(), req.clone())).await;
+                    }
+
+                    // Set to search state
+                    debug!("Operation {} entering searching state", req_id);
+                    op.state = OperationState::Searching(0)
+                },
+                // Currently searching / awaiting responses
+                OperationState::Searching(n) => {
+                    // Fetch known nodes 
+                    let nodes = op.nodes.clone();
+                    let mut known: Vec<_> = nodes.iter()
+                        .collect();
+                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
+
+                    // Short-circuit to next search if active nodes have completed operations
+                    let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
+                        .iter()
+                        .filter(|(_key, (_e, s))| *s == RequestState::Active)
+                        .collect();
+
+                    // Exit when no pending nodes remain within K bucket
+                    let pending: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
+                        .iter()
+                        .filter(|(_key, (_e, s))| *s == RequestState::Pending)
+                        .collect();
+
+                    // Check for expiry
+                    let search_timeout = self.config.search_timeout;
+                    let expired = Instant::now().checked_duration_since(op.last_update)
+                            .map(|d| d > search_timeout).unwrap_or(false);
+
+                    debug!("active: {:?}", active);
+                    debug!("pending: {:?}", pending);
+                    debug!("data: {:?}", op.data);
+
+                    match (active.len(), pending.len(), expired) {
+                        // No active or pending nodes, all complete (this will basically never happen)
+                        (0, 0, _) => {
+                            debug!("Operation {} search complete!", req_id);
+                            op.state = OperationState::Request;
+                        },
+                        // No active nodes, all replies received, re-start search
+                        (0, _, _) => {
+                            debug!("Operation {}, all responses received, re-starting search", req_id);
+                            op.state = OperationState::Search(n + 1);
+                        },
+                        // Search iteration timeout
+                        (_, _, true) => {
+                            debug!("Operation {} timeout at iteration {}", req_id, n);
+
+                            // TODO: Update active nodes to timed-out
+                            for (id, _n) in pending {
+                                op.nodes.entry((*id).clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                            }
+
+                            op.state = OperationState::Search(n + 1);
+                        },
+                        _ => (),
+                    }               
+                }
+                // Update a search iteration
+                OperationState::Search(n) => {
+                    // Check for max recursion
+                    if n > self.config.max_recursion {
+                        debug!("Reached recursion limit, aborting search {}", req_id);
+                        op.state = OperationState::Pending;
+                        continue;
+                    }
+
+                    debug!("Operation {} search iteration {}", req_id, n);
+
+                    // Locate next nearest nodes
+                    let own_id = self.id.clone();
+                    let mut nearest: Vec<_> = op.nodes.iter()
+                        .filter(|(k, (_n, s))| (*s == RequestState::Pending) & (*k != &own_id))
+                        .map(|(_k, (n, _s))| n.clone())
+                        .collect();
+
+                    // Sort and limit
+                    nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
+                    let range = 0..usize::min(self.config.concurrency, nearest.len());
+
+                    // Launch next set of requests
+                    debug!("Operation {} issuing search request: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
+                    for n in &nearest[range] {
+                        op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+
+                        // TODO: handle sink errors?
+                        let _ = req_sink.send((n.clone(), req.clone())).await;
+                    }
+
+                    // Update search state
+                    debug!("Operation {} entering searching state", req_id);
+                    op.state = OperationState::Searching(n);
+                },
+                // Issue find / store operation if required
+                OperationState::Request => {
+                    let req = match &op.kind {
+                        OperationKind::FindValues(_) => Request::FindValue(op.target.clone()),
+                        OperationKind::Store(v, _) => Request::Store(op.target.clone(), v.clone()),
+                        OperationKind::FindNode(_) => {
+                            op.state = OperationState::Done;
+                            continue;
+                        }
+                    };
+
+                    // Locate nearest responding nodes
+                    // TODO: this doesn't _need_ to be per search, could be from the global table?
+                    let own_id = self.id.clone();
+                    let mut nearest: Vec<_> = op.nodes.iter()
+                        .filter(|(k, (_n, s))| (*s == RequestState::Complete) & (*k != &own_id))
+                        .map(|(_k, (n, _s))| n.clone())
+                        .collect();
+
+                    // Sort and limit
+                    nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
+                    let range = 0..usize::min(self.config.concurrency, nearest.len());
+
+                    debug!("Operation {} issuing: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
+
+                    for n in &nearest[range] {
+                        op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+
+                        // TODO: handle sink errors?
+                        let _ = req_sink.send((n.clone(), req.clone())).await;
+                    }
+
+                    op.state = OperationState::Pending;
+                },
+                // Currently awaiting request responses
+                OperationState::Pending => {
+                    // Fetch known nodes 
+                    let nodes = op.nodes.clone();
+                    let mut known: Vec<_> = nodes.iter()
+                        .collect();
+                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
+
+                    // Exit when no pending nodes remain
+                    let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
+                        .iter()
+                        .filter(|(_key, (_e, s))| *s == RequestState::Active)
+                        .collect();
+
+                    // Check for expiry
+                    let search_timeout = self.config.search_timeout;
+                    let expired = Instant::now().checked_duration_since(op.last_update)
+                            .map(|d| d > search_timeout).unwrap_or(false);
+
+                    if active.len() == 0 || expired {
+                        debug!("Operation {} entering done state", req_id);
+                        op.state = OperationState::Done;
+                    }
+                }
+                // Update completion state
+                OperationState::Done => {
+                    debug!("Operating {} done", req_id);
+
+                    match &op.kind {
+                        OperationKind::FindNode(tx) => {
+                            match op.nodes.get(&op.target) {
+                                Some((n, _s)) => tx.clone().send(Ok(n.clone())).await.unwrap(),
+                                None => tx.clone().send(Err(Error::NotFound)).await.unwrap(),
+                            };
+                        }
+                        OperationKind::FindValues(tx) => {
+                            if op.data.len() > 0 {
+                                // Flatten out response
+                                let mut flat_data: Vec<Data> = op.data.iter().flat_map(|(_k, v)| v.clone() ).collect();
+
+                                // Append any already known data
+                                if let Some(mut existing) = self.datastore.find(&op.target) {
+                                    flat_data.append(&mut existing);
+                                }
+
+                                debug!("Operation {} values found: {:?}", req_id, flat_data);
+
+                                tx.clone().send(Ok(flat_data)).await.unwrap();
+                            } else {
+                                tx.clone().send(Err(Error::NotFound)).await.unwrap();
+                            }
+                        }
+                        OperationKind::Store(values, tx) => {
+                            // TODO: check values
+                            if op.data.len() > 0 {
+                                let flat_ids: Vec<_> = op.data.iter().map(|(k, _v)| k.clone() ).collect();
+                                let flat_nodes: Vec<_> = flat_ids.iter().filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone() ) ).collect();
+
+                                debug!("Operation {} stored at {} peers", req_id, flat_ids.len());
+
+                                tx.clone().send(Ok(flat_nodes)).await.unwrap();
+                            } else {
+                                debug!("Operation {} store failed", req_id);
+                                tx.clone().send(Err(Error::NotFound)).await.unwrap();
+                            }
+                            
+                        }
+                    }
+
+                    // TODO: remove from tracking
+                }
+            };
+        }
+
+        Ok(())
     }
 
     /// Refresh buckets and node table entries
@@ -473,16 +571,10 @@ macro_rules! mock_dht {
         mock_dht!($connector, $root, $dht, config);
     };
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
-        let table = KNodeTable::new($root.id().clone(), $config.k, $root.id().max_bits());
-
-        let store: HashMapStore<[u8; 1], u64> = HashMapStore::new();
-
-        let mut $dht = Dht::<[u8; 1], u64, _, u64, _, _>::new(
+        let mut $dht = Dht::<[u8; 1], _, u64, u64>::standard(
             $root.id().clone(),
             $config,
-            table,
             $connector.clone(),
-            store,
         );
     };
 }

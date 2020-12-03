@@ -13,10 +13,6 @@ use std::collections::HashMap;
 
 use futures::channel::mpsc::{Sender};
 
-use log::{trace, debug, info, warn};
-
-use crate::Config;
-
 use crate::common::*;
 
 
@@ -32,6 +28,8 @@ pub enum RequestState {
 
 #[derive(Debug)]
 pub enum OperationKind<Id, Info, Data> {
+    /// Connect to known peers
+    Connect(Sender<Result<usize, Error>>),
     /// Find a node with the specified ID
     FindNode(Sender<Result<Entry<Id, Info>, Error>>),
     /// Find values at the specified ID
@@ -43,6 +41,7 @@ pub enum OperationKind<Id, Info, Data> {
 impl <Id, Info, Data> Display for OperationKind<Id, Info, Data> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            OperationKind::Connect(_) => write!(f, "Connect"),
             OperationKind::FindNode(_) => write!(f, "FindNode"),
             OperationKind::FindValues(_) => write!(f, "FindValues"),
             OperationKind::Store(_, _) => write!(f, "Store"),

@@ -11,10 +11,6 @@ use std::marker::PhantomData;
 use std::time::Instant;
 use std::collections::HashMap;
 
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
 use futures::prelude::*;
 use futures::channel::mpsc::{Sender};
 
@@ -30,11 +26,8 @@ use crate::table::{NodeTable, KNodeTable};
 mod operation;
 pub use operation::*;
 
-//pub mod search;
-//pub use self::search::{Operation, Search};
-
-//mod connect;
-//pub use connect::*;
+mod connect;
+pub use connect::*;
 
 mod lookup;
 pub use lookup::*;
@@ -160,7 +153,7 @@ where
 
         // Check request is expected / from a valid peer
         match op.nodes.get_mut(from.id()) {
-            Some((e, s)) if *s != RequestState::Active => {
+            Some((_e, s)) if *s != RequestState::Active => {
                 warn!("Operation {} unexpected response from: {:?}", req_id, from);
                 *s = RequestState::InvalidResponse;
                 return Ok(())
@@ -185,7 +178,7 @@ where
                 RequestState::Complete
             },
             Response::NodesFound(id, _entries) => {
-                debug!("Operation {}, invalid response from: {:?} (id: {:?})", req_id, from, id);
+                debug!("Operation {}, invalid nodes response: {:?} from: {:?} (id: {:?})", req_id, resp, from, id);
                 RequestState::InvalidResponse
             },
             Response::ValuesFound(id, values) if id == &op.target => {
@@ -197,7 +190,7 @@ where
                 RequestState::Complete
             },
             Response::ValuesFound(id, _values) => {
-                debug!("Operation {}, invalid response from: {:?} (id: {:?})", req_id, from, id);
+                debug!("Operation {}, invalid values response: {:?} from: {:?} (id: {:?})", req_id, resp, from, id);
                 RequestState::InvalidResponse
             },
             Response::NoResult => {
@@ -255,6 +248,7 @@ where
 
             // Generate request objects
             let req = match &op.kind {
+                OperationKind::Connect(_tx) => Request::FindNode(op.target.clone()),
                 OperationKind::FindNode(_tx) => Request::FindNode(op.target.clone()),
                 OperationKind::FindValues(_tx) => Request::FindValue(op.target.clone()),
                 OperationKind::Store(_v, _tx) => Request::FindNode(op.target.clone()),
@@ -269,12 +263,15 @@ where
                         op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
                     }
 
-                    debug!("Initiating operation {} ({})  sending {:?} request to: {:?}", &op.kind, req_id, req, nearest);
+                    debug!("Initiating operation {} ({})  sending {:?} request to {:?} nodes", &op.kind, req_id, req, op.nodes.len());
 
                     // Issue appropriate request
-                    for n in &nearest {
+                    for (_id, (e, _s)) in op.nodes.iter() {
+
+                        debug!("Op {} tx: {:?} to: {:?}", req_id, req, e);
+
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((n.clone(), req.clone())).await;
+                        let _ = req_sink.send((e.clone(), req.clone())).await;
                     }
 
                     // Set to search state
@@ -372,10 +369,11 @@ where
                 },
                 // Issue find / store operation if required
                 OperationState::Request => {
+                    // TODO: should a search be a find all then query, or a find values with short-circuits?
                     let req = match &op.kind {
-                        OperationKind::FindValues(_) => Request::FindValue(op.target.clone()),
                         OperationKind::Store(v, _) => Request::Store(op.target.clone(), v.clone()),
-                        OperationKind::FindNode(_) => {
+                        _ => {
+                            debug!("Operation {} entering done state", req_id);
                             op.state = OperationState::Done;
                             continue;
                         }
@@ -433,6 +431,15 @@ where
                     debug!("Operating {} done", req_id);
 
                     match &op.kind {
+                        OperationKind::Connect(tx) => {
+                            let peers = op.nodes.iter().filter(|(_k, (_n, s))| *s == RequestState::Complete).count();
+                            if peers > 0 {
+                                tx.clone().send(Ok(peers)).await.unwrap();
+
+                            } else {
+                                tx.clone().send(Err(Error::NotFound)).await.unwrap();
+                            }
+                        }
                         OperationKind::FindNode(tx) => {
                             match op.nodes.get(&op.target) {
                                 Some((n, _s)) => tx.clone().send(Ok(n.clone())).await.unwrap(),
@@ -456,7 +463,7 @@ where
                                 tx.clone().send(Err(Error::NotFound)).await.unwrap();
                             }
                         }
-                        OperationKind::Store(values, tx) => {
+                        OperationKind::Store(_values, tx) => {
                             // TODO: check values
                             if op.data.len() > 0 {
                                 let flat_ids: Vec<_> = op.data.iter().map(|(k, _v)| k.clone() ).collect();
@@ -544,6 +551,7 @@ where
     }
 }
 
+#[cfg(nope)]
 impl<Id, Info, Data, ReqId, Table, Store> Future for Dht<Id, Info, Data, ReqId, Table, Store>
 where
     Id: DatabaseId + Clone + Sized + Send + 'static,
@@ -555,7 +563,7 @@ where
 {
     type Output = Result<(), Error>;
 
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Self::Output> {
         unimplemented!()
     }
 }

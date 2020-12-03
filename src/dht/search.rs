@@ -132,6 +132,7 @@ mod tests {
         dht.update().await.unwrap();
         // Detect completion
         dht.update().await.unwrap();
+        dht.update().await.unwrap();
 
         info!("Expecting search completion");
         assert_eq!(search.await, Ok(vec![value_data, value_data]));

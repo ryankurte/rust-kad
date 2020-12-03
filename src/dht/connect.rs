@@ -1,101 +1,136 @@
 
-use std::fmt::Debug;
+
+use std::fmt::{Debug, Display};
+
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use futures::prelude::*;
+use futures::channel::mpsc;
 
 use crate::common::*;
 use crate::store::Datastore;
 use crate::table::NodeTable;
 
-use super::{Dht, Search, Operation};
+use super::{Dht, OperationKind, Operation, RequestState};
 
-impl<Id, Info, Data, ReqId, Table, Store>
-Dht<Id, Info, Data, ReqId, Table, Store>
-where
-Id: DatabaseId + Clone + Sized + Send + 'static,
-Info: PartialEq + Clone + Sized + Debug + Send + 'static,
-Data: PartialEq + Clone + Sized + Debug + Send + 'static,
-ReqId: RequestId + Clone + Sized + Debug + Send + 'static,
-Table: NodeTable<Id, Info> + Clone + Send + 'static,
-Store: Datastore<Id, Data> + Clone + Send + 'static,
-{
+/// Future returned by connect operation
+/// Resolves into a number of located peers on success
+pub struct ConnectFuture {
+    rx: mpsc::Receiver<Result<usize, Error>>,
+}
+impl  Future for ConnectFuture {
+    type Output = Result<usize, Error>;
 
-    /// Connect to a known node
-    /// This is used for bootstrapping onto the DHT, however requires a complete Entry
-    /// due to limitations of the underlying connector abstraction.
-    /// If this is unsuitable, manually issue an initial FindNode request and use the
-    /// handle_connect_response method to complete the connection.
-    pub async fn connect(
-        &mut self,
-        target: Entry<Id, Info>,
-    ) -> Result<Vec<Entry<Id, Info>>, Error> {
-        let id = self.id.clone();
-
-        info!(target: "dht", "[DHT connect] {:?} to: {:?} at: {:?}", id, target.id(), target.info());
-
-        // Issue request
-        self.request(ReqId::generate(),
-            target.clone(),
-            Request::FindNode(self.id.clone())
-        );
-
-        // TODO: await response
-        
-        // TODO: handle response
-        s.handle_connect_response(target, resp).await
-    }
-
-    /// Handle the response to an initial FindNodes request.
-    /// This is used to bootstrap a connection where the `.connect` method is unsuitable.
-    pub async fn handle_connect_response(
-        &mut self,
-        target: Entry<Id, Info>,
-        resp: Response<Id, Info, Data>,
-    ) -> Result<Vec<Entry<Id, Info>>, Error> {
-        let (id, mut found) = match resp {
-            Response::NodesFound(id, nodes) => (id, nodes),
-            Response::NoResult => {
-                warn!(
-                    "[DHT connect] Received NoResult response from {:?}",
-                    target.id()
-                );
-                return Ok(vec![]);
-            }
-            _ => {
-                warn!("[DHT connect] invalid response from: {:?}", target.id());
-                return Err(Error::InvalidResponse);
-            }
-        };
-
-        // Check ID matches self
-        if id != self.id {
-            return Err(Error::InvalidResponseId);
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.rx.poll_next_unpin(ctx) {
+            Poll::Ready(Some(r)) => Poll::Ready(r),
+            _ => Poll::Pending,
         }
-
-        // Filter self from response
-        let our_id = self.id.clone();
-        let found: Vec<_> = found.drain(..).filter(|e| e.id() != &our_id).collect();
-
-        // Add responding target to table
-        // This only occurs after a response as there's no point adding a non-responding
-        // node to the DHT
-        let _table = self.table.clone();
-        self.table.create_or_update(&target);
-
-        trace!(
-            "[DHT connect] response received, searching {} nodes",
-            found.len()
-        );
-
-        // Create a FIND_NODE search on own id with responded nodes
-        // This both registers this node with peers, and finds and relevant closer peers
-        let search = self.search(id, Operation::FindNode, &found).await?;
-
-        // We don't care about the search result here
-        // Generally it should be that discovered nodes > 0, however not for the first bootstrapping...
-
-        // TODO: Refresh all k-buckets further away than our nearest neighbor
-
-        // Return newly discovered nodes
-        Ok(search.all_completed())
     }
+}
 
+
+impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
+where
+    Id: DatabaseId + Clone + Sized + Send + 'static,
+    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
+    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
+    ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
+    Table: NodeTable<Id, Info> + Clone + Send + 'static,
+    Store: Datastore<Id, Data> + Clone + Send + 'static,
+{
+    /// Connect to the database
+    pub fn connect(&mut self, peers: &[Entry<Id, Info>]) -> Result<(ConnectFuture, ReqId), Error> {
+
+        // Create an operation for the provided target
+        let req_id = ReqId::generate();
+        let (done_tx, done_rx) = mpsc::channel(1);
+
+        // Create operation and seed with known peers
+        // This is a hack to avoid needing separate logic for the connect operation
+        let mut op = Operation::new(req_id.clone(), self.id.clone(), OperationKind::Connect(done_tx));
+        for e in peers {
+            op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
+        }
+        
+        // Register and start operation
+        self.operations.insert(req_id.clone(), op);
+
+        // Return locate future to caller
+        Ok((ConnectFuture{
+            rx: done_rx,
+        }, req_id))
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use log::*;
+    use simplelog::{SimpleLogger, LevelFilter, Config as LogConfig};
+
+    use crate::{Dht, Config};
+
+    use super::*;
+
+    #[async_std::test]
+    async fn test_connect() {
+        let _ = SimpleLogger::init(LevelFilter::Debug, LogConfig::default());
+
+        let n1 = Entry::new([0b1000], 100);
+        let n2 = Entry::new([0b0011], 200);
+        let n3 = Entry::new([0b0010], 300);
+        let n4 = Entry::new([0b1001], 400);
+        let n5 = Entry::new([0b1010], 400);
+
+        // Create configuration
+        let mut config = Config::default();
+        config.concurrency = 2;
+        config.k = 2;
+
+        // Instantiated DHT
+        let (tx, mut rx) = mpsc::channel(10);
+        let mut dht: Dht<_, u32, u32, u16> = Dht::standard(n1.id().clone(), config, tx);
+        
+        info!("Start connect");
+        // Issue lookup
+        let (connect, req_id) = dht.connect(&[n2.clone(), n3.clone()]).expect("Error starting lookup");
+
+        info!("Search round 0");
+        // Start the first search pass
+        dht.update().await.unwrap();
+
+        // Check requests (query node 2, 3), find node 4
+        assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(n1.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((n3.clone(), Request::FindNode(n1.id().clone()))));
+
+        // Handle responses (response from 2, 3), node 4, 5 known
+        dht.handle_resp(req_id, &n2, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n3, &Response::NodesFound(n1.id().clone(), vec![n5.clone()])).await.unwrap();
+
+        info!("Search round 1");
+
+        // Update search state (re-start search)
+        dht.update().await.unwrap();
+        dht.update().await.unwrap();
+
+        // Check requests (query node 4, 5)
+        assert_eq!(rx.try_next().unwrap() , Some((n4.clone(), Request::FindNode(n1.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((n5.clone(), Request::FindNode(n1.id().clone()))));
+
+        // Handle responses for node 4, 5
+        dht.handle_resp(req_id, &n4, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n5, &Response::NodesFound(n1.id().clone(), vec![n5.clone()])).await.unwrap();
+
+        // Launch next search
+        dht.update().await.unwrap();
+        // Detect completion
+        dht.update().await.unwrap();
+        dht.update().await.unwrap();
+
+        info!("Expecting completion");
+        assert_eq!(connect.await, Ok(4));
+    }
 }

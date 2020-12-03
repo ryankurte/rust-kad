@@ -263,10 +263,13 @@ where
                         op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
                     }
 
-                    debug!("Initiating operation {} ({})  sending {:?} request to {:?} nodes", &op.kind, req_id, req, op.nodes.len());
+                    let mut nodes: Vec<_> = op.nodes.iter().map(|(k, (n, _s))| n.clone() ).collect(); 
+                    nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
+
+                    debug!("Initiating operation {} ({})  sending {:?} request to {:?}", &op.kind, req_id, req, nodes);
 
                     // Issue appropriate request
-                    for (_id, (e, _s)) in op.nodes.iter() {
+                    for e in nodes.iter() {
 
                         debug!("Op {} tx: {:?} to: {:?}", req_id, req, e);
 
@@ -307,19 +310,19 @@ where
                     debug!("pending: {:?}", pending);
                     debug!("data: {:?}", op.data);
 
-                    match (active.len(), pending.len(), expired) {
+                    match (active.len(), pending.len(), expired, &op.kind) {
                         // No active or pending nodes, all complete (this will basically never happen)
-                        (0, 0, _) => {
+                        (0, 0, _, _) => {
                             debug!("Operation {} search complete!", req_id);
                             op.state = OperationState::Request;
                         },
                         // No active nodes, all replies received, re-start search
-                        (0, _, _) => {
+                        (0, _, _, _) => {
                             debug!("Operation {}, all responses received, re-starting search", req_id);
                             op.state = OperationState::Search(n + 1);
                         },
                         // Search iteration timeout
-                        (_, _, true) => {
+                        (_, _, true, _) => {
                             debug!("Operation {} timeout at iteration {}", req_id, n);
 
                             // TODO: Update active nodes to timed-out
@@ -459,6 +462,7 @@ where
                                 debug!("Operation {} values found: {:?}", req_id, flat_data);
 
                                 tx.clone().send(Ok(flat_data)).await.unwrap();
+                                
                             } else {
                                 tx.clone().send(Err(Error::NotFound)).await.unwrap();
                             }
@@ -467,7 +471,8 @@ where
                             // TODO: check values
                             if op.data.len() > 0 {
                                 let flat_ids: Vec<_> = op.data.iter().map(|(k, _v)| k.clone() ).collect();
-                                let flat_nodes: Vec<_> = flat_ids.iter().filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone() ) ).collect();
+                                let mut flat_nodes: Vec<_> = flat_ids.iter().filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone() ) ).collect();
+                                flat_nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
 
                                 debug!("Operation {} stored at {} peers", req_id, flat_ids.len());
 

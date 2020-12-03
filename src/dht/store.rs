@@ -111,8 +111,8 @@ mod tests {
         assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(value_id.clone()))));
 
         // Handle responses (response from 2, 3), node 4, 5 known
-        dht.handle_resp(req_id, &n2, &Response::NodesFound(value_id.clone(), vec![n4.clone()])).await.unwrap();
-        dht.handle_resp(req_id, &n3, &Response::NodesFound(value_id.clone(), vec![n5.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n3, &Response::NodesFound(value_id.clone(), vec![n4.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n2, &Response::NodesFound(value_id.clone(), vec![n5.clone()])).await.unwrap();
 
         info!("Search round 1");
 

@@ -13,7 +13,7 @@ use crate::common::*;
 use crate::store::Datastore;
 use crate::table::NodeTable;
 
-use super::{Dht, OperationKind, Operation, RequestState};
+use super::{Dht, OperationKind, OperationState, Operation, RequestState};
 
 /// Future returned by connect operation
 /// Resolves into a number of located peers on success
@@ -48,20 +48,49 @@ where
         let req_id = ReqId::generate();
         let (done_tx, done_rx) = mpsc::channel(1);
 
-        // Create operation and seed with known peers
-        // This is a hack to avoid needing separate logic for the connect operation
+        // Create operation
         let mut op = Operation::new(req_id.clone(), self.id.clone(), OperationKind::Connect(done_tx));
+
+        // Seed operation with known peers
+        // This is a hack to avoid needing separate logic for the connect operation
         for e in peers {
             op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
         }
         
-        // Register and start operation
+        // Register operation for response / update handling
         self.operations.insert(req_id.clone(), op);
 
-        // Return locate future to caller
+        // Return connect future to caller
         Ok((ConnectFuture{
             rx: done_rx,
         }, req_id))
+    }
+
+    /// Create a connection request _without_ storing nodes or sending messages
+    ///
+    /// This is useful for integrating with external interfaces that _may not_
+    /// be aware of the node ID at connect time. The caller is responsible for issuing
+    /// the appropriate request to viable peers, responses will be handled automatically.
+    pub fn connect_start(&mut self) -> Result<(ConnectFuture, Request<Id, Data>), Error> {
+        let req_id = ReqId::generate();
+        let (done_tx, done_rx) = mpsc::channel(1);
+
+        // Create operation
+        let mut op = Operation::new(req_id.clone(), self.id.clone(), OperationKind::Connect(done_tx));
+
+        // Create request
+        let req = Request::FindNode(self.id.clone());
+
+        // Skip init state
+        op.state = OperationState::Searching(0);
+
+        // Register operation for response / update handling
+        self.operations.insert(req_id.clone(), op);
+
+        // Return connect future and request for caller use
+        Ok((ConnectFuture{
+            rx: done_rx,
+        }, req))
     }
 }
 
@@ -103,8 +132,8 @@ mod tests {
         dht.update().await.unwrap();
 
         // Check requests (query node 2, 3), find node 4
-        assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(n1.id().clone()))));
         assert_eq!(rx.try_next().unwrap() , Some((n3.clone(), Request::FindNode(n1.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(n1.id().clone()))));
 
         // Handle responses (response from 2, 3), node 4, 5 known
         dht.handle_resp(req_id, &n2, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).await.unwrap();

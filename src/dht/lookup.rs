@@ -114,8 +114,8 @@ mod tests {
         assert_eq!(rx.try_next().unwrap() , Some((n3.clone(), Request::FindNode(n4.id().clone()))));
 
         // Handle responses (response from 2, 3), node 4, 5 known
-        dht.handle_resp(req_id, &n2, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();
-        dht.handle_resp(req_id, &n3, &Response::NodesFound(n4.id().clone(), vec![n5.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n3, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n2, &Response::NodesFound(n4.id().clone(), vec![n5.clone()])).await.unwrap();
 
         info!("Search round 1");
 
@@ -134,6 +134,7 @@ mod tests {
         // Launch next search
         dht.update().await.unwrap();
         // Detect completion
+        dht.update().await.unwrap();
         dht.update().await.unwrap();
 
         info!("Expecting completion");

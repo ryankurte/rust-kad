@@ -1,17 +1,15 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
-use std::sync::{Arc, Mutex};
 
 use crate::common::DatabaseId;
 use crate::store::Datastore;
 
 pub type Reducer<Data> = dyn Fn(&[Data]) -> Vec<Data> + Send + 'static;
 
-#[derive(Clone)]
 pub struct HashMapStore<Id: Debug, Data: Debug> {
-    data: Arc<Mutex<HashMap<Id, Vec<Data>>>>,
-    reducer: Option<Arc<Mutex<Box<Reducer<Data>>>>>,
+    data: HashMap<Id, Vec<Data>>,
+    reducer: Option<Box<Reducer<Data>>>,
 }
 
 #[derive(Debug)]
@@ -28,7 +26,7 @@ where
     /// Create a new HashMapStore without a reducer
     pub fn new() -> HashMapStore<Id, Data> {
         HashMapStore {
-            data: Arc::new(Mutex::new(HashMap::new())),
+            data: HashMap::new(),
             reducer: None,
         }
     }
@@ -36,15 +34,14 @@ where
     /// Create a new HashMapStore with the provided reducer
     pub fn new_with_reducer(reducer: Box<Reducer<Data>>) -> HashMapStore<Id, Data> {
         HashMapStore {
-            data: Arc::new(Mutex::new(HashMap::new())),
-            reducer: Some(Arc::new(Mutex::new(reducer))),
+            data: HashMap::new(),
+            reducer: Some(reducer),
         }
     }
 
     /// Dump all data in the store
     pub fn dump(&self) -> Vec<(Id, Vec<Data>)> {
-        let data = self.data.lock().unwrap();
-        data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 }
 
@@ -54,8 +51,7 @@ where
     Data: PartialEq + Clone + Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let data = self.data.lock().unwrap();
-        write!(f, "{:?}", data)
+        write!(f, "{:?}", self.data)
     }
 }
 
@@ -65,8 +61,7 @@ where
     Data: PartialEq + Clone + Debug,
 {
     fn find(&self, id: &Id) -> Option<Vec<Data>> {
-        let data = self.data.lock().unwrap();
-        let d = match data.get(id).map(|d| d.clone()) {
+        let d = match self.data.get(id).map(|d| d.clone()) {
             Some(d) => d,
             None => return None,
         };
@@ -78,9 +73,8 @@ where
 
     fn store(&mut self, id: &Id, new: &Vec<Data>) -> Vec<Data> {
         let mut new = new.clone();
-        let mut data = self.data.lock().unwrap();
 
-        match data.entry(id.clone()) {
+        match self.data.entry(id.clone()) {
             Entry::Vacant(v) => {
                 v.insert(new.clone());
 
@@ -92,8 +86,7 @@ where
                 existing.append(&mut new);
 
                 // Reduce if provided
-                if let Some(reducer) = self.reducer.clone() {
-                    let reducer = reducer.lock().unwrap();
+                if let Some(reducer) = &self.reducer {
                     let filtered = (reducer)(&existing);
                     *existing = filtered;
                 }

@@ -34,12 +34,12 @@ impl <Data> Future for SearchFuture<Data> {
 
 impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
 where
-Id: DatabaseId + Clone + Sized + Send + 'static,
-Info: PartialEq + Clone + Sized + Debug + Send + 'static,
-Data: PartialEq + Clone + Sized + Debug + Send + 'static,
-ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-Table: NodeTable<Id, Info> + Clone + Send + 'static,
-Store: Datastore<Id, Data> + Clone + Send + 'static,
+    Id: DatabaseId + Clone + Sized + Send + 'static,
+    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
+    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
+    ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
+    Table: NodeTable<Id, Info> + Send + 'static,
+    Store: Datastore<Id, Data> + Send + 'static,
 {
     /// Search for values at a target ID in the DHT
     pub fn search(&mut self, target: Id) -> Result<(SearchFuture<Data>, ReqId), Error> {

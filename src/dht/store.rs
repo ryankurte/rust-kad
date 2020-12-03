@@ -38,8 +38,8 @@ where
     Info: PartialEq + Clone + Sized + Debug + Send + 'static,
     Data: PartialEq + Clone + Sized + Debug + Send + 'static,
     ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-    Table: NodeTable<Id, Info> + Clone + Send + 'static,
-    Store: Datastore<Id, Data> + Clone + Send + 'static,
+    Table: NodeTable<Id, Info> + Send + 'static,
+    Store: Datastore<Id, Data> + Send + 'static,
 {
     /// Store data in the DHT by ID
     pub fn store(&mut self, target: Id, data: Vec<Data>) -> Result<(StoreFuture<Id, Info>, ReqId), Error> {

@@ -60,8 +60,8 @@ where
     Info: PartialEq + Clone + Sized + Debug + Send + 'static,
     Data: PartialEq + Clone + Sized + Debug + Send + 'static,
     ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-    Table: NodeTable<Id, Info> + Clone + Send + 'static,
-    Store: Datastore<Id, Data> + Clone + Send + 'static,
+    Table: NodeTable<Id, Info> + Send + 'static,
+    Store: Datastore<Id, Data> + Send + 'static,
 {
     /// Create a new DHT with custom node table / data store implementation
     pub fn custom(
@@ -258,12 +258,14 @@ where
             match op.state.clone() {
                 // Initialise new operation
                 OperationState::Init => {
+                    // Identify nearest nodes if available
                     let nearest: Vec<_> = self.table.nearest(&op.target, 0..self.config.concurrency);
                     for e in &nearest {
                         op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
                     }
 
-                    let mut nodes: Vec<_> = op.nodes.iter().map(|(k, (n, _s))| n.clone() ).collect(); 
+                    // Build node array (required to include existing op.nodes)
+                    let mut nodes: Vec<_> = op.nodes.iter().map(|(_k, (n, _s))| n.clone() ).collect(); 
                     nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
 
                     debug!("Initiating operation {} ({})  sending {:?} request to {:?}", &op.kind, req_id, req, nodes);
@@ -462,7 +464,7 @@ where
                                 debug!("Operation {} values found: {:?}", req_id, flat_data);
 
                                 tx.clone().send(Ok(flat_data)).await.unwrap();
-                                
+
                             } else {
                                 tx.clone().send(Err(Error::NotFound)).await.unwrap();
                             }

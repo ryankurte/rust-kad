@@ -13,6 +13,9 @@ use crate::common::{DatabaseId, Entry};
 // Generic Node Table implementation
 // This keeps track of known nodes
 pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
+    /// Return available number of buckets
+    fn buckets(&self) -> usize;
+
     /// Create or update a node in the table
     /// Returns true if node has been stored or updated, false if there is no room remaining in the table
     fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool;
@@ -25,8 +28,8 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
     /// This is used to fetch a node from the node table
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>>;
 
-    /// Iterate through the oldest nodes in each bucket
-    fn iter_oldest(&self) -> Box<dyn Iterator<Item = Entry<Id, Info>>>;
+    /// Fetch the oldest node in a specified bucket
+    fn oldest(&self, index: usize) -> Option<Entry<Id, Info>>;
 
     /// Update an entry in the bucket by ID
     /// Returns true if update function has been executed, false if no entry was found

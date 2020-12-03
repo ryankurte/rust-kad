@@ -45,8 +45,8 @@ where
     Info: PartialEq + Clone + Sized + Debug + Send + 'static,
     Data: PartialEq + Clone + Sized + Debug + Send + 'static,
     ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-    Table: NodeTable<Id, Info> + Clone + Send + 'static,
-    Store: Datastore<Id, Data> + Clone + Send + 'static,
+    Table: NodeTable<Id, Info> + Send + 'static,
+    Store: Datastore<Id, Data> + Send + 'static,
 {
     /// Look up a node in the database by Id
     pub fn locate(&mut self, target: Id) -> Result<(LocateFuture<Id, Info>, ReqId), Error> {

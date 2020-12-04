@@ -110,8 +110,8 @@ mod tests {
         dht.update().await.unwrap();
 
         // Check requests (query node 2, 3), find node 4
-        assert_eq!(rx.try_next().unwrap() , Some((n2.clone(), Request::FindNode(n4.id().clone()))));
-        assert_eq!(rx.try_next().unwrap() , Some((n3.clone(), Request::FindNode(n4.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((req_id, n2.clone(), Request::FindNode(n4.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((req_id, n3.clone(), Request::FindNode(n4.id().clone()))));
 
         // Handle responses (response from 2, 3), node 4, 5 known
         dht.handle_resp(req_id, &n3, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();
@@ -124,8 +124,8 @@ mod tests {
         dht.update().await.unwrap();
 
         // Check requests (query node 4, 5)
-        assert_eq!(rx.try_next().unwrap() , Some((n4.clone(), Request::FindNode(n4.id().clone()))));
-        assert_eq!(rx.try_next().unwrap() , Some((n5.clone(), Request::FindNode(n4.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((req_id, n4.clone(), Request::FindNode(n4.id().clone()))));
+        assert_eq!(rx.try_next().unwrap() , Some((req_id, n5.clone(), Request::FindNode(n4.id().clone()))));
 
         // Handle responses for node 4, 5
         dht.handle_resp(req_id, &n4, &Response::NodesFound(n4.id().clone(), vec![n4.clone()])).await.unwrap();

@@ -82,7 +82,7 @@ where
     ReqId: RequestId + Clone + Display + Send + 'static,
 {
     /// Create a new DHT using the standard node table and data store implementations
-    pub fn standard(id: Id, config: Config, req_sink: Sender<(Entry<Id, Info>, Request<Id, Data>)>) -> StandardDht<Id, Info, Data, ReqId> {
+    pub fn standard(id: Id, config: Config, req_sink: Sender<(ReqId, Entry<Id, Info>, Request<Id, Data>)>) -> StandardDht<Id, Info, Data, ReqId> {
         let table = KNodeTable::new(id.clone(), config.k, id.max_bits());
         let store = HashMapStore::new();
         Dht::custom(id, config, req_sink, table, store)

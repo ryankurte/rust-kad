@@ -43,7 +43,7 @@ pub struct Dht<Id, Info, Data, ReqId, Table=KNodeTable<Id, Info>, Store=HashMapS
 
     config: Config,
     table: Table,
-    conn_mgr: Sender<(Entry<Id, Info>, Request<Id, Data>)>,
+    conn_mgr: Sender<(ReqId, Entry<Id, Info>, Request<Id, Data>)>,
     datastore: Store,
 
     operations: HashMap<ReqId, Operation<Id, Info, Data, ReqId>>,
@@ -67,7 +67,7 @@ where
     pub fn custom(
         id: Id,
         config: Config,
-        conn_mgr: Sender<(Entry<Id, Info>, Request<Id, Data>)>,
+        conn_mgr: Sender<(ReqId, Entry<Id, Info>, Request<Id, Data>)>,
         table: Table,
         datastore: Store,
     ) -> Dht<Id, Info, Data, ReqId, Table, Store> {
@@ -276,7 +276,7 @@ where
                         debug!("Op {} tx: {:?} to: {:?}", req_id, req, e);
 
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((e.clone(), req.clone())).await;
+                        let _ = req_sink.send((req_id.clone(), e.clone(), req.clone())).await;
                     }
 
                     // Set to search state
@@ -365,7 +365,7 @@ where
                         op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
 
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((n.clone(), req.clone())).await;
+                        let _ = req_sink.send((req_id.clone(), n.clone(), req.clone())).await;
                     }
 
                     // Update search state
@@ -402,7 +402,7 @@ where
                         op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
 
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((n.clone(), req.clone())).await;
+                        let _ = req_sink.send((req_id.clone(), n.clone(), req.clone())).await;
                     }
 
                     op.state = OperationState::Pending;
@@ -437,8 +437,11 @@ where
 
                     match &op.kind {
                         OperationKind::Connect(tx) => {
-                            let peers = op.nodes.iter().filter(|(_k, (_n, s))| *s == RequestState::Complete).count();
-                            if peers > 0 {
+                            let peers: Vec<_> = op.nodes.iter()
+                                .filter(|(_k, (_n, s))| *s == RequestState::Complete)
+                                .map(|(_k, (e, _s))| e.clone() )
+                                .collect();
+                            if peers.len() > 0 {
                                 tx.clone().send(Ok(peers)).await.unwrap();
 
                             } else {
@@ -550,6 +553,14 @@ where
         future::join_all(pings).await;
 
         Ok(())
+    }
+
+    pub fn nodetable(&mut self) -> &mut Table {
+        &mut self.table
+    }
+
+    pub fn datastore(&mut self) -> &mut Store {
+        &mut self.datastore
     }
 
     #[cfg(test)]

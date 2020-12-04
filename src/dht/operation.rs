@@ -29,7 +29,7 @@ pub enum RequestState {
 #[derive(Debug)]
 pub enum OperationKind<Id, Info, Data> {
     /// Connect to known peers
-    Connect(Sender<Result<usize, Error>>),
+    Connect(Sender<Result<Vec<Entry<Id, Info>>, Error>>),
     /// Find a node with the specified ID
     FindNode(Sender<Result<Entry<Id, Info>, Error>>),
     /// Find values at the specified ID

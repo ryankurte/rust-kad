@@ -17,11 +17,11 @@ use super::{Dht, OperationKind, OperationState, Operation, RequestState};
 
 /// Future returned by connect operation
 /// Resolves into a number of located peers on success
-pub struct ConnectFuture {
-    rx: mpsc::Receiver<Result<usize, Error>>,
+pub struct ConnectFuture<Id, Info> {
+    rx: mpsc::Receiver<Result<Vec<Entry<Id, Info>>, Error>>,
 }
-impl  Future for ConnectFuture {
-    type Output = Result<usize, Error>;
+impl <Id, Info> Future for ConnectFuture<Id, Info> {
+    type Output = Result<Vec<Entry<Id, Info>>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.rx.poll_next_unpin(ctx) {
@@ -42,7 +42,7 @@ where
     Store: Datastore<Id, Data> + Send + 'static,
 {
     /// Connect to the database
-    pub fn connect(&mut self, peers: &[Entry<Id, Info>]) -> Result<(ConnectFuture, ReqId), Error> {
+    pub fn connect(&mut self, peers: &[Entry<Id, Info>]) -> Result<(ConnectFuture<Id, Info>, ReqId), Error> {
 
         // Create an operation for the provided target
         let req_id = ReqId::generate();
@@ -71,7 +71,7 @@ where
     /// This is useful for integrating with external interfaces that _may not_
     /// be aware of the node ID at connect time. The caller is responsible for issuing
     /// the appropriate request to viable peers, responses will be handled automatically.
-    pub fn connect_start(&mut self) -> Result<(ConnectFuture, Request<Id, Data>), Error> {
+    pub fn connect_start(&mut self) -> Result<(ConnectFuture<Id, Info>, ReqId,  Request<Id, Data>), Error> {
         let req_id = ReqId::generate();
         let (done_tx, done_rx) = mpsc::channel(1);
 
@@ -90,7 +90,7 @@ where
         // Return connect future and request for caller use
         Ok((ConnectFuture{
             rx: done_rx,
-        }, req))
+        }, req_id, req))
     }
 }
 

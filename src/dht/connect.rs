@@ -1,6 +1,7 @@
 
 
 use std::fmt::{Debug, Display};
+use std::time::Instant;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -18,14 +19,23 @@ use super::{Dht, OperationKind, OperationState, Operation, RequestState};
 /// Future returned by connect operation
 /// Resolves into a number of located peers on success
 pub struct ConnectFuture<Id, Info> {
+    done: bool,
     rx: mpsc::Receiver<Result<Vec<Entry<Id, Info>>, Error>>,
 }
+
 impl <Id, Info> Future for ConnectFuture<Id, Info> {
     type Output = Result<Vec<Entry<Id, Info>>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.done {
+            return Poll::Pending;
+        }
+
         match self.rx.poll_next_unpin(ctx) {
-            Poll::Ready(Some(r)) => Poll::Ready(r),
+            Poll::Ready(Some(r)) => {
+                self.done = true;
+                Poll::Ready(r)
+            },
             _ => Poll::Pending,
         }
     }
@@ -62,6 +72,7 @@ where
 
         // Return connect future to caller
         Ok((ConnectFuture{
+            done: false,
             rx: done_rx,
         }, req_id))
     }
@@ -82,13 +93,15 @@ where
         let req = Request::FindNode(self.id.clone());
 
         // Skip init state
-        op.state = OperationState::Searching(0);
+        op.state = OperationState::Connecting;
+        op.last_update = Instant::now();
 
         // Register operation for response / update handling
         self.operations.insert(req_id.clone(), op);
 
         // Return connect future and request for caller use
         Ok((ConnectFuture{
+            done: false,
             rx: done_rx,
         }, req_id, req))
     }

@@ -11,6 +11,9 @@ use std::marker::PhantomData;
 use std::time::Instant;
 use std::collections::HashMap;
 
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use futures::prelude::*;
 use futures::channel::mpsc::{Sender};
 
@@ -133,7 +136,7 @@ where
 
 
     // Receive responses and update internal state
-    pub async fn handle_resp(
+    pub fn handle_resp(
         &mut self,
         req_id: ReqId,
         from: &Entry<Id, Info>,
@@ -170,9 +173,14 @@ where
                 debug!("Operation {}, adding entries to map: {:?}", req_id, entries);
 
                 for e in entries {
+                    let state = match from.id() == e.id() {
+                        true => RequestState::Complete,
+                        false => RequestState::Pending,
+                    };
+
                     op.nodes
                         .entry(e.id().clone())
-                        .or_insert((e.clone(), RequestState::Pending));
+                        .or_insert((e.clone(), state));
                 }
 
                 RequestState::Complete
@@ -238,10 +246,11 @@ where
     }
 
     /// Update internal state
-    pub async fn update(&mut self) -> Result<(), Error> {
-        debug!("Update");
+    /// Usually this should be called via future `Dht::poll()`
+    pub fn update(&mut self) -> Result<(), Error> {
 
         let mut req_sink = self.conn_mgr.clone();
+        let mut done = vec![];
 
         //  For each currently tracked operation
         for (req_id, op) in self.operations.iter_mut() {
@@ -276,12 +285,44 @@ where
                         debug!("Op {} tx: {:?} to: {:?}", req_id, req, e);
 
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((req_id.clone(), e.clone(), req.clone())).await;
+                        let _ = req_sink.try_send((req_id.clone(), e.clone(), req.clone()));
                     }
 
                     // Set to search state
                     debug!("Operation {} entering searching state", req_id);
                     op.state = OperationState::Searching(0)
+                },
+                // Awaiting response to connect message
+                OperationState::Connecting => {
+                    // Check for known nodes (connect responses)
+                    let nodes = op.nodes.clone();
+                    let mut known: Vec<_> = nodes.iter()
+                        .collect();
+                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
+
+                    let pending = known.iter()
+                        .filter(|(_key, (_e, s))| *s == RequestState::Pending )
+                        .count();
+
+                    // Check for expiry
+                    let search_timeout = self.config.search_timeout;
+                    let expired = Instant::now().checked_duration_since(op.last_update)
+                            .map(|d| d > search_timeout).unwrap_or(false);
+
+                    if nodes.len() > 0 {
+                        debug!("Operation {} connect response received ({} peers)", req_id, pending);
+
+                        // Short-circuit if we didn't receive other peer information
+                        if pending > 0 {
+                            op.state = OperationState::Search(0);
+                        } else {
+                            op.state = OperationState::Done;
+                        }
+
+                    } else if expired {
+                        debug!("Operation {} connect timeout", req_id);
+                        op.state = OperationState::Done;
+                    }
                 },
                 // Currently searching / awaiting responses
                 OperationState::Searching(n) => {
@@ -308,9 +349,9 @@ where
                     let expired = Instant::now().checked_duration_since(op.last_update)
                             .map(|d| d > search_timeout).unwrap_or(false);
 
-                    debug!("active: {:?}", active);
-                    debug!("pending: {:?}", pending);
-                    debug!("data: {:?}", op.data);
+                    trace!("active: {:?}", active);
+                    trace!("pending: {:?}", pending);
+                    trace!("data: {:?}", op.data);
 
                     match (active.len(), pending.len(), expired, &op.kind) {
                         // No active or pending nodes, all complete (this will basically never happen)
@@ -365,7 +406,7 @@ where
                         op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
 
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((req_id.clone(), n.clone(), req.clone())).await;
+                        let _ = req_sink.try_send((req_id.clone(), n.clone(), req.clone()));
                     }
 
                     // Update search state
@@ -402,7 +443,7 @@ where
                         op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
 
                         // TODO: handle sink errors?
-                        let _ = req_sink.send((req_id.clone(), n.clone(), req.clone())).await;
+                        let _ = req_sink.try_send((req_id.clone(), n.clone(), req.clone()));
                     }
 
                     op.state = OperationState::Pending;
@@ -442,16 +483,16 @@ where
                                 .map(|(_k, (e, _s))| e.clone() )
                                 .collect();
                             if peers.len() > 0 {
-                                tx.clone().send(Ok(peers)).await.unwrap();
+                                tx.clone().try_send(Ok(peers)).unwrap();
 
                             } else {
-                                tx.clone().send(Err(Error::NotFound)).await.unwrap();
+                                tx.clone().try_send(Err(Error::NotFound)).unwrap();
                             }
                         }
                         OperationKind::FindNode(tx) => {
                             match op.nodes.get(&op.target) {
-                                Some((n, _s)) => tx.clone().send(Ok(n.clone())).await.unwrap(),
-                                None => tx.clone().send(Err(Error::NotFound)).await.unwrap(),
+                                Some((n, _s)) => tx.clone().try_send(Ok(n.clone())).unwrap(),
+                                None => tx.clone().try_send(Err(Error::NotFound)).unwrap(),
                             };
                         }
                         OperationKind::FindValues(tx) => {
@@ -466,10 +507,10 @@ where
 
                                 debug!("Operation {} values found: {:?}", req_id, flat_data);
 
-                                tx.clone().send(Ok(flat_data)).await.unwrap();
+                                tx.clone().try_send(Ok(flat_data)).unwrap();
 
                             } else {
-                                tx.clone().send(Err(Error::NotFound)).await.unwrap();
+                                tx.clone().try_send(Err(Error::NotFound)).unwrap();
                             }
                         }
                         OperationKind::Store(_values, tx) => {
@@ -481,18 +522,23 @@ where
 
                                 debug!("Operation {} stored at {} peers", req_id, flat_ids.len());
 
-                                tx.clone().send(Ok(flat_nodes)).await.unwrap();
+                                tx.clone().try_send(Ok(flat_nodes)).unwrap();
                             } else {
                                 debug!("Operation {} store failed", req_id);
-                                tx.clone().send(Err(Error::NotFound)).await.unwrap();
+                                tx.clone().try_send(Err(Error::NotFound)).unwrap();
                             }
                             
                         }
                     }
 
                     // TODO: remove from tracking
+                    done.push(req_id.clone());
                 }
             };
+        }
+
+        for req_id in done {
+            self.operations.remove(&req_id);
         }
 
         Ok(())
@@ -569,20 +615,26 @@ where
     }
 }
 
-#[cfg(nope)]
+
+impl<Id, Info, Data, ReqId, Table, Store> Unpin for Dht<Id, Info, Data, ReqId, Table, Store> {}
+
 impl<Id, Info, Data, ReqId, Table, Store> Future for Dht<Id, Info, Data, ReqId, Table, Store>
 where
     Id: DatabaseId + Clone + Sized + Send + 'static,
     Info: PartialEq + Clone + Sized + Debug + Send + 'static,
     Data: PartialEq + Clone + Sized + Debug + Send + 'static,
-    ReqId: RequestId + Clone + Sized + Debug + Send + 'static,
+    ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
     Table: NodeTable<Id, Info> + Clone + Send + 'static,
     Store: Datastore<Id, Data> + Clone + Send + 'static,
 {
     type Output = Result<(), Error>;
 
-    fn poll(self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        unimplemented!()
+    // Poll calls internal update function
+    fn poll(mut self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        
+        let _ = self.update();
+
+        Poll::Pending
     }
 }
 

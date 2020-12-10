@@ -52,6 +52,7 @@ impl <Id, Info, Data> Display for OperationKind<Id, Info, Data> {
 #[derive(Clone, PartialEq, Debug)]
 pub enum OperationState {
     Init,
+    Connecting,
     Search(usize),
     Searching(usize),
     Request,

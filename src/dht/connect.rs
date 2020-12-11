@@ -142,37 +142,37 @@ mod tests {
 
         info!("Search round 0");
         // Start the first search pass
-        dht.update().await.unwrap();
+        dht.update().unwrap();
 
         // Check requests (query node 2, 3), find node 4
         assert_eq!(rx.try_next().unwrap() , Some((req_id, n3.clone(), Request::FindNode(n1.id().clone()))));
         assert_eq!(rx.try_next().unwrap() , Some((req_id, n2.clone(), Request::FindNode(n1.id().clone()))));
 
         // Handle responses (response from 2, 3), node 4, 5 known
-        dht.handle_resp(req_id, &n2, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).await.unwrap();
-        dht.handle_resp(req_id, &n3, &Response::NodesFound(n1.id().clone(), vec![n5.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n2, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).unwrap();
+        dht.handle_resp(req_id, &n3, &Response::NodesFound(n1.id().clone(), vec![n5.clone()])).unwrap();
 
         info!("Search round 1");
 
         // Update search state (re-start search)
-        dht.update().await.unwrap();
-        dht.update().await.unwrap();
+        dht.update().unwrap();
+        dht.update().unwrap();
 
         // Check requests (query node 4, 5)
         assert_eq!(rx.try_next().unwrap() , Some((req_id, n4.clone(), Request::FindNode(n1.id().clone()))));
         assert_eq!(rx.try_next().unwrap() , Some((req_id, n5.clone(), Request::FindNode(n1.id().clone()))));
 
         // Handle responses for node 4, 5
-        dht.handle_resp(req_id, &n4, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).await.unwrap();
-        dht.handle_resp(req_id, &n5, &Response::NodesFound(n1.id().clone(), vec![n5.clone()])).await.unwrap();
+        dht.handle_resp(req_id, &n4, &Response::NodesFound(n1.id().clone(), vec![n4.clone()])).unwrap();
+        dht.handle_resp(req_id, &n5, &Response::NodesFound(n1.id().clone(), vec![n5.clone()])).unwrap();
 
         // Launch next search
-        dht.update().await.unwrap();
+        dht.update().unwrap();
         // Detect completion
-        dht.update().await.unwrap();
-        dht.update().await.unwrap();
+        dht.update().unwrap();
+        dht.update().unwrap();
 
         info!("Expecting completion");
-        assert_eq!(connect.await, Ok(vec![n2, n3, n4, n5]));
+        assert_eq!(connect.await, Ok(vec![n4, n5, n3, n2]));
     }
 }

@@ -478,10 +478,13 @@ where
 
                     match &op.kind {
                         OperationKind::Connect(tx) => {
-                            let peers: Vec<_> = op.nodes.iter()
+                            let mut peers: Vec<_> = op.nodes.iter()
                                 .filter(|(_k, (_n, s))| *s == RequestState::Complete)
                                 .map(|(_k, (e, _s))| e.clone() )
                                 .collect();
+
+                                let own_id = self.id.clone();
+                                peers.sort_by_key(|n| Id::xor(&own_id, n.id()));
                             if peers.len() > 0 {
                                 tx.clone().try_send(Ok(peers)).unwrap();
 

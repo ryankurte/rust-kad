@@ -161,6 +161,9 @@ where
                 *s = RequestState::InvalidResponse;
                 return Ok(())
             },
+            Some((_e, s)) if *s == RequestState::Active => {
+                *s = RequestState::Complete;
+            }
             _ => (),
         }
 
@@ -173,11 +176,19 @@ where
                 debug!("Operation {}, adding entries to map: {:?}", req_id, entries);
 
                 for e in entries {
+                    // Skip entries relating to ourself
+                    if e.id() == &self.id {
+                        continue;
+                    }
+
+                    // The responding node state should be complete,
+                    // Unknown nodes should enter the pending state
                     let state = match from.id() == e.id() {
                         true => RequestState::Complete,
                         false => RequestState::Pending,
                     };
 
+                    // Insert new nodes into tracking
                     op.nodes
                         .entry(e.id().clone())
                         .or_insert((e.clone(), state));
@@ -294,6 +305,8 @@ where
                 },
                 // Awaiting response to connect message
                 OperationState::Connecting => {
+                    debug!("Operation {} starting connect", req_id);
+
                     // Check for known nodes (connect responses)
                     let nodes = op.nodes.clone();
                     let mut known: Vec<_> = nodes.iter()
@@ -369,7 +382,7 @@ where
                             debug!("Operation {} timeout at iteration {}", req_id, n);
 
                             // TODO: Update active nodes to timed-out
-                            for (id, _n) in pending {
+                            for (id, _n) in active {
                                 op.nodes.entry((*id).clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
                             }
 
@@ -398,11 +411,16 @@ where
 
                     // Sort and limit
                     nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
-                    let range = 0..usize::min(self.config.concurrency, nearest.len());
+                    let n = usize::min(self.config.concurrency, nearest.len());
+
+                    // Exit search when we have no more requests to make
+                    if n == 0 {
+                        op.state = OperationState::Request;
+                    }
 
                     // Launch next set of requests
-                    debug!("Operation {} issuing search request: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
-                    for n in &nearest[range] {
+                    debug!("Operation {} issuing search request: {:?} to: {:?}", req_id, req, &nearest[0..n]);
+                    for n in &nearest[0..n] {
                         op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
 
                         // TODO: handle sink errors?
@@ -437,7 +455,7 @@ where
                     nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
                     let range = 0..usize::min(self.config.concurrency, nearest.len());
 
-                    debug!("Operation {} issuing: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
+                    debug!("Operation {} issuing request: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
 
                     for n in &nearest[range] {
                         op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );

@@ -518,13 +518,15 @@ where
                         }
                         OperationKind::FindValues(tx) => {
                             if op.data.len() > 0 {
-                                // Flatten out response
+                                // Flatten out response data
                                 let mut flat_data: Vec<Data> = op.data.iter().flat_map(|(_k, v)| v.clone() ).collect();
 
                                 // Append any already known data
                                 if let Some(mut existing) = self.datastore.find(&op.target) {
                                     flat_data.append(&mut existing);
                                 }
+
+                                // TODO: apply reducer?
 
                                 debug!("Operation {} values found: {:?}", req_id, flat_data);
 
@@ -535,11 +537,15 @@ where
                             }
                         }
                         OperationKind::Store(_values, tx) => {
-                            // TODO: check values
+                            // `Store` responds with a `FoundData` object containing the stored data
+                            // this allows us to check `op.data` for the nodes at which data has been stored
+                            
                             if op.data.len() > 0 {
                                 let flat_ids: Vec<_> = op.data.iter().map(|(k, _v)| k.clone() ).collect();
                                 let mut flat_nodes: Vec<_> = flat_ids.iter().filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone() ) ).collect();
                                 flat_nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
+
+                                // TODO: check the stored _values_ too (as this may be reduced on the upstream side)
 
                                 debug!("Operation {} stored at {} peers", req_id, flat_ids.len());
 

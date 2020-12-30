@@ -32,14 +32,15 @@ pub use operation::*;
 mod connect;
 pub use connect::*;
 
-mod lookup;
-pub use lookup::*;
+mod locate;
+pub use locate::*;
 
 mod search;
 pub use search::*;
 
 mod store;
 pub use store::*;
+
 
 pub struct Dht<Id, Info, Data, ReqId, Table=KNodeTable<Id, Info>, Store=HashMapStore<Id, Data>> {
     id: Id,
@@ -154,7 +155,7 @@ where
 
         debug!("Receive response id: {} ({:?}) from: {:?}", req_id, resp, from);
 
-        // Check request is expected / from a valid peer
+        // Check request is expected / from a valid peer and update state
         match op.nodes.get_mut(from.id()) {
             Some((_e, s)) if *s != RequestState::Active => {
                 warn!("Operation {} unexpected response from: {:?}", req_id, from);
@@ -181,17 +182,21 @@ where
                         continue;
                     }
 
-                    // The responding node state should be complete,
-                    // Unknown nodes should enter the pending state
-                    let state = match from.id() == e.id() {
-                        true => RequestState::Complete,
-                        false => RequestState::Pending,
-                    };
+                    // Update global nodetable
+                    self.table.create_or_update(e);
+
+                    // Skip adding responding node to operation again
+                    // (state is updated abovbe)
+                    if e.id() == from.id() {
+                        continue;
+                    }
 
                     // Insert new nodes into tracking
+                    // TODO: should we update op node table with responding node info?
                     op.nodes
                         .entry(e.id().clone())
-                        .or_insert((e.clone(), state));
+                        .or_insert((e.clone(), RequestState::Pending));
+
                 }
 
                 RequestState::Complete

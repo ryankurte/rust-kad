@@ -7,7 +7,6 @@ use std::fmt::Debug;
  * Copyright 2018 Ryan Kurte
  */
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::common::{DatabaseId, Entry};
@@ -18,10 +17,9 @@ use super::nodetable::{BucketInfo, NodeTable};
 /// KNodeTable Implementation
 /// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local Id
 /// as a simplification of the allocation based branching approach introduced in the paper.
-#[derive(Clone)]
 pub struct KNodeTable<Id, Info> {
     id: Id,
-    buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>,
+    buckets: Vec<KBucket<Id, Info>>,
 }
 
 impl<Id, Info> KNodeTable<Id, Info>
@@ -32,14 +30,9 @@ where
     /// Create a new KNodeTable with the provded bucket and hash sizes
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Info> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size)
-            .map(|_| Arc::new(Mutex::new(KBucket::new(bucket_size))))
-            .collect();
+        let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
-        KNodeTable {
-            id,
-            buckets: Arc::new(Mutex::new(buckets)),
-        }
+        KNodeTable { id, buckets }
     }
 
     // Calculate the distance between two Ids.
@@ -48,10 +41,14 @@ where
     }
 
     /// Fetch a reference to the bucket containing the provided Id
-    fn bucket(&self, id: &Id) -> Arc<Mutex<KBucket<Id, Info>>> {
+    fn bucket(&self, id: &Id) -> &KBucket<Id, Info> {
         let index = self.bucket_index(id);
-        let buckets = &self.buckets.lock().unwrap();
-        buckets[index].clone()
+        &self.buckets[index]
+    }
+
+    fn bucket_mut(&mut self, id: &Id) -> &mut KBucket<Id, Info> {
+        let index = self.bucket_index(id);
+        &mut self.buckets[index]
     }
 
     /// Fetch the bucket index for a given Id
@@ -67,8 +64,6 @@ where
 
     #[allow(dead_code)]
     fn update_buckets(&self) {
-        let _buckets = self.buckets.lock().unwrap();
-
         unimplemented!()
     }
 }
@@ -78,14 +73,17 @@ where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
 {
+    fn buckets(&self) -> usize {
+        self.buckets.len()
+    }
+
     /// Create or update a node in the NodeTable
     fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
         if node.id() == &self.id {
             return false;
         }
 
-        let bucket = self.bucket(node.id());
-        let mut bucket = bucket.lock().unwrap();
+        let bucket = self.bucket_mut(node.id());
         let mut node = node.clone();
         node.set_seen(Instant::now());
         bucket.create_or_update(&node)
@@ -93,13 +91,8 @@ where
 
     /// Find the nearest nodes to the provided Id in the given range
     fn nearest(&self, id: &Id, range: Range<usize>) -> Vec<Entry<Id, Info>> {
-        let buckets = self.buckets.lock().unwrap();
-
         // Create a list of all nodes
-        let mut all: Vec<_> = buckets
-            .iter()
-            .flat_map(|b| b.lock().unwrap().nodes())
-            .collect();
+        let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes()).collect();
         let count = all.len();
 
         // Sort by distance
@@ -117,16 +110,12 @@ where
     /// This returns the node object if found
     fn contains(&self, id: &Id) -> Option<Entry<Id, Info>> {
         let bucket = self.bucket(id);
-        let bucket = bucket.lock().unwrap();
         bucket.find(id)
     }
 
-    /// Peek at the oldest node in the bucket associated with a given Id
-    fn iter_oldest(&self) -> Box<dyn Iterator<Item = Entry<Id, Info>>> {
-        Box::new(KNodeTableIterOldest {
-            index: 0,
-            buckets: self.buckets.clone(),
-        })
+    /// Fetch the oldest node in the specified bucket
+    fn oldest<'a>(&'a self, index: usize) -> Option<Entry<Id, Info>> {
+        self.buckets[index].oldest()
     }
 
     /// Update an entry by ID
@@ -134,25 +123,22 @@ where
     where
         F: Fn(&mut Entry<Id, Info>),
     {
-        let bucket = self.bucket(id);
-        let mut bucket = bucket.lock().unwrap();
+        let bucket = self.bucket_mut(id);
         bucket.update_entry(id, f)
     }
 
     /// Remove an entry by ID
     fn remove_entry(&mut self, id: &Id) {
-        let bucket = self.bucket(id);
-        let mut bucket = bucket.lock().unwrap();
+        let bucket = self.bucket_mut(id);
         bucket.remove_entry(id, false);
     }
 
     /// Fetch information from each bucket
     fn bucket_info(&self) -> Vec<BucketInfo> {
-        let buckets = self.buckets.lock().unwrap();
-        let mut info = Vec::with_capacity(buckets.len());
+        let mut info = Vec::with_capacity(self.buckets.len());
 
-        for i in 0..buckets.len() {
-            let b = buckets[i].lock().unwrap();
+        for i in 0..self.buckets.len() {
+            let b = &self.buckets[i];
             info.push(BucketInfo {
                 index: i,
                 nodes: b.node_count(),
@@ -160,39 +146,6 @@ where
             });
         }
         info
-    }
-}
-
-/// Iterator over the oldest node from each bucket
-#[derive(Clone)]
-pub struct KNodeTableIterOldest<Id, Info> {
-    index: usize,
-    buckets: Arc<Mutex<Vec<Arc<Mutex<KBucket<Id, Info>>>>>>,
-}
-
-impl<Id, Info> Iterator for KNodeTableIterOldest<Id, Info>
-where
-    Id: DatabaseId + Clone + 'static,
-    Info: Clone + Debug + 'static,
-{
-    type Item = Entry<Id, Info>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let buckets = self.buckets.lock().unwrap();
-        let mut r = None;
-
-        while self.index < buckets.len() {
-            let bucket = buckets[self.index].lock().unwrap();
-            r = bucket.oldest();
-
-            self.index += 1;
-
-            if let Some(_) = &r {
-                break;
-            }
-        }
-
-        return r;
     }
 }
 

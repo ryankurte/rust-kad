@@ -35,53 +35,53 @@ pub enum Response<Id, Info, Value> {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct RequestMessage<Id, Info, Value> {
-    pub request_id: Id,
+pub struct RequestMessage<Id, Info, Value, ReqId> {
+    pub req_id: ReqId,
     pub caller: Entry<Id, Info>,
     pub request: Request<Id, Value>,
 }
 
-impl<Id, Info, Value> RequestMessage<Id, Info, Value> {
-    pub fn ping(request_id: Id, caller: Entry<Id, Info>) -> RequestMessage<Id, Info, Value> {
+impl<Id, Info, Value, ReqId> RequestMessage<Id, Info, Value, ReqId> {
+    pub fn ping(req_id: ReqId, caller: Entry<Id, Info>) -> RequestMessage<Id, Info, Value, ReqId> {
         RequestMessage {
-            request_id,
+            req_id,
             caller,
             request: Request::Ping,
         }
     }
 
     pub fn find_node(
-        request_id: Id,
+        req_id: ReqId,
         caller: Entry<Id, Info>,
         id: Id,
-    ) -> RequestMessage<Id, Info, Value> {
+    ) -> RequestMessage<Id, Info, Value, ReqId> {
         RequestMessage {
-            request_id,
+            req_id,
             caller,
             request: Request::FindNode(id),
         }
     }
 
     pub fn find_values(
-        request_id: Id,
+        req_id: ReqId,
         caller: Entry<Id, Info>,
         id: Id,
-    ) -> RequestMessage<Id, Info, Value> {
+    ) -> RequestMessage<Id, Info, Value, ReqId> {
         RequestMessage {
-            request_id,
+            req_id,
             caller,
             request: Request::FindValue(id),
         }
     }
 
     pub fn store(
-        request_id: Id,
+        req_id: ReqId,
         caller: Entry<Id, Info>,
         id: Id,
         value: Vec<Value>,
-    ) -> RequestMessage<Id, Info, Value> {
+    ) -> RequestMessage<Id, Info, Value, ReqId> {
         RequestMessage {
-            request_id,
+            req_id,
             caller,
             request: Request::Store(id, value),
         }
@@ -89,14 +89,14 @@ impl<Id, Info, Value> RequestMessage<Id, Info, Value> {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct ResponseMessage<Id, Info, Value> {
-    pub request_id: Id,
+pub struct ResponseMessage<Id, Info, Value, ReqId> {
+    pub req_id: ReqId,
     pub responder: Entry<Id, Info>,
     pub response: Response<Id, Info, Value>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum Message<Id, Info, Value> {
-    Request(RequestMessage<Id, Info, Value>),
-    Response(ResponseMessage<Id, Info, Value>),
+pub enum Message<Id, Info, Value, ReqId> {
+    Request(RequestMessage<Id, Info, Value, ReqId>),
+    Response(ResponseMessage<Id, Info, Value, ReqId>),
 }

@@ -13,12 +13,14 @@ use crate::table::NodeTable;
 
 use super::{Dht, OperationKind};
 
-pub struct SearchFuture<Data> {
-    rx: mpsc::Receiver<Result<Vec<Data>, Error>>,
+/// Future returned by locate operation
+/// Resolves into node entry or error on completion
+pub struct StoreFuture<Id, Info> {
+    rx: mpsc::Receiver<Result<Vec<Entry<Id, Info>>, Error>>,
 }
 
-impl<Data> Future for SearchFuture<Data> {
-    type Output = Result<Vec<Data>, Error>;
+impl<Id, Info> Future for StoreFuture<Id, Info> {
+    type Output = Result<Vec<Entry<Id, Info>>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.rx.poll_next_unpin(ctx) {
@@ -37,17 +39,21 @@ where
     Table: NodeTable<Id, Info> + Send + 'static,
     Store: Datastore<Id, Data> + Send + 'static,
 {
-    /// Search for values at a target ID in the DHT
-    pub fn search(&mut self, target: Id) -> Result<(SearchFuture<Data>, ReqId), Error> {
+    /// Store data in the DHT by ID
+    pub fn store(
+        &mut self,
+        target: Id,
+        data: Vec<Data>,
+    ) -> Result<(StoreFuture<Id, Info>, ReqId), Error> {
         // Create an operation for the provided target
         let req_id = ReqId::generate();
         let (done_tx, done_rx) = mpsc::channel(1);
 
         // Register and start operation
-        self.exec(req_id.clone(), target, OperationKind::FindValues(done_tx))?;
+        self.exec(req_id.clone(), target, OperationKind::Store(data, done_tx))?;
 
         // Return locate future to caller
-        Ok((SearchFuture { rx: done_rx }, req_id))
+        Ok((StoreFuture { rx: done_rx }, req_id))
     }
 }
 
@@ -63,7 +69,7 @@ mod tests {
     use super::*;
 
     #[async_std::test]
-    async fn test_search() {
+    async fn test_store() {
         let _ = SimpleLogger::init(LevelFilter::Debug, LogConfig::default());
 
         // Setup nodes
@@ -90,9 +96,11 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(10);
         let mut dht: Dht<_, u32, u32, u16> = Dht::custom(n1.id().clone(), config, tx, table, store);
 
-        info!("Start locate");
+        info!("Start store");
         // Issue lookup
-        let (search, req_id) = dht.search(value_id).expect("Error starting lookup");
+        let (store, req_id) = dht
+            .store(value_id, vec![value_data])
+            .expect("Error starting lookup");
 
         info!("Search round 0");
         // Start the first search pass
@@ -101,23 +109,23 @@ mod tests {
         // Check requests (query node 2, 3), find node 4
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n3.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n3.clone(), Request::FindNode(value_id.clone())))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n2.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n2.clone(), Request::FindNode(value_id.clone())))
         );
 
         // Handle responses (response from 2, 3), node 4, 5 known
         dht.handle_resp(
             req_id,
-            &n2,
+            &n3,
             &Response::NodesFound(value_id.clone(), vec![n4.clone()]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
-            &n3,
+            &n2,
             &Response::NodesFound(value_id.clone(), vec![n5.clone()]),
         )
         .unwrap();
@@ -131,34 +139,63 @@ mod tests {
         // Check requests (query node 4, 5)
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n4.clone(), Request::FindNode(value_id.clone())))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n5.clone(), Request::FindNode(value_id.clone())))
+        );
+
+        // Handle responses for node 4, 5
+        dht.handle_resp(req_id, &n4, &Response::NodesFound(value_id.clone(), vec![]))
+            .unwrap();
+        dht.handle_resp(req_id, &n5, &Response::NodesFound(value_id.clone(), vec![]))
+            .unwrap();
+
+        info!("Store round");
+
+        // Launch store
+        dht.update().unwrap();
+        // Detect completion
+        dht.update().unwrap();
+
+        // Check requests (store node 4, 5)
+        assert_eq!(
+            rx.try_next().unwrap(),
+            Some((
+                req_id,
+                n4.clone(),
+                Request::Store(value_id.clone(), vec![value_data])
+            ))
+        );
+        assert_eq!(
+            rx.try_next().unwrap(),
+            Some((
+                req_id,
+                n5.clone(),
+                Request::Store(value_id.clone(), vec![value_data])
+            ))
         );
 
         // Handle responses for node 4, 5
         dht.handle_resp(
             req_id,
             &n4,
-            &Response::ValuesFound(value_id.clone(), vec![value_data.clone()]),
+            &Response::ValuesFound(value_id.clone(), vec![value_data]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
             &n5,
-            &Response::ValuesFound(value_id.clone(), vec![value_data.clone()]),
+            &Response::ValuesFound(value_id.clone(), vec![value_data]),
         )
         .unwrap();
 
-        // Launch next search
-        dht.update().unwrap();
-        // Detect completion
+        // Finalise operation
         dht.update().unwrap();
         dht.update().unwrap();
 
-        info!("Expecting search completion");
-        assert_eq!(search.await, Ok(vec![value_data, value_data]));
+        info!("Expecting store completion");
+        assert_eq!(store.await, Ok(vec![n4.clone(), n5.clone()]));
     }
 }

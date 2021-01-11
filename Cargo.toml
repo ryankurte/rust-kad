@@ -26,3 +26,5 @@ features = ["max_level_debug"]
 
 [dev-dependencies]
 rr-mux = "0.10.0"
+async-std = { version = "1.7.0", features = [ "attributes" ] }
+simplelog = "0.8.0"

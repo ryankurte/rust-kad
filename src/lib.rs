@@ -4,23 +4,12 @@
 //! https://github.com/ryankurte/rust-kad
 //! Copyright 2018 Ryan Kurte
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::time::Duration;
 
-extern crate futures;
+use futures::channel::mpsc::Sender;
 
-#[macro_use]
-extern crate tracing;
-
-#[macro_use]
-extern crate structopt;
-
-extern crate futures_timer;
-
-extern crate num;
-extern crate rand;
-
-extern crate humantime;
+use structopt::StructOpt;
 
 pub mod common;
 use crate::common::*;
@@ -33,9 +22,6 @@ use store::HashMapStore;
 
 pub mod dht;
 use dht::Dht;
-
-pub mod connector;
-pub use connector::Connector;
 
 pub mod prelude;
 
@@ -56,6 +42,10 @@ pub struct Config {
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
+    #[structopt(long = "dht-search-timeout", parse(try_from_str = parse_duration), default_value = "10s")]
+    /// Timeout for search iterations with missing responses
+    pub search_timeout: Duration,
+
     #[structopt(long = "dht-node-timeout", parse(try_from_str = parse_duration), default_value = "15m")]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
@@ -73,36 +63,36 @@ impl Default for Config {
             k: 20,
             concurrency: 4,
             max_recursion: 10,
+            search_timeout: Duration::from_secs(10),
             node_timeout: Duration::from_secs(15 * 60 * 60),
         }
     }
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<Id, Info, Data, ReqId, Conn, Ctx> =
-    Dht<Id, Info, Data, ReqId, Conn, KNodeTable<Id, Info>, HashMapStore<Id, Data>, Ctx>;
+pub type StandardDht<Id, Info, Data, ReqId> =
+    Dht<Id, Info, Data, ReqId, KNodeTable<Id, Info>, HashMapStore<Id, Data>>;
 
-impl<Id, Info, Data, ReqId, Conn, Ctx> StandardDht<Id, Info, Data, ReqId, Conn, Ctx>
+impl<Id, Info, Data, ReqId> Dht<Id, Info, Data, ReqId>
 where
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Debug + Send + 'static,
-    ReqId: RequestId + Clone + Send + 'static,
-    Conn: Connector<Id, Info, Data, ReqId, Ctx> + Send + Clone + 'static,
-    Ctx: Clone + PartialEq + Debug + Send + 'static,
+    ReqId: RequestId + Clone + Display + Send + 'static,
 {
-    /// Helper to construct a standard Dht using crate provided KNodeTable and HashMapStore.
+    /// Create a new DHT using the standard node table and data store implementations
     pub fn standard(
         id: Id,
         config: Config,
-        conn: Conn,
-    ) -> StandardDht<Id, Info, Data, ReqId, Conn, Ctx> {
+        req_sink: Sender<(ReqId, Entry<Id, Info>, Request<Id, Data>)>,
+    ) -> StandardDht<Id, Info, Data, ReqId> {
         let table = KNodeTable::new(id.clone(), config.k, id.max_bits());
         let store = HashMapStore::new();
-        Dht::new(id, config, table, conn, store)
+        Dht::custom(id, config, req_sink, table, store)
     }
 }
 
+#[cfg(nope)]
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;

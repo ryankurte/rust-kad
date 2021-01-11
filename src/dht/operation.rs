@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 /**
  * rust-kad
  * Kademlia base operation, used in the implementation of connect / locate / search / store functions
@@ -5,16 +6,12 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
-
 use std::fmt::{Debug, Display};
 use std::time::Instant;
-use std::collections::HashMap;
 
-use futures::channel::mpsc::{Sender};
+use futures::channel::mpsc::Sender;
 
 use crate::common::*;
-
 
 /// RequestState is used to store the state of pending requests
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -38,7 +35,7 @@ pub enum OperationKind<Id, Info, Data> {
     Store(Vec<Data>, Sender<Result<Vec<Entry<Id, Info>>, Error>>),
 }
 
-impl <Id, Info, Data> Display for OperationKind<Id, Info, Data> {
+impl<Id, Info, Data> Display for OperationKind<Id, Info, Data> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OperationKind::Connect(_) => write!(f, "Connect"),
@@ -60,7 +57,6 @@ pub enum OperationState {
     Done,
 }
 
-
 #[derive(Debug)]
 pub(crate) struct Operation<Id, Info, Data, ReqId> {
     pub req_id: ReqId,
@@ -73,7 +69,7 @@ pub(crate) struct Operation<Id, Info, Data, ReqId> {
     pub data: HashMap<Id, Vec<Data>>,
 }
 
-impl <Id, Info, Data, ReqId> Operation<Id, Info, Data, ReqId> {
+impl<Id, Info, Data, ReqId> Operation<Id, Info, Data, ReqId> {
     pub(crate) fn new(req_id: ReqId, target: Id, kind: OperationKind<Id, Info, Data>) -> Self {
         Self {
             req_id,
@@ -85,8 +81,4 @@ impl <Id, Info, Data, ReqId> Operation<Id, Info, Data, ReqId> {
             data: HashMap::new(),
         }
     }
-
-
-
 }
-

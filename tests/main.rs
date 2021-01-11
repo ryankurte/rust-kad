@@ -20,9 +20,8 @@ use kad::table::KNodeTable;
 use kad::Config;
 
 extern crate futures;
-use futures::executor::block_on;
 use futures::channel::mpsc;
-
+use futures::executor::block_on;
 
 struct MockPeer<Id: Debug, Info: Debug, Data: Debug> {
     dht: Dht<Id, Info, Data, u64>,
@@ -52,9 +51,7 @@ where
 
             let dht = Dht::standard(n.id().clone(), config, sink_tx);
 
-            let peer = MockPeer{
-                dht
-            };
+            let peer = MockPeer { dht };
 
             m.peers.lock().unwrap().insert(n.id().clone(), peer);
         }
@@ -62,7 +59,6 @@ where
         m
     }
 }
-
 
 #[cfg(nope)]
 #[test]

@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display};
 
+use std::collections::HashMap;
 /**
  * rust-kad
  * Kademlia core implementation
@@ -9,22 +10,21 @@ use std::fmt::{Debug, Display};
  */
 use std::marker::PhantomData;
 use std::time::Instant;
-use std::collections::HashMap;
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use futures::channel::mpsc::Sender;
 use futures::prelude::*;
-use futures::channel::mpsc::{Sender};
 
-use log::{trace, debug, warn};
+use log::{debug, trace, warn};
 
 use crate::Config;
 
 use crate::common::*;
 
 use crate::store::{Datastore, HashMapStore};
-use crate::table::{NodeTable, KNodeTable};
+use crate::table::{KNodeTable, NodeTable};
 
 mod operation;
 pub use operation::*;
@@ -41,8 +41,8 @@ pub use search::*;
 mod store;
 pub use store::*;
 
-
-pub struct Dht<Id, Info, Data, ReqId, Table=KNodeTable<Id, Info>, Store=HashMapStore<Id, Data>> {
+pub struct Dht<Id, Info, Data, ReqId, Table = KNodeTable<Id, Info>, Store = HashMapStore<Id, Data>>
+{
     id: Id,
 
     config: Config,
@@ -56,7 +56,6 @@ pub struct Dht<Id, Info, Data, ReqId, Table=KNodeTable<Id, Info>, Store=HashMapS
     _data: PhantomData<Data>,
     _req_id: PhantomData<ReqId>,
 }
-
 
 impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
 where
@@ -135,7 +134,6 @@ where
         Ok(resp)
     }
 
-
     // Receive responses and update internal state
     pub fn handle_resp(
         &mut self,
@@ -143,7 +141,6 @@ where
         from: &Entry<Id, Info>,
         resp: &Response<Id, Info, Data>,
     ) -> Result<(), Error> {
-        
         // Locate matching operation
         let mut op = match self.operations.remove(&req_id) {
             Some(v) => v,
@@ -153,15 +150,18 @@ where
             }
         };
 
-        debug!("Receive response id: {} ({:?}) from: {:?}", req_id, resp, from);
+        debug!(
+            "Receive response id: {} ({:?}) from: {:?}",
+            req_id, resp, from
+        );
 
         // Check request is expected / from a valid peer and update state
         match op.nodes.get_mut(from.id()) {
             Some((_e, s)) if *s != RequestState::Active => {
                 warn!("Operation {} unexpected response from: {:?}", req_id, from);
                 *s = RequestState::InvalidResponse;
-                return Ok(())
-            },
+                return Ok(());
+            }
             Some((_e, s)) if *s == RequestState::Active => {
                 *s = RequestState::Complete;
             }
@@ -173,7 +173,7 @@ where
 
         // Handle incoming response message
         let v = match &resp {
-            Response::NodesFound(id, entries) if id == &op.target  => {
+            Response::NodesFound(id, entries) if id == &op.target => {
                 debug!("Operation {}, adding entries to map: {:?}", req_id, entries);
 
                 for e in entries {
@@ -196,15 +196,17 @@ where
                     op.nodes
                         .entry(e.id().clone())
                         .or_insert((e.clone(), RequestState::Pending));
-
                 }
 
                 RequestState::Complete
-            },
+            }
             Response::NodesFound(id, _entries) => {
-                debug!("Operation {}, invalid nodes response: {:?} from: {:?} (id: {:?})", req_id, resp, from, id);
+                debug!(
+                    "Operation {}, invalid nodes response: {:?} from: {:?} (id: {:?})",
+                    req_id, resp, from, id
+                );
                 RequestState::InvalidResponse
-            },
+            }
             Response::ValuesFound(id, values) if id == &op.target => {
                 debug!("Operation {}, adding data to map: {:?}", req_id, values);
 
@@ -212,11 +214,14 @@ where
                 op.data.insert(from.id().clone(), values.clone());
 
                 RequestState::Complete
-            },
+            }
             Response::ValuesFound(id, _values) => {
-                debug!("Operation {}, invalid values response: {:?} from: {:?} (id: {:?})", req_id, resp, from, id);
+                debug!(
+                    "Operation {}, invalid values response: {:?} from: {:?} (id: {:?})",
+                    req_id, resp, from, id
+                );
                 RequestState::InvalidResponse
-            },
+            }
             Response::NoResult => {
                 debug!("Operation {}, empty response from: {:?}", req_id, from);
                 RequestState::Complete
@@ -224,7 +229,8 @@ where
         };
 
         // Update operation node state
-        let e = op.nodes
+        let e = op
+            .nodes
             .entry(from.id().clone())
             .and_modify(|(_e, s)| *s = v)
             .or_insert((from.clone(), v));
@@ -235,10 +241,9 @@ where
 
         // Replace operation
         self.operations.insert(req_id, op);
-    
-        return Ok(())
-    }
 
+        return Ok(());
+    }
 
     // Create a new operation
     pub(crate) fn exec(
@@ -247,7 +252,6 @@ where
         target: Id,
         kind: OperationKind<Id, Info, Data>,
     ) -> Result<(), Error> {
-
         debug!("Registering operation id: {}", req_id);
 
         // Create operation object
@@ -264,13 +268,11 @@ where
     /// Update internal state
     /// Usually this should be called via future `Dht::poll()`
     pub fn update(&mut self) -> Result<(), Error> {
-
         let mut req_sink = self.conn_mgr.clone();
         let mut done = vec![];
 
         //  For each currently tracked operation
         for (req_id, op) in self.operations.iter_mut() {
-
             // Generate request objects
             let req = match &op.kind {
                 OperationKind::Connect(_tx) => Request::FindNode(op.target.clone()),
@@ -284,20 +286,25 @@ where
                 // Initialise new operation
                 OperationState::Init => {
                     // Identify nearest nodes if available
-                    let nearest: Vec<_> = self.table.nearest(&op.target, 0..self.config.concurrency);
+                    let nearest: Vec<_> =
+                        self.table.nearest(&op.target, 0..self.config.concurrency);
                     for e in &nearest {
-                        op.nodes.insert(e.id().clone(), (e.clone(), RequestState::Active));
+                        op.nodes
+                            .insert(e.id().clone(), (e.clone(), RequestState::Active));
                     }
 
                     // Build node array (required to include existing op.nodes)
-                    let mut nodes: Vec<_> = op.nodes.iter().map(|(_k, (n, _s))| n.clone() ).collect(); 
+                    let mut nodes: Vec<_> =
+                        op.nodes.iter().map(|(_k, (n, _s))| n.clone()).collect();
                     nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
 
-                    debug!("Initiating operation {} ({})  sending {:?} request to {:?}", &op.kind, req_id, req, nodes);
+                    debug!(
+                        "Initiating operation {} ({})  sending {:?} request to {:?}",
+                        &op.kind, req_id, req, nodes
+                    );
 
                     // Issue appropriate request
                     for e in nodes.iter() {
-
                         debug!("Op {} tx: {:?} to: {:?}", req_id, req, e);
 
                         // TODO: handle sink errors?
@@ -307,28 +314,33 @@ where
                     // Set to search state
                     debug!("Operation {} entering searching state", req_id);
                     op.state = OperationState::Searching(0)
-                },
+                }
                 // Awaiting response to connect message
                 OperationState::Connecting => {
                     debug!("Operation {} starting connect", req_id);
 
                     // Check for known nodes (connect responses)
                     let nodes = op.nodes.clone();
-                    let mut known: Vec<_> = nodes.iter()
-                        .collect();
-                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
+                    let mut known: Vec<_> = nodes.iter().collect();
+                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k));
 
-                    let pending = known.iter()
-                        .filter(|(_key, (_e, s))| *s == RequestState::Pending )
+                    let pending = known
+                        .iter()
+                        .filter(|(_key, (_e, s))| *s == RequestState::Pending)
                         .count();
 
                     // Check for expiry
                     let search_timeout = self.config.search_timeout;
-                    let expired = Instant::now().checked_duration_since(op.last_update)
-                            .map(|d| d > search_timeout).unwrap_or(false);
+                    let expired = Instant::now()
+                        .checked_duration_since(op.last_update)
+                        .map(|d| d > search_timeout)
+                        .unwrap_or(false);
 
                     if nodes.len() > 0 {
-                        debug!("Operation {} connect response received ({} peers)", req_id, pending);
+                        debug!(
+                            "Operation {} connect response received ({} peers)",
+                            req_id, pending
+                        );
 
                         // Short-circuit if we didn't receive other peer information
                         if pending > 0 {
@@ -336,19 +348,17 @@ where
                         } else {
                             op.state = OperationState::Done;
                         }
-
                     } else if expired {
                         debug!("Operation {} connect timeout", req_id);
                         op.state = OperationState::Done;
                     }
-                },
+                }
                 // Currently searching / awaiting responses
                 OperationState::Searching(n) => {
-                    // Fetch known nodes 
+                    // Fetch known nodes
                     let nodes = op.nodes.clone();
-                    let mut known: Vec<_> = nodes.iter()
-                        .collect();
-                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
+                    let mut known: Vec<_> = nodes.iter().collect();
+                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k));
 
                     // Short-circuit to next search if active nodes have completed operations
                     let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
@@ -364,8 +374,10 @@ where
 
                     // Check for expiry
                     let search_timeout = self.config.search_timeout;
-                    let expired = Instant::now().checked_duration_since(op.last_update)
-                            .map(|d| d > search_timeout).unwrap_or(false);
+                    let expired = Instant::now()
+                        .checked_duration_since(op.last_update)
+                        .map(|d| d > search_timeout)
+                        .unwrap_or(false);
 
                     trace!("active: {:?}", active);
                     trace!("pending: {:?}", pending);
@@ -376,25 +388,30 @@ where
                         (0, 0, _, _) => {
                             debug!("Operation {} search complete!", req_id);
                             op.state = OperationState::Request;
-                        },
+                        }
                         // No active nodes, all replies received, re-start search
                         (0, _, _, _) => {
-                            debug!("Operation {}, all responses received, re-starting search", req_id);
+                            debug!(
+                                "Operation {}, all responses received, re-starting search",
+                                req_id
+                            );
                             op.state = OperationState::Search(n + 1);
-                        },
+                        }
                         // Search iteration timeout
                         (_, _, true, _) => {
                             debug!("Operation {} timeout at iteration {}", req_id, n);
 
                             // TODO: Update active nodes to timed-out
                             for (id, _n) in active {
-                                op.nodes.entry((*id).clone()).and_modify(|(_n, s)| *s = RequestState::Timeout );
+                                op.nodes
+                                    .entry((*id).clone())
+                                    .and_modify(|(_n, s)| *s = RequestState::Timeout);
                             }
 
                             op.state = OperationState::Search(n + 1);
-                        },
+                        }
                         _ => (),
-                    }               
+                    }
                 }
                 // Update a search iteration
                 OperationState::Search(n) => {
@@ -409,7 +426,9 @@ where
 
                     // Locate next nearest nodes
                     let own_id = self.id.clone();
-                    let mut nearest: Vec<_> = op.nodes.iter()
+                    let mut nearest: Vec<_> = op
+                        .nodes
+                        .iter()
                         .filter(|(k, (_n, s))| (*s == RequestState::Pending) & (*k != &own_id))
                         .map(|(_k, (n, _s))| n.clone())
                         .collect();
@@ -424,9 +443,16 @@ where
                     }
 
                     // Launch next set of requests
-                    debug!("Operation {} issuing search request: {:?} to: {:?}", req_id, req, &nearest[0..n]);
+                    debug!(
+                        "Operation {} issuing search request: {:?} to: {:?}",
+                        req_id,
+                        req,
+                        &nearest[0..n]
+                    );
                     for n in &nearest[0..n] {
-                        op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+                        op.nodes
+                            .entry(n.id().clone())
+                            .and_modify(|(_n, s)| *s = RequestState::Active);
 
                         // TODO: handle sink errors?
                         let _ = req_sink.try_send((req_id.clone(), n.clone(), req.clone()));
@@ -435,7 +461,7 @@ where
                     // Update search state
                     debug!("Operation {} entering searching state", req_id);
                     op.state = OperationState::Searching(n);
-                },
+                }
                 // Issue find / store operation if required
                 OperationState::Request => {
                     // TODO: should a search be a find all then query, or a find values with short-circuits?
@@ -451,7 +477,9 @@ where
                     // Locate nearest responding nodes
                     // TODO: this doesn't _need_ to be per search, could be from the global table?
                     let own_id = self.id.clone();
-                    let mut nearest: Vec<_> = op.nodes.iter()
+                    let mut nearest: Vec<_> = op
+                        .nodes
+                        .iter()
                         .filter(|(k, (_n, s))| (*s == RequestState::Complete) & (*k != &own_id))
                         .map(|(_k, (n, _s))| n.clone())
                         .collect();
@@ -460,24 +488,30 @@ where
                     nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
                     let range = 0..usize::min(self.config.concurrency, nearest.len());
 
-                    debug!("Operation {} issuing request: {:?} to: {:?}", req_id, req, &nearest[range.clone()]);
+                    debug!(
+                        "Operation {} issuing request: {:?} to: {:?}",
+                        req_id,
+                        req,
+                        &nearest[range.clone()]
+                    );
 
                     for n in &nearest[range] {
-                        op.nodes.entry(n.id().clone()).and_modify(|(_n, s)| *s = RequestState::Active );
+                        op.nodes
+                            .entry(n.id().clone())
+                            .and_modify(|(_n, s)| *s = RequestState::Active);
 
                         // TODO: handle sink errors?
                         let _ = req_sink.try_send((req_id.clone(), n.clone(), req.clone()));
                     }
 
                     op.state = OperationState::Pending;
-                },
+                }
                 // Currently awaiting request responses
                 OperationState::Pending => {
-                    // Fetch known nodes 
+                    // Fetch known nodes
                     let nodes = op.nodes.clone();
-                    let mut known: Vec<_> = nodes.iter()
-                        .collect();
-                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k) );
+                    let mut known: Vec<_> = nodes.iter().collect();
+                    known.sort_by_key(|(k, _)| Id::xor(&op.target, k));
 
                     // Exit when no pending nodes remain
                     let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
@@ -487,8 +521,10 @@ where
 
                     // Check for expiry
                     let search_timeout = self.config.search_timeout;
-                    let expired = Instant::now().checked_duration_since(op.last_update)
-                            .map(|d| d > search_timeout).unwrap_or(false);
+                    let expired = Instant::now()
+                        .checked_duration_since(op.last_update)
+                        .map(|d| d > search_timeout)
+                        .unwrap_or(false);
 
                     if active.len() == 0 || expired {
                         debug!("Operation {} entering done state", req_id);
@@ -501,16 +537,17 @@ where
 
                     match &op.kind {
                         OperationKind::Connect(tx) => {
-                            let mut peers: Vec<_> = op.nodes.iter()
+                            let mut peers: Vec<_> = op
+                                .nodes
+                                .iter()
                                 .filter(|(_k, (_n, s))| *s == RequestState::Complete)
-                                .map(|(_k, (e, _s))| e.clone() )
+                                .map(|(_k, (e, _s))| e.clone())
                                 .collect();
 
-                                let own_id = self.id.clone();
-                                peers.sort_by_key(|n| Id::xor(&own_id, n.id()));
+                            let own_id = self.id.clone();
+                            peers.sort_by_key(|n| Id::xor(&own_id, n.id()));
                             if peers.len() > 0 {
                                 tx.clone().try_send(Ok(peers)).unwrap();
-
                             } else {
                                 tx.clone().try_send(Err(Error::NotFound)).unwrap();
                             }
@@ -524,7 +561,8 @@ where
                         OperationKind::FindValues(tx) => {
                             if op.data.len() > 0 {
                                 // Flatten out response data
-                                let mut flat_data: Vec<Data> = op.data.iter().flat_map(|(_k, v)| v.clone() ).collect();
+                                let mut flat_data: Vec<Data> =
+                                    op.data.iter().flat_map(|(_k, v)| v.clone()).collect();
 
                                 // Append any already known data
                                 if let Some(mut existing) = self.datastore.find(&op.target) {
@@ -536,7 +574,6 @@ where
                                 debug!("Operation {} values found: {:?}", req_id, flat_data);
 
                                 tx.clone().try_send(Ok(flat_data)).unwrap();
-
                             } else {
                                 tx.clone().try_send(Err(Error::NotFound)).unwrap();
                             }
@@ -544,10 +581,14 @@ where
                         OperationKind::Store(_values, tx) => {
                             // `Store` responds with a `FoundData` object containing the stored data
                             // this allows us to check `op.data` for the nodes at which data has been stored
-                            
+
                             if op.data.len() > 0 {
-                                let flat_ids: Vec<_> = op.data.iter().map(|(k, _v)| k.clone() ).collect();
-                                let mut flat_nodes: Vec<_> = flat_ids.iter().filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone() ) ).collect();
+                                let flat_ids: Vec<_> =
+                                    op.data.iter().map(|(k, _v)| k.clone()).collect();
+                                let mut flat_nodes: Vec<_> = flat_ids
+                                    .iter()
+                                    .filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone()))
+                                    .collect();
                                 flat_nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
 
                                 // TODO: check the stored _values_ too (as this may be reduced on the upstream side)
@@ -559,7 +600,6 @@ where
                                 debug!("Operation {} store failed", req_id);
                                 tx.clone().try_send(Err(Error::NotFound)).unwrap();
                             }
-                            
                         }
                     }
 
@@ -647,7 +687,6 @@ where
     }
 }
 
-
 impl<Id, Info, Data, ReqId, Table, Store> Unpin for Dht<Id, Info, Data, ReqId, Table, Store> {}
 
 impl<Id, Info, Data, ReqId, Table, Store> Future for Dht<Id, Info, Data, ReqId, Table, Store>
@@ -663,7 +702,6 @@ where
 
     // Poll calls internal update function
     fn poll(mut self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        
         let _ = self.update();
 
         Poll::Pending
@@ -681,11 +719,8 @@ macro_rules! mock_dht {
         mock_dht!($connector, $root, $dht, config);
     };
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {
-        let mut $dht = Dht::<[u8; 1], _, u64, u64>::standard(
-            $root.id().clone(),
-            $config,
-            $connector.clone(),
-        );
+        let mut $dht =
+            Dht::<[u8; 1], _, u64, u64>::standard($root.id().clone(), $config, $connector.clone());
     };
 }
 
@@ -732,7 +767,6 @@ mod tests {
         let friend2 = dht.table.contains(friend.id()).unwrap();
         assert_ne!(friend1.seen(), friend2.seen());
     }
-
 
     #[test]
     fn test_receive_ping() {
@@ -783,7 +817,8 @@ mod tests {
 
         // FindValues (unknown, returns NodesFound)
         assert_eq!(
-            dht.handle_req(1, &other, &Request::FindValue([201])).unwrap(),
+            dht.handle_req(1, &other, &Request::FindValue([201]))
+                .unwrap(),
             Response::NodesFound([201], vec![friend.clone()]),
         );
 
@@ -792,7 +827,8 @@ mod tests {
 
         // FindValues
         assert_eq!(
-            dht.handle_req(2, &other, &Request::FindValue([201])).unwrap(),
+            dht.handle_req(2, &other, &Request::FindValue([201]))
+                .unwrap(),
             Response::ValuesFound([201], vec![1337]),
         );
     }
@@ -826,11 +862,9 @@ mod tests {
         let n1 = Entry::new([1], 002);
         let n2 = Entry::new([2], 003);
 
-        
         let (tx, _rx) = mpsc::channel(10);
         let c = config.clone();
         mock_dht!(tx, root, dht, config);
-
 
         // Add known nodes
         dht.table.create_or_update(&n1);

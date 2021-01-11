@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use log::{trace};
+use log::trace;
 
 /// KBucket implementation
 /// This implements a single bucket for use in the KNodeTable implementation

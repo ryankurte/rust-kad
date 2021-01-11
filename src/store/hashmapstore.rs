@@ -41,7 +41,10 @@ where
 
     /// Dump all data in the store
     pub fn dump(&self) -> Vec<(Id, Vec<Data>)> {
-        self.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.data
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 }
 

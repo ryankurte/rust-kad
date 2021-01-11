@@ -30,14 +30,9 @@ where
     /// Create a new KNodeTable with the provded bucket and hash sizes
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Info> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size)
-            .map(|_| KBucket::new(bucket_size))
-            .collect();
+        let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
-        KNodeTable {
-            id,
-            buckets,
-        }
+        KNodeTable { id, buckets }
     }
 
     // Calculate the distance between two Ids.
@@ -69,7 +64,6 @@ where
 
     #[allow(dead_code)]
     fn update_buckets(&self) {
-
         unimplemented!()
     }
 }
@@ -82,7 +76,7 @@ where
     fn buckets(&self) -> usize {
         self.buckets.len()
     }
-    
+
     /// Create or update a node in the NodeTable
     fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
         if node.id() == &self.id {
@@ -98,10 +92,7 @@ where
     /// Find the nearest nodes to the provided Id in the given range
     fn nearest(&self, id: &Id, range: Range<usize>) -> Vec<Entry<Id, Info>> {
         // Create a list of all nodes
-        let mut all: Vec<_> = self.buckets
-            .iter()
-            .flat_map(|b| b.nodes())
-            .collect();
+        let mut all: Vec<_> = self.buckets.iter().flat_map(|b| b.nodes()).collect();
         let count = all.len();
 
         // Sort by distance

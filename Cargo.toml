@@ -1,6 +1,6 @@
 [package]
 name = "kad"
-version = "0.5.0"
+version = "0.6.0"
 repository = "https://github.com/ryankurte/rust-kad"
 description = "A generic / futures based implementation of the Kademlia Distributed Hash Table (DHT)"
 keywords = ["kademlia", "dht", "distributed", "hash", "table"]

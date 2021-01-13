@@ -10,16 +10,12 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-extern crate kad;
-
 use kad::common::*;
 use kad::dht::Dht;
-use kad::mock::MockSync;
 use kad::store::HashMapStore;
 use kad::table::KNodeTable;
 use kad::Config;
 
-extern crate futures;
 use futures::channel::mpsc;
 use futures::executor::block_on;
 

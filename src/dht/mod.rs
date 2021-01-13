@@ -285,6 +285,8 @@ where
             match op.state.clone() {
                 // Initialise new operation
                 OperationState::Init => {
+                    debug!("Operation {} ({}) start", req_id, &op.kind);
+
                     // Identify nearest nodes if available
                     let nearest: Vec<_> =
                         self.table.nearest(&op.target, 0..self.config.concurrency);
@@ -317,7 +319,6 @@ where
                 }
                 // Awaiting response to connect message
                 OperationState::Connecting => {
-                    debug!("Operation {} starting connect", req_id);
 
                     // Check for known nodes (connect responses)
                     let nodes = op.nodes.clone();
@@ -422,7 +423,7 @@ where
                         continue;
                     }
 
-                    debug!("Operation {} search iteration {}", req_id, n);
+                    debug!("Operation {} ({}) search iteration {}", req_id, &op.kind, n);
 
                     // Locate next nearest nodes
                     let own_id = self.id.clone();
@@ -489,8 +490,9 @@ where
                     let range = 0..usize::min(self.config.concurrency, nearest.len());
 
                     debug!(
-                        "Operation {} issuing request: {:?} to: {:?}",
+                        "Operation {} ({}) issuing request: {:?} to: {:?}",
                         req_id,
+                        &op.kind,
                         req,
                         &nearest[range.clone()]
                     );
@@ -527,13 +529,13 @@ where
                         .unwrap_or(false);
 
                     if active.len() == 0 || expired {
-                        debug!("Operation {} entering done state", req_id);
+                        debug!("Operation {} ({}) entering done state", req_id, &op.kind);
                         op.state = OperationState::Done;
                     }
                 }
                 // Update completion state
                 OperationState::Done => {
-                    debug!("Operating {} done", req_id);
+                    debug!("Operating {} ({}) done", req_id, &op.kind);
 
                     match &op.kind {
                         OperationKind::Connect(tx) => {
@@ -673,11 +675,19 @@ where
         Ok(())
     }
 
-    pub fn nodetable(&mut self) -> &mut Table {
+    pub fn nodetable(&self) -> &Table {
+        &self.table
+    }
+
+    pub fn nodetable_mut(&mut self) -> &mut Table {
         &mut self.table
     }
 
-    pub fn datastore(&mut self) -> &mut Store {
+    pub fn datastore(&self) -> &Store {
+        &self.datastore
+    }
+
+    pub fn datastore_mut(&mut self) -> &mut Store {
         &mut self.datastore
     }
 
@@ -727,15 +737,12 @@ macro_rules! mock_dht {
 #[cfg(test)]
 mod tests {
     use std::clone::Clone;
-    use std::time::Duration;
 
     extern crate futures;
     use futures::channel::mpsc;
-    use futures::executor::block_on;
 
     use super::*;
-    use crate::store::{Datastore, HashMapStore};
-    use crate::table::{KNodeTable, NodeTable};
+    use crate::store::{Datastore};
 
     #[test]
     fn test_receive_common() {

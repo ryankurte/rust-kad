@@ -9,7 +9,6 @@ use crate::common::{DatabaseId, Entry};
 
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use log::trace;
@@ -18,7 +17,7 @@ use log::trace;
 /// This implements a single bucket for use in the KNodeTable implementation
 pub struct KBucket<Id, Info> {
     bucket_size: usize,
-    nodes: Arc<Mutex<VecDeque<Entry<Id, Info>>>>,
+    nodes: VecDeque<Entry<Id, Info>>,
     pending: Option<Entry<Id, Info>>,
     updated: Option<Instant>,
 }
@@ -32,7 +31,7 @@ where
     pub fn new(bucket_size: usize) -> KBucket<Id, Info> {
         KBucket {
             bucket_size,
-            nodes: Arc::new(Mutex::new(VecDeque::with_capacity(bucket_size))),
+            nodes: VecDeque::with_capacity(bucket_size),
             pending: None,
             updated: None,
         }
@@ -41,18 +40,19 @@ where
     /// Update a node in the bucket
     /// TODO: positional updating seems inefficient and complex vs. just sorting by last_seen..?
     pub fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
-        let mut nodes = self.nodes.lock().unwrap();
 
-        let res = if let Some(_n) = nodes.clone().iter().find(|n| n.id() == node.id()) {
+        let res = if let Some(_n) = self.nodes.clone().iter().find(|n| n.id() == node.id()) {
             // If the node already exists, update it
             trace!(target: "dht", "[KBucket] Updating node {:?}", node);
-            KBucket::update_position(&mut nodes, node);
+            KBucket::update_position(&mut self.nodes, node);
             true
-        } else if nodes.len() < self.bucket_size {
+
+        } else if self.nodes.len() < self.bucket_size {
             // If there's space in the bucket, add it
             trace!(target: "dht", "[KBucket] Adding node {:?}", node);
-            nodes.push_front(node.clone());
+            self.nodes.push_front(node.clone());
             true
+
         } else {
             // If there's no space, discard it
             trace!(target: "dht", "[KBucket] No space to add node {:?}", node);
@@ -70,8 +70,6 @@ where
     /// Find a node in the bucket
     pub fn find(&self, id: &Id) -> Option<Entry<Id, Info>> {
         self.nodes
-            .lock()
-            .unwrap()
             .iter()
             .find(|n| *n.id() == *id)
             .map(|n| n.clone())
@@ -80,8 +78,6 @@ where
     /// Clone the list of nodes currently in the bucket
     pub fn nodes(&self) -> Vec<Entry<Id, Info>> {
         self.nodes
-            .lock()
-            .unwrap()
             .iter()
             .map(|n| n.clone())
             .collect()
@@ -94,35 +90,40 @@ where
 
     /// Fetch number of nodes in bucket
     pub fn node_count(&self) -> usize {
-        self.nodes.lock().unwrap().len()
+        self.nodes.len()
     }
 
     /// Fetch the oldest node in the bucket
     pub fn oldest(&self) -> Option<Entry<Id, Info>> {
-        let nodes = self.nodes.lock().unwrap();
-        if nodes.len() == 0 {
+        if self.nodes.len() == 0 {
             return None;
         }
-        nodes.get(nodes.len() - 1).map(|n| n.clone())
+        self.nodes.get(self.nodes.len() - 1).map(|n| n.clone())
     }
 
     /// Move a node to the start of the bucket
     fn update_position(nodes: &mut VecDeque<Entry<Id, Info>>, node: &Entry<Id, Info>) {
-        // Find the node to update
-        if let Some(_existing) = nodes
-            .iter()
-            .find(|n| n.id() == node.id())
-            .map(|n| n.clone())
-        {
-            // Update node array
-            *nodes = nodes
-                .iter()
-                .filter(|n| n.id() != node.id())
-                .map(|n| n.clone())
-                .collect();
-            // Push node to front
-            nodes.push_front(node.clone());
-        }
+        // Find matching node by index
+        let found = nodes.iter().enumerate()
+            .find_map(|(i, n)| {
+                if n.id() == node.id() {
+                    Some(i)
+                } else {
+                    None
+                }
+            });
+
+        // Nothing to do if the node is not found
+        let i = match found {
+            Some(v) => v,
+            None => return,
+        };
+
+        // Remove prior node entry from list
+        nodes.remove(i);
+
+        // Push updated node entry to front
+        nodes.push_front(node.clone());
     }
 
     /// Update an entry by ID
@@ -130,7 +131,7 @@ where
     where
         F: Fn(&mut Entry<Id, Info>),
     {
-        if let Some(ref mut n) = self.nodes.lock().unwrap().iter_mut().find(|n| n.id() == id) {
+        if let Some(ref mut n) = self.nodes.iter_mut().find(|n| n.id() == id) {
             (f)(n);
             return true;
         }
@@ -139,18 +140,28 @@ where
 
     /// Remove an entry from the bucket
     pub fn remove_entry(&mut self, id: &Id, replace: bool) {
-        let mut nodes = self.nodes.lock().unwrap();
+        // Find matching node by index
+        let index = self.nodes.iter().enumerate()
+            .find_map(|(i, n)| {
+                if n.id() == id {
+                    Some(i)
+                } else {
+                    None
+                }
+            });
 
-        // Filter nodes from existing
-        *nodes = nodes
-            .iter()
-            .filter(|n| n.id() != id)
-            .map(|n| n.clone())
-            .collect();
+        // Nothing to do if the node is not found
+        let index = match index {
+            Some(i) => i,
+            None => return,
+        };
+
+        // If we have a viable index, remove the node
+        self.nodes.remove(index);
 
         // Replace with pending node if enabled and found
-        if replace && nodes.len() < self.bucket_size && self.pending.is_some() {
-            nodes.push_back(self.pending.take().unwrap());
+        if replace && self.nodes.len() < self.bucket_size && self.pending.is_some() {
+            self.nodes.push_back(self.pending.take().unwrap());
         }
     }
 }

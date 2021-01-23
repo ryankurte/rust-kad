@@ -40,19 +40,16 @@ where
     /// Update a node in the bucket
     /// TODO: positional updating seems inefficient and complex vs. just sorting by last_seen..?
     pub fn create_or_update(&mut self, node: &Entry<Id, Info>) -> bool {
-
         let res = if let Some(_n) = self.nodes.clone().iter().find(|n| n.id() == node.id()) {
             // If the node already exists, update it
             trace!(target: "dht", "[KBucket] Updating node {:?}", node);
             KBucket::update_position(&mut self.nodes, node);
             true
-
         } else if self.nodes.len() < self.bucket_size {
             // If there's space in the bucket, add it
             trace!(target: "dht", "[KBucket] Adding node {:?}", node);
             self.nodes.push_front(node.clone());
             true
-
         } else {
             // If there's no space, discard it
             trace!(target: "dht", "[KBucket] No space to add node {:?}", node);
@@ -77,10 +74,7 @@ where
 
     /// Clone the list of nodes currently in the bucket
     pub fn nodes(&self) -> Vec<Entry<Id, Info>> {
-        self.nodes
-            .iter()
-            .map(|n| n.clone())
-            .collect()
+        self.nodes.iter().map(|n| n.clone()).collect()
     }
 
     /// Fetch last updated time
@@ -104,14 +98,16 @@ where
     /// Move a node to the start of the bucket
     fn update_position(nodes: &mut VecDeque<Entry<Id, Info>>, node: &Entry<Id, Info>) {
         // Find matching node by index
-        let found = nodes.iter().enumerate()
-            .find_map(|(i, n)| {
-                if n.id() == node.id() {
-                    Some(i)
-                } else {
-                    None
-                }
-            });
+        let found =
+            nodes.iter().enumerate().find_map(
+                |(i, n)| {
+                    if n.id() == node.id() {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                },
+            );
 
         // Nothing to do if the node is not found
         let i = match found {
@@ -141,14 +137,16 @@ where
     /// Remove an entry from the bucket
     pub fn remove_entry(&mut self, id: &Id, replace: bool) {
         // Find matching node by index
-        let index = self.nodes.iter().enumerate()
-            .find_map(|(i, n)| {
-                if n.id() == id {
-                    Some(i)
-                } else {
-                    None
-                }
-            });
+        let index =
+            self.nodes.iter().enumerate().find_map(
+                |(i, n)| {
+                    if n.id() == id {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                },
+            );
 
         // Nothing to do if the node is not found
         let index = match index {

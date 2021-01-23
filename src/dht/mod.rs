@@ -319,7 +319,6 @@ where
                 }
                 // Awaiting response to connect message
                 OperationState::Connecting => {
-
                     // Check for known nodes (connect responses)
                     let nodes = op.nodes.clone();
                     let mut known: Vec<_> = nodes.iter().collect();
@@ -742,7 +741,7 @@ mod tests {
     use futures::channel::mpsc;
 
     use super::*;
-    use crate::store::{Datastore};
+    use crate::store::Datastore;
 
     #[test]
     fn test_receive_common() {

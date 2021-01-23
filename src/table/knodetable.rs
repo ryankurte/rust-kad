@@ -92,7 +92,9 @@ where
     /// Find the nearest nodes to the provided Id in the given range
     fn nearest(&self, id: &Id, range: Range<usize>) -> Vec<Entry<Id, Info>> {
         // Create a list of all nodes
-        let mut all: Vec<_> = self.buckets.iter()
+        let mut all: Vec<_> = self
+            .buckets
+            .iter()
             .flat_map(|b| b.nodes())
             //.filter(|n| n.id() != &self.id )
             .collect();

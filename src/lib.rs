@@ -42,7 +42,7 @@ pub struct Config {
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
-    #[structopt(long = "dht-search-timeout", parse(try_from_str = parse_duration), default_value = "10s")]
+    #[structopt(long = "dht-search-timeout", parse(try_from_str = parse_duration), default_value = "5s")]
     /// Timeout for search iterations with missing responses
     pub search_timeout: Duration,
 

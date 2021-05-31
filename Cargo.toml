@@ -1,30 +1,35 @@
 [package]
-name = "kad"
-version = "0.6.0"
-repository = "https://github.com/ryankurte/rust-kad"
-description = "A generic / futures based implementation of the Kademlia Distributed Hash Table (DHT)"
-keywords = ["kademlia", "dht", "distributed", "hash", "table"]
 authors = ["Ryan Kurte <ryankurte@gmail.com>"]
-license = "MIT / Apache-2.0"
+description = "A generic / futures based implementation of the Kademlia Distributed Hash Table (DHT)"
 edition = "2018"
-
+keywords = ["kademlia", "dht", "distributed", "hash", "table"]
+license = "MIT / Apache-2.0"
+name = "kad"
+repository = "https://github.com/ryankurte/rust-kad"
+version = "0.6.0"
 [dependencies]
+async-trait = "0.1.19"
 futures = "0.3.1"
 futures-timer = "0.1.1"
-num = { version = "0.2.0", features = ["rand"]}
-structopt = "0.3.7"
+humantime = "1.2.0"
 rand = "0.5.5"
-
-async-trait = "0.1.19"
+structopt = "0.3.7"
+strum = "*"
+strum_macros = "*"
 tracing = "0.1.10"
 
-humantime = "1.2.0"
-
 [dependencies.log]
-version = "0.4.6"
 features = ["max_level_debug"]
+version = "0.4.6"
+
+[dependencies.num]
+features = ["rand"]
+version = "0.2.0"
 
 [dev-dependencies]
 rr-mux = "0.10.0"
-async-std = { version = "1.7.0", features = [ "attributes" ] }
 simplelog = "0.8.0"
+
+[dev-dependencies.async-std]
+features = ["attributes"]
+version = "1.7.0"

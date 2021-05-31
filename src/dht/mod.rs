@@ -151,14 +151,15 @@ where
         };
 
         debug!(
-            "Receive response id: {} ({:?}) from: {:?}",
-            req_id, resp, from
+            "Operation {} response from {:?}: {}",
+            req_id, from.id(), resp
         );
+        trace!("Response: {:?}", resp);
 
         // Check request is expected / from a valid peer and update state
         match op.nodes.get_mut(from.id()) {
             Some((_e, s)) if *s != RequestState::Active => {
-                warn!("Operation {} unexpected response from: {:?}", req_id, from);
+                warn!("Operation {} unexpected response from: {:?}", req_id, from.id());
                 *s = RequestState::InvalidResponse;
                 return Ok(());
             }
@@ -174,7 +175,8 @@ where
         // Handle incoming response message
         let v = match &resp {
             Response::NodesFound(id, entries) if id == &op.target => {
-                debug!("Operation {}, adding entries to map: {:?}", req_id, entries);
+                debug!("Operation {}, adding {} entries to map", req_id, entries.len());
+                trace!("Entries: {:?}", entries);
 
                 for e in entries {
                     // Skip entries relating to ourself
@@ -186,7 +188,7 @@ where
                     self.table.create_or_update(e);
 
                     // Skip adding responding node to operation again
-                    // (state is updated abovbe)
+                    // (state is updated above)
                     if e.id() == from.id() {
                         continue;
                     }
@@ -203,12 +205,13 @@ where
             Response::NodesFound(id, _entries) => {
                 debug!(
                     "Operation {}, invalid nodes response: {:?} from: {:?} (id: {:?})",
-                    req_id, resp, from, id
+                    req_id, resp, from.id(), id
                 );
                 RequestState::InvalidResponse
             }
             Response::ValuesFound(id, values) if id == &op.target => {
-                debug!("Operation {}, adding data to map: {:?}", req_id, values);
+                debug!("Operation {}, adding {} values to map", req_id, values.len());
+                trace!("Values: {:?}", values);
 
                 // Add data to data list
                 op.data.insert(from.id().clone(), values.clone());
@@ -217,9 +220,10 @@ where
             }
             Response::ValuesFound(id, _values) => {
                 debug!(
-                    "Operation {}, invalid values response: {:?} from: {:?} (id: {:?})",
-                    req_id, resp, from, id
+                    "Operation {}, invalid values response from: {:?} (id: {:?})",
+                    req_id, from.id(), id
                 );
+                trace!("Invalid response: {:?}", resp);
                 RequestState::InvalidResponse
             }
             Response::NoResult => {
@@ -235,7 +239,7 @@ where
             .and_modify(|(_e, s)| *s = v)
             .or_insert((from.clone(), v));
 
-        debug!("update node: {:?}", e);
+        debug!("update node {:?} state: {:?}", e.0.id(), e.1);
 
         trace!("Operation state: {:?}", op);
 
@@ -301,13 +305,13 @@ where
                     nodes.sort_by_key(|n| Id::xor(&op.target, n.id()));
 
                     debug!(
-                        "Initiating operation {} ({})  sending {:?} request to {:?}",
-                        &op.kind, req_id, req, nodes
+                        "Initiating {} operation ({}), sending {} request to {} peers",
+                        &op.kind, req_id, req, nodes.len()
                     );
 
                     // Issue appropriate request
                     for e in nodes.iter() {
-                        debug!("Op {} tx: {:?} to: {:?}", req_id, req, e);
+                        trace!("Operation {} issuing {} to: {:?}", req_id, req, e.id());
 
                         // TODO: handle sink errors?
                         let _ = req_sink.try_send((req_id.clone(), e.clone(), req.clone()));
@@ -489,11 +493,11 @@ where
                     let range = 0..usize::min(self.config.concurrency, nearest.len());
 
                     debug!(
-                        "Operation {} ({}) issuing request: {:?} to: {:?}",
+                        "Operation {} ({}) issuing {} request to {} peers",
                         req_id,
                         &op.kind,
                         req,
-                        &nearest[range.clone()]
+                        nearest[range.clone()].len()
                     );
 
                     for n in &nearest[range] {

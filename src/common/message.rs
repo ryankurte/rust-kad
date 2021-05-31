@@ -15,6 +15,18 @@ pub enum Request<Id, Value> {
     Store(Id, Vec<Value>),
 }
 
+
+impl <Id: std::fmt::Debug, Value> std::fmt::Display for Request<Id, Value> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ping => write!(f, "Ping"),
+            Self::FindNode(id) => write!(f, "FindNode({:?})", id),
+            Self::FindValue(id) => write!(f, "FindValues({:?})", id),
+            Self::Store(id, values) => write!(f, "Store({:?}, {} values)", id, values.len()),
+        }
+    }
+}
+
 impl<Id, Value> Request<Id, Value> {
     /// Fetch the database ID for the request (if present)
     pub fn id(&self) -> Option<&Id> {
@@ -32,6 +44,16 @@ pub enum Response<Id, Info, Value> {
     NodesFound(Id, Vec<Entry<Id, Info>>),
     ValuesFound(Id, Vec<Value>),
     NoResult,
+}
+
+impl <Id: std::fmt::Debug, Info, Value> std::fmt::Display for Response<Id, Info, Value> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NodesFound(id, entries) => write!(f, "NodesFound({:?}, {} nodes)", id, entries.len()),
+            Self::ValuesFound(id, values) => write!(f, "ValuesFound({:?}, {} values)", id, values.len()),
+            Self::NoResult => write!(f, "NoResult"),
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Debug)]

@@ -6,7 +6,8 @@ keywords = ["kademlia", "dht", "distributed", "hash", "table"]
 license = "MIT / Apache-2.0"
 name = "kad"
 repository = "https://github.com/ryankurte/rust-kad"
-version = "0.6.0"
+version = "0.6.1"
+
 [dependencies]
 async-trait = "0.1.19"
 futures = "0.3.1"

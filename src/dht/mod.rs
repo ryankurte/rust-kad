@@ -102,7 +102,7 @@ where
             Request::FindNode(id) => {
                 let nodes = self.table.nearest(id, 0..self.config.k);
                 Response::NodesFound(id.clone(), nodes)
-            }
+            },
             Request::FindValue(id) => {
                 // Lookup the value
                 if let Some(values) = self.datastore.find(id) {
@@ -113,7 +113,7 @@ where
                     let nodes = self.table.nearest(id, 0..self.config.k);
                     Response::NodesFound(id.clone(), nodes)
                 }
-            }
+            },
             Request::Store(id, value) => {
                 // Write value to local storage
                 let values = self.datastore.store(id, value);
@@ -125,7 +125,7 @@ where
                     debug!("Ignored values for id: {:?}", id);
                     Response::NoResult
                 }
-            }
+            },
         };
 
         // Update record for sender
@@ -287,7 +287,7 @@ where
             let req = match &op.kind {
                 OperationKind::Connect(_tx) => Request::FindNode(op.target.clone()),
                 OperationKind::FindNode(_tx) => Request::FindNode(op.target.clone()),
-                OperationKind::FindValues(_tx) => Request::FindValue(op.target.clone()),
+                OperationKind::FindValues(_tx) => Request::FindNode(op.target.clone()),
                 OperationKind::Store(_v, _tx) => Request::FindNode(op.target.clone()),
             };
 
@@ -474,11 +474,12 @@ where
                     debug!("Operation {} entering searching state", req_id);
                     op.state = OperationState::Searching(n);
                 }
-                // Issue find / store operation if required
+                // Issue find / store operation following search
                 OperationState::Request => {
                     // TODO: should a search be a find all then query, or a find values with short-circuits?
                     let req = match &op.kind {
                         OperationKind::Store(v, _) => Request::Store(op.target.clone(), v.clone()),
+                        OperationKind::FindValues(_) => Request::FindValue(op.target.clone()), 
                         _ => {
                             debug!("Operation {} entering done state", req_id);
                             op.state = OperationState::Done;
@@ -566,7 +567,7 @@ where
                             }
                         }
                         OperationKind::FindNode(tx) => {
-                            debug!("Found nodes: {:?}", op.nodes);
+                            trace!("Found nodes: {:?}", op.nodes);
                             match op.nodes.get(&op.target) {
                                 Some((n, _s)) => tx.clone().try_send(Ok(n.clone())).unwrap(),
                                 None => tx.clone().try_send(Err(Error::NotFound)).unwrap(),

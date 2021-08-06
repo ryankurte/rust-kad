@@ -101,11 +101,11 @@ mod tests {
         // Check requests (query node 2, 3), find node 4
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n3.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n3.clone(), Request::FindNode(value_id.clone())))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n2.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n2.clone(), Request::FindNode(value_id.clone())))
         );
 
         // Handle responses (response from 2, 3), node 4, 5 known
@@ -123,6 +123,34 @@ mod tests {
         .unwrap();
 
         info!("Search round 1");
+
+        // Update search state (re-start search)
+        dht.update().unwrap();
+        dht.update().unwrap();
+
+        // Check requests (query node 4, 5)
+        assert_eq!(
+            rx.try_next().unwrap(),
+            Some((req_id, n4.clone(), Request::FindNode(value_id.clone())))
+        );
+        assert_eq!(
+            rx.try_next().unwrap(),
+            Some((req_id, n5.clone(), Request::FindNode(value_id.clone())))
+        );
+
+        // Handle responses for node 4, 5
+        dht.handle_resp(
+            req_id,
+            &n4,
+            &Response::NodesFound(value_id.clone(), vec![]),
+        )
+        .unwrap();
+        dht.handle_resp(
+            req_id,
+            &n5,
+            &Response::NodesFound(value_id.clone(), vec![]),
+        )
+        .unwrap();
 
         // Update search state (re-start search)
         dht.update().unwrap();
@@ -154,6 +182,9 @@ mod tests {
 
         // Launch next search
         dht.update().unwrap();
+
+
+
         // Detect completion
         dht.update().unwrap();
         dht.update().unwrap();

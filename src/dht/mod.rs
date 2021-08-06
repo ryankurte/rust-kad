@@ -104,7 +104,7 @@ where
                 Response::NodesFound(id.clone(), nodes)
             }
             Request::FindValue(id) => {
-                // Lockup the value
+                // Lookup the value
                 if let Some(values) = self.datastore.find(id) {
                     debug!("Found {} values for id: {:?}", values.len(), id);
                     Response::ValuesFound(id.clone(), values)
@@ -172,13 +172,19 @@ where
         // Update global / DHT peer table
         self.table.create_or_update(from);
 
+        // Add responding node to nodes
+        op.nodes.entry(from.id().clone())
+            .or_insert((from.clone(), RequestState::Complete));
+
         // Handle incoming response message
         let v = match &resp {
             Response::NodesFound(id, entries) if id == &op.target => {
-                debug!("Operation {}, adding {} entries to map", req_id, entries.len());
+                debug!("Operation {}, adding {} nodes to map", req_id, entries.len());
                 trace!("Entries: {:?}", entries);
 
                 for e in entries {
+                    debug!("Operation {}, add node {:?}", req_id, e.id());
+
                     // Skip entries relating to ourself
                     if e.id() == &self.id {
                         continue;
@@ -437,6 +443,8 @@ where
                         .map(|(_k, (n, _s))| n.clone())
                         .collect();
 
+                    debug!("Operation {} nearest: {:?}", req_id, nearest);
+
                     // Sort and limit
                     nearest.sort_by_key(|n| Id::xor(&op.target, n.id()));
                     let n = usize::min(self.config.concurrency, nearest.len());
@@ -558,6 +566,7 @@ where
                             }
                         }
                         OperationKind::FindNode(tx) => {
+                            debug!("Found nodes: {:?}", op.nodes);
                             match op.nodes.get(&op.target) {
                                 Some((n, _s)) => tx.clone().try_send(Ok(n.clone())).unwrap(),
                                 None => tx.clone().try_send(Err(Error::NotFound)).unwrap(),

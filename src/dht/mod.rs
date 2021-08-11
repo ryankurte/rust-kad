@@ -17,7 +17,7 @@ use std::task::{Context, Poll};
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
 
-use log::{debug, trace, warn};
+use log::{debug, trace, warn, error};
 
 use crate::Config;
 
@@ -106,10 +106,10 @@ where
             Request::FindValue(id) => {
                 // Lookup the value
                 if let Some(values) = self.datastore.find(id) {
-                    debug!("Found {} values for id: {:?}", values.len(), id);
+                    debug!("FindValue request, {} values for id: {:?}", values.len(), id);
                     Response::ValuesFound(id.clone(), values)
                 } else {
-                    debug!("No values found, returning closer nodes for id: {:?}", id);
+                    debug!("FindValue request, no values found, returning closer nodes for id: {:?}", id);
                     let nodes = self.table.nearest(id, 0..self.config.k);
                     Response::NodesFound(id.clone(), nodes)
                 }
@@ -119,10 +119,10 @@ where
                 let values = self.datastore.store(id, value);
                 // Reply to confirm write was completed
                 if values.len() != 0 {
-                    debug!("Stored {} values for id: {:?}", values.len(), id);
+                    debug!("Store request, stored {} values for id: {:?}", values.len(), id);
                     Response::ValuesFound(id.clone(), values)
                 } else {
-                    debug!("Ignored values for id: {:?}", id);
+                    debug!("Store request, ignored values for id: {:?}", id);
                     Response::NoResult
                 }
             },
@@ -560,44 +560,57 @@ where
 
                             let own_id = self.id.clone();
                             peers.sort_by_key(|n| Id::xor(&own_id, n.id()));
-                            if peers.len() > 0 {
-                                tx.clone().try_send(Ok(peers)).unwrap();
+                            let res = if peers.len() > 0 {
+                                tx.clone().try_send(Ok(peers))
                             } else {
-                                tx.clone().try_send(Err(Error::NotFound)).unwrap();
+                                tx.clone().try_send(Err(Error::NotFound))
+                            };
+
+                            if let Err(e) = res {
+                                error!("Failed to send connect complete: {:?}", e);
                             }
                         }
                         OperationKind::FindNode(tx) => {
                             trace!("Found nodes: {:?}", op.nodes);
-                            match op.nodes.get(&op.target) {
-                                Some((n, _s)) => tx.clone().try_send(Ok(n.clone())).unwrap(),
-                                None => tx.clone().try_send(Err(Error::NotFound)).unwrap(),
+                            let res = match op.nodes.get(&op.target) {
+                                Some((n, _s)) => tx.clone().try_send(Ok(n.clone())),
+                                None => tx.clone().try_send(Err(Error::NotFound)),
                             };
+
+                            if let Err(e) = res {
+                                error!("Failed to send find node complete: {:?}", e);
+                            }
                         }
                         OperationKind::FindValues(tx) => {
-                            if op.data.len() > 0 {
-                                // Flatten out response data
-                                let mut flat_data: Vec<Data> =
-                                    op.data.iter().flat_map(|(_k, v)| v.clone()).collect();
+                            
+                            // Flatten out response data
+                            let mut flat_data: Vec<Data> =
+                                op.data.iter().flat_map(|(_k, v)| v.clone()).collect();
 
-                                // Append any already known data
-                                if let Some(mut existing) = self.datastore.find(&op.target) {
-                                    flat_data.append(&mut existing);
-                                }
+                            // Append any already known data
+                            if let Some(mut existing) = self.datastore.find(&op.target) {
+                                flat_data.append(&mut existing);
+                            }
 
-                                // TODO: apply reducer?
+                            // TODO: apply reducer?
 
-                                debug!("Operation {} values found: {:?}", req_id, flat_data);
+                            debug!("Operation {} values found: {:?}", req_id, flat_data);
 
-                                tx.clone().try_send(Ok(flat_data)).unwrap();
+                            let res = if flat_data.len() > 0 {
+                                tx.clone().try_send(Ok(flat_data))
                             } else {
-                                tx.clone().try_send(Err(Error::NotFound)).unwrap();
+                                tx.clone().try_send(Err(Error::NotFound))
+                            };
+
+                            if let Err(e) = res {
+                                error!("Failed to send find values complete: {:?}", e);
                             }
                         }
                         OperationKind::Store(_values, tx) => {
                             // `Store` responds with a `FoundData` object containing the stored data
                             // this allows us to check `op.data` for the nodes at which data has been stored
 
-                            if op.data.len() > 0 {
+                            let res = if op.data.len() > 0 {
                                 let flat_ids: Vec<_> =
                                     op.data.iter().map(|(k, _v)| k.clone()).collect();
                                 let mut flat_nodes: Vec<_> = flat_ids
@@ -610,13 +623,18 @@ where
 
                                 debug!("Operation {} stored at {} peers", req_id, flat_ids.len());
 
-                                tx.clone().try_send(Ok(flat_nodes)).unwrap();
+                                tx.clone().try_send(Ok(flat_nodes))
                             } else {
                                 debug!("Operation {} store failed", req_id);
-                                tx.clone().try_send(Err(Error::NotFound)).unwrap();
+                                tx.clone().try_send(Err(Error::NotFound))
+                            };
+
+                            if let Err(e) = res {
+                                error!("Failed to send store complete: {:?}", e);
                             }
                         }
-                    }
+                    };
+
 
                     // TODO: remove from tracking
                     done.push(req_id.clone());

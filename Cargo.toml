@@ -18,6 +18,7 @@ structopt = "0.3.7"
 strum = "0.21.0"
 strum_macros = "0.21.1"
 tracing = "0.1.10"
+serde = { version = "1.0.126", features = ["derive"] }
 
 [dependencies.log]
 features = ["max_level_debug"]

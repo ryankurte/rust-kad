@@ -6,8 +6,9 @@
  * Copyright 2018 Ryan Kurte
  */
 use super::entry::Entry;
+use serde::{Serialize, Deserialize};
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum Request<Id, Value> {
     Ping,
     FindNode(Id),
@@ -39,7 +40,7 @@ impl<Id, Value> Request<Id, Value> {
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum Response<Id, Info, Value> {
     NodesFound(Id, Vec<Entry<Id, Info>>),
     ValuesFound(Id, Vec<Value>),

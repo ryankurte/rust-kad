@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 /**
  * rust-kad
  * Kademlia node type
@@ -6,27 +5,21 @@ use std::fmt::Debug;
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
+use std::fmt::Debug;
 use std::time::Instant;
+use serde::{Serialize, Deserialize};
 
 use super::id::DatabaseId;
 
 /// Entry is a node entry in the DHT
 /// This is generic over Id and Info and intended to be cheaply cloned
 /// as a container for unique information
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry<Id, Info> {
     id: Id,
     info: Info,
+    #[serde(skip)]
     seen: Option<Instant>,
-    state: EntryState,
-    frozen: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum EntryState {
-    Ok,
-    Expiring,
-    Expired,
 }
 
 impl<Id, Info> PartialEq for Entry<Id, Info>
@@ -49,8 +42,6 @@ where
             id,
             info,
             seen: None,
-            frozen: false,
-            state: EntryState::Ok,
         }
     }
 

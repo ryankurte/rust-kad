@@ -11,7 +11,8 @@ use crate::common::*;
 use crate::store::Datastore;
 use crate::table::NodeTable;
 
-use super::{Dht, OperationKind};
+use super::{Dht, OperationKind, OperationState};
+use super::operation::{Operation, RequestState};
 
 /// Future returned by locate operation
 /// Resolves into node entry or error on completion
@@ -53,6 +54,25 @@ where
         self.exec(req_id.clone(), target, OperationKind::Store(data, done_tx))?;
 
         // Return locate future to caller
+        Ok((StoreFuture { rx: done_rx }, req_id))
+    }
+
+    /// Store data with an pre-provided list of peers, skipping the search step
+    pub fn store_peers<'a, P: Iterator<Item=&'a Entry<Id, Info>>>(&mut self, target: Id, data: Vec<Data>, peers: P) -> Result<(StoreFuture<Id, Info>, ReqId), Error> {
+        // Create an operation for the provided target
+        let req_id = ReqId::generate();
+        let (done_tx, done_rx) = mpsc::channel(1);
+
+        let kind = OperationKind::Store(data, done_tx);
+        let mut op = Operation::new(req_id.clone(), target.clone(), kind);
+
+        // Patch state and nodes for store
+        op.state = OperationState::Request;
+        op.nodes = peers.map(|e| (e.id().clone(), (e.clone(), RequestState::Complete))).collect();
+
+        // Add to operation registry
+        self.operations.insert(req_id.clone(), op);
+
         Ok((StoreFuture { rx: done_rx }, req_id))
     }
 }

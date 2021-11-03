@@ -126,6 +126,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use log::*;
     use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
 

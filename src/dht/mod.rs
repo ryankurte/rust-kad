@@ -277,9 +277,11 @@ where
 
     /// Update internal state
     /// Usually this should be called via future `Dht::poll()`
-    pub fn update(&mut self) -> Result<(), Error> {
+    pub fn update(&mut self) -> Result<bool, Error> {
         let mut req_sink = self.conn_mgr.clone();
         let mut done = vec![];
+
+        let mut changed = true;
 
         //  For each currently tracked operation
         for (req_id, op) in self.operations.iter_mut() {
@@ -292,7 +294,8 @@ where
             };
 
             // Match on states
-            match op.state.clone() {
+            let last_state = op.state.clone();
+            match last_state {
                 // Initialise new operation
                 OperationState::Init => {
                     debug!("Operation {} ({}) start", req_id, &op.kind);
@@ -640,13 +643,17 @@ where
                     done.push(req_id.clone());
                 }
             };
+
+            if op.state != last_state {
+                changed = true;
+            }
         }
 
         for req_id in done {
             self.operations.remove(&req_id);
         }
 
-        Ok(())
+        Ok(changed)
     }
 
     /// Refresh buckets and node table entries
@@ -736,14 +743,17 @@ where
     Info: PartialEq + Clone + Sized + Debug + Send + 'static,
     Data: PartialEq + Clone + Sized + Debug + Send + 'static,
     ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-    Table: NodeTable<Id, Info> + Clone + Send + 'static,
-    Store: Datastore<Id, Data> + Clone + Send + 'static,
+    Table: NodeTable<Id, Info> + Send + 'static,
+    Store: Datastore<Id, Data> + Send + 'static,
 {
     type Output = Result<(), Error>;
 
     // Poll calls internal update function
-    fn poll(mut self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        let _ = self.update();
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        let updated = self.update()?;
+        if updated {
+            ctx.waker().clone().wake();
+        }
 
         Poll::Pending
     }

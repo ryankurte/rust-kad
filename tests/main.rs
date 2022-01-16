@@ -7,17 +7,15 @@ use std::collections::HashMap;
  * Copyright 2018 Ryan Kurte
  */
 use std::fmt::Debug;
-use std::marker::PhantomData;
+
 use std::sync::{Arc, Mutex};
 
 use kad::common::*;
 use kad::dht::Dht;
-use kad::store::HashMapStore;
-use kad::table::KNodeTable;
+
 use kad::Config;
 
 use futures::channel::mpsc;
-use futures::executor::block_on;
 
 struct MockPeer<Id: Debug, Info: Debug, Data: Debug> {
     dht: Dht<Id, Info, Data, u64>,
@@ -43,7 +41,7 @@ where
         for n in nodes {
             let config = config.clone();
 
-            let (sink_tx, sink_rx) = mpsc::channel(10);
+            let (sink_tx, _sink_rx) = mpsc::channel(10);
 
             let dht = Dht::standard(n.id().clone(), config, sink_tx);
 
@@ -56,9 +54,12 @@ where
     }
 }
 
-#[cfg(nope)]
-#[test]
-fn integration() {
+type MockSync = u64;
+
+// TODO: reimplement this
+#[ignore]
+#[async_std::test]
+async fn integration() {
     // TODO: split into separate tests, add benchmarks
 
     // Setup config
@@ -70,7 +71,7 @@ fn integration() {
     for i in 0..16 {
         nodes.push(Entry::<[u8; 1], MockSync>::new(
             [i * 16],
-            MockSync::new(i as u64),
+            i as u64,
         ));
     }
     let n0 = &nodes[0];
@@ -82,7 +83,8 @@ fn integration() {
     for n in nodes.iter().skip(1) {
         let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-        block_on(peer.connect(n0.clone(), ())).expect("Error connecting to network");
+        let (conn, _id) = peer.dht.connect(&[n0.clone()]).unwrap();
+        conn.await.expect("Error connecting to network");
 
         mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
     }
@@ -96,8 +98,8 @@ fn integration() {
 
             let mut peer = { mgr.peers.lock().unwrap().remove(n1.id()).unwrap() };
 
-            let _node =
-                block_on(peer.lookup(n2.id().clone(), ())).expect("Error finding node in network");
+            let (locate, _req_id) = peer.dht.locate(n2.id().clone()).unwrap();
+            let _node = locate.await.expect("Error finding node in network");
 
             mgr.peers.lock().unwrap().insert(n1.id().clone(), peer);
         }
@@ -109,7 +111,8 @@ fn integration() {
     {
         let mut peer = { mgr.peers.lock().unwrap().remove(n0.id()).unwrap() };
 
-        let _res = block_on(peer.store(addr, val, ())).expect("Error storing value");
+        let (store, _req_id) = peer.dht.store(addr, val).unwrap();
+        let _res = store.await.expect("Error storing value");
 
         mgr.peers.lock().unwrap().insert(n0.id().clone(), peer);
     }
@@ -118,7 +121,8 @@ fn integration() {
     for n in &nodes {
         let mut peer = { mgr.peers.lock().unwrap().remove(n.id()).unwrap() };
 
-        let val = block_on(peer.find(addr, ())).expect("Error finding values");
+        let (find, _req_id) = peer.dht.search(addr).unwrap();
+        let val = find.await.expect("Error finding values");
         assert!(val.len() > 0);
 
         mgr.peers.lock().unwrap().insert(n.id().clone(), peer);

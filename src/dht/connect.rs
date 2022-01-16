@@ -151,7 +151,7 @@ mod tests {
 
         // Instantiated DHT
         let (tx, mut rx) = mpsc::channel(10);
-        let mut dht: Dht<_, u32, u32, u16> = Dht::standard(n1.id().clone(), config, tx);
+        let mut dht: Dht<_, u32, u32, u16> = Dht::standard(*n1.id(), config, tx);
 
         info!("Start connect");
         // Issue lookup
@@ -166,24 +166,24 @@ mod tests {
         // Check requests (query node 2, 3), find node 4
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n3.clone(), Request::FindNode(n1.id().clone())))
+            Some((req_id, n3.clone(), Request::FindNode(*n1.id())))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n2.clone(), Request::FindNode(n1.id().clone())))
+            Some((req_id, n2.clone(), Request::FindNode(*n1.id())))
         );
 
         // Handle responses (response from 2, 3), node 4, 5 known
         dht.handle_resp(
             req_id,
             &n2,
-            &Response::NodesFound(n1.id().clone(), vec![n4.clone()]),
+            &Response::NodesFound(*n1.id(), vec![n4.clone()]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
             &n3,
-            &Response::NodesFound(n1.id().clone(), vec![n5.clone()]),
+            &Response::NodesFound(*n1.id(), vec![n5.clone()]),
         )
         .unwrap();
 
@@ -196,24 +196,24 @@ mod tests {
         // Check requests (query node 4, 5)
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindNode(n1.id().clone())))
+            Some((req_id, n4.clone(), Request::FindNode(*n1.id())))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindNode(n1.id().clone())))
+            Some((req_id, n5.clone(), Request::FindNode(*n1.id())))
         );
 
         // Handle responses for node 4, 5
         dht.handle_resp(
             req_id,
             &n4,
-            &Response::NodesFound(n1.id().clone(), vec![n4.clone()]),
+            &Response::NodesFound(*n1.id(), vec![n4.clone()]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
             &n5,
-            &Response::NodesFound(n1.id().clone(), vec![n5.clone()]),
+            &Response::NodesFound(*n1.id(), vec![n5.clone()]),
         )
         .unwrap();
 

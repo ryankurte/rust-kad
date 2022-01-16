@@ -68,13 +68,12 @@ where
     pub fn find(&self, id: &Id) -> Option<Entry<Id, Info>> {
         self.nodes
             .iter()
-            .find(|n| *n.id() == *id)
-            .map(|n| n.clone())
+            .find(|n| *n.id() == *id).cloned()
     }
 
     /// Clone the list of nodes currently in the bucket
     pub fn nodes(&self) -> Vec<Entry<Id, Info>> {
-        self.nodes.iter().map(|n| n.clone()).collect()
+        self.nodes.iter().cloned().collect()
     }
 
     /// Fetch last updated time
@@ -89,10 +88,10 @@ where
 
     /// Fetch the oldest node in the bucket
     pub fn oldest(&self) -> Option<Entry<Id, Info>> {
-        if self.nodes.len() == 0 {
+        if self.nodes.is_empty() {
             return None;
         }
-        self.nodes.get(self.nodes.len() - 1).map(|n| n.clone())
+        self.nodes.get(self.nodes.len() - 1).cloned()
     }
 
     /// Move a node to the start of the bucket

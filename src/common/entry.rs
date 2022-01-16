@@ -18,8 +18,6 @@ pub struct Entry<Id, Info> {
     id: Id,
     info: Info,
     seen: Option<Instant>,
-    state: EntryState,
-    frozen: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -49,8 +47,6 @@ where
             id,
             info,
             seen: None,
-            frozen: false,
-            state: EntryState::Ok,
         }
     }
 

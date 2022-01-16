@@ -118,7 +118,7 @@ where
                 // Write value to local storage
                 let values = self.datastore.store(id, value);
                 // Reply to confirm write was completed
-                if values.len() != 0 {
+                if !values.is_empty() {
                     debug!("Store request, stored {} values for id: {:?}", values.len(), id);
                     Response::ValuesFound(id.clone(), values)
                 } else {
@@ -252,7 +252,7 @@ where
         // Replace operation
         self.operations.insert(req_id, op);
 
-        return Ok(());
+        Ok(())
     }
 
     // Create a new operation
@@ -265,11 +265,11 @@ where
         debug!("Registering operation id: {}", req_id);
 
         // Create operation object
-        let op = Operation::new(req_id.clone(), target.clone(), kind);
+        let op = Operation::new(req_id.clone(), target, kind);
 
         // Register operation in tracking
         // Actual execution happens in `Dht::update` methods.
-        self.operations.insert(req_id.clone(), op);
+        self.operations.insert(req_id, op);
 
         // Return OK
         Ok(())
@@ -349,7 +349,7 @@ where
                         .map(|d| d > search_timeout)
                         .unwrap_or(false);
 
-                    if nodes.len() > 0 {
+                    if !nodes.is_empty() {
                         debug!(
                             "Operation {} connect response received ({} peers)",
                             req_id, pending
@@ -543,7 +543,7 @@ where
                         .map(|d| d > search_timeout)
                         .unwrap_or(false);
 
-                    if active.len() == 0 || expired {
+                    if active.is_empty() || expired {
                         debug!("Operation {} ({}) entering done state", req_id, &op.kind);
                         op.state = OperationState::Done;
                     }
@@ -563,7 +563,7 @@ where
 
                             let own_id = self.id.clone();
                             peers.sort_by_key(|n| Id::xor(&own_id, n.id()));
-                            let res = if peers.len() > 0 {
+                            let res = if !peers.is_empty() {
                                 tx.clone().try_send(Ok(peers))
                             } else {
                                 tx.clone().try_send(Err(Error::NotFound))
@@ -599,7 +599,7 @@ where
 
                             debug!("Operation {} values found: {:?}", req_id, flat_data);
 
-                            let res = if flat_data.len() > 0 {
+                            let res = if !flat_data.is_empty() {
                                 tx.clone().try_send(Ok(flat_data))
                             } else {
                                 tx.clone().try_send(Err(Error::NotFound))
@@ -613,7 +613,7 @@ where
                             // `Store` responds with a `FoundData` object containing the stored data
                             // this allows us to check `op.data` for the nodes at which data has been stored
 
-                            let res = if op.data.len() > 0 {
+                            let res = if !op.data.is_empty() {
                                 let flat_ids: Vec<_> =
                                     op.data.iter().map(|(k, _v)| k.clone()).collect();
                                 let mut flat_nodes: Vec<_> = flat_ids
@@ -845,9 +845,9 @@ mod tests {
 
         // FindNodes
         assert_eq!(
-            dht.handle_req(1, &friend, &Request::FindNode(other.id().clone()))
+            dht.handle_req(1, &friend, &Request::FindNode(*other.id()))
                 .unwrap(),
-            Response::NodesFound(other.id().clone(), vec![friend.clone()]),
+            Response::NodesFound(*other.id(), vec![friend.clone()]),
         );
     }
 

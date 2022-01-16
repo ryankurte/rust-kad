@@ -12,8 +12,8 @@ impl MockSync {
 
 impl PartialEq for MockSync {
     fn eq(&self, o: &Self) -> bool {
-        let v1 = { self.0.lock().unwrap().clone() };
-        let v2 = { o.0.lock().unwrap().clone() };
+        let v1 = { *self.0.lock().unwrap() };
+        let v2 = { *o.0.lock().unwrap() };
         v1 == v2
     }
 }

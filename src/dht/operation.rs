@@ -59,7 +59,7 @@ pub enum OperationState {
 
 #[derive(Debug)]
 pub(crate) struct Operation<Id, Info, Data, ReqId> {
-    pub req_id: ReqId,
+    pub _req_id: ReqId,
     pub target: Id,
     pub kind: OperationKind<Id, Info, Data>,
 
@@ -72,7 +72,7 @@ pub(crate) struct Operation<Id, Info, Data, ReqId> {
 impl<Id, Info, Data, ReqId> Operation<Id, Info, Data, ReqId> {
     pub(crate) fn new(req_id: ReqId, target: Id, kind: OperationKind<Id, Info, Data>) -> Self {
         Self {
-            req_id,
+            _req_id: req_id,
             target,
             kind,
             state: OperationState::Init,

@@ -12,12 +12,6 @@ pub struct HashMapStore<Id: Debug, Data: Debug> {
     reducer: Option<Box<Reducer<Data>>>,
 }
 
-#[derive(Debug)]
-pub struct DataEntry<Data, Meta> {
-    value: Data,
-    meta: Meta,
-}
-
 impl<Id, Data> HashMapStore<Id, Data>
 where
     Id: DatabaseId + Debug,
@@ -64,11 +58,11 @@ where
     Data: PartialEq + Clone + Debug,
 {
     fn find(&self, id: &Id) -> Option<Vec<Data>> {
-        let d = match self.data.get(id).map(|d| d.clone()) {
+        let d = match self.data.get(id).cloned() {
             Some(d) => d,
             None => return None,
         };
-        if d.len() == 0 {
+        if d.is_empty() {
             return None;
         }
         Some(d)
@@ -90,7 +84,7 @@ where
 
                 // Reduce if provided
                 if let Some(reducer) = &self.reducer {
-                    let filtered = (reducer)(&existing);
+                    let filtered = (reducer)(existing);
                     *existing = filtered;
                 }
 

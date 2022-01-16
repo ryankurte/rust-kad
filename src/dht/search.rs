@@ -82,13 +82,13 @@ mod tests {
 
         // Inject initial nodes into the table
         let store = HashMapStore::new();
-        let mut table = KNodeTable::new(n1.id().clone(), 2, 4);
+        let mut table = KNodeTable::new(*n1.id(), 2, 4);
         table.create_or_update(&n2);
         table.create_or_update(&n3);
 
         // Instantiated DHT
         let (tx, mut rx) = mpsc::channel(10);
-        let mut dht: Dht<_, u32, u32, u16> = Dht::custom(n1.id().clone(), config, tx, table, store);
+        let mut dht: Dht<_, u32, u32, u16> = Dht::custom(*n1.id(), config, tx, table, store);
 
         info!("Start locate");
         // Issue lookup
@@ -101,24 +101,24 @@ mod tests {
         // Check requests (query node 2, 3), find node 4
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n3.clone(), Request::FindNode(value_id.clone())))
+            Some((req_id, n3.clone(), Request::FindNode(value_id)))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n2.clone(), Request::FindNode(value_id.clone())))
+            Some((req_id, n2.clone(), Request::FindNode(value_id)))
         );
 
         // Handle responses (response from 2, 3), node 4, 5 known
         dht.handle_resp(
             req_id,
             &n2,
-            &Response::NodesFound(value_id.clone(), vec![n4.clone()]),
+            &Response::NodesFound(value_id, vec![n4.clone()]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
             &n3,
-            &Response::NodesFound(value_id.clone(), vec![n5.clone()]),
+            &Response::NodesFound(value_id, vec![n5.clone()]),
         )
         .unwrap();
 
@@ -131,24 +131,24 @@ mod tests {
         // Check requests (query node 4, 5)
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindNode(value_id.clone())))
+            Some((req_id, n4.clone(), Request::FindNode(value_id)))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindNode(value_id.clone())))
+            Some((req_id, n5.clone(), Request::FindNode(value_id)))
         );
 
         // Handle responses for node 4, 5
         dht.handle_resp(
             req_id,
             &n4,
-            &Response::NodesFound(value_id.clone(), vec![]),
+            &Response::NodesFound(value_id, vec![]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
             &n5,
-            &Response::NodesFound(value_id.clone(), vec![]),
+            &Response::NodesFound(value_id, vec![]),
         )
         .unwrap();
 
@@ -159,24 +159,24 @@ mod tests {
         // Check requests (query node 4, 5)
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n4.clone(), Request::FindValue(value_id)))
         );
         assert_eq!(
             rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindValue(value_id.clone())))
+            Some((req_id, n5.clone(), Request::FindValue(value_id)))
         );
 
         // Handle responses for node 4, 5
         dht.handle_resp(
             req_id,
             &n4,
-            &Response::ValuesFound(value_id.clone(), vec![value_data.clone()]),
+            &Response::ValuesFound(value_id, vec![value_data]),
         )
         .unwrap();
         dht.handle_resp(
             req_id,
             &n5,
-            &Response::ValuesFound(value_id.clone(), vec![value_data.clone()]),
+            &Response::ValuesFound(value_id, vec![value_data]),
         )
         .unwrap();
 

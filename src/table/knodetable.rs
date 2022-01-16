@@ -58,8 +58,8 @@ where
         let diff = KNodeTable::<Id, Info>::distance(&self.id, id);
         assert!(!diff.is_zero(), "Distance cannot be zero");
 
-        let index = diff.bits() - 1;
-        index
+        
+        diff.bits() - 1
     }
 
     #[allow(dead_code)]
@@ -163,7 +163,7 @@ mod test {
     fn test_k_node_table() {
         let n = Entry::new([0b0100], 1);
 
-        let mut t = KNodeTable::<[u8; 1], u64>::new(n.id().clone(), 10, 4);
+        let mut t = KNodeTable::<[u8; 1], u64>::new(*n.id(), 10, 4);
 
         let nodes = vec![
             Entry::new([0b0000], 1),
@@ -175,7 +175,7 @@ mod test {
         // Add some nodes
         for n in &nodes {
             assert_eq!(true, t.contains(n.id()).is_none());
-            assert_eq!(true, t.create_or_update(&n));
+            assert_eq!(true, t.create_or_update(n));
             assert_eq!(*n, t.contains(n.id()).unwrap());
         }
 

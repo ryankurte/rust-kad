@@ -281,7 +281,7 @@ where
         let mut req_sink = self.conn_mgr.clone();
         let mut done = vec![];
 
-        let mut changed = true;
+        let mut changed = false;
 
         //  For each currently tracked operation
         for (req_id, op) in self.operations.iter_mut() {

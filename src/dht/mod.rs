@@ -628,8 +628,8 @@ where
 
                                 tx.clone().try_send(Ok(flat_nodes))
                             } else {
-                                debug!("Operation {} store failed", req_id);
-                                tx.clone().try_send(Err(Error::NotFound))
+                                debug!("Operation {} store failed (no peers)", req_id);
+                                tx.clone().try_send(Err(Error::NoPeers))
                             };
 
                             if let Err(e) = res {

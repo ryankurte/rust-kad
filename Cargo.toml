@@ -15,7 +15,7 @@ futures-timer = "0.1.1"
 humantime = "1.2.0"
 rand = "0.5.5"
 structopt = "0.3.7"
-strum = "0.21.0"
+strum = "0.23.0"
 strum_macros = "0.21.1"
 tracing = "0.1.10"
 

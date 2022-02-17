@@ -50,6 +50,9 @@ where
         let req_id = ReqId::generate();
         let (done_tx, done_rx) = mpsc::channel(1);
 
+        // Add the data to our own storage
+        self.datastore_mut().store(&target, &data);
+
         // Register and start operation
         self.exec(req_id.clone(), target, OperationKind::Store(data, done_tx))?;
 

@@ -81,12 +81,12 @@ where
     }
 }
 
-impl<Id, Info> Into<(Id, Info)> for Entry<Id, Info>
+impl<Id, Info> From<Entry<Id, Info>> for (Id, Info)
 where
     Id: DatabaseId + Clone + Debug + 'static,
     Info: Clone + Debug + 'static,
 {
-    fn into(self) -> (Id, Info) {
-        (self.id, self.info)
+    fn from(val: Entry<Id, Info>) -> Self {
+        (val.id, val.info)
     }
 }

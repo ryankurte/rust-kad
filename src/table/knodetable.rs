@@ -58,7 +58,6 @@ where
         let diff = KNodeTable::<Id, Info>::distance(&self.id, id);
         assert!(!diff.is_zero(), "Distance cannot be zero");
 
-        
         diff.bits() - 1
     }
 
@@ -119,7 +118,7 @@ where
     }
 
     /// Fetch the oldest node in the specified bucket
-    fn oldest<'a>(&'a self, index: usize) -> Option<Entry<Id, Info>> {
+    fn oldest(&self, index: usize) -> Option<Entry<Id, Info>> {
         self.buckets[index].oldest()
     }
 
@@ -174,8 +173,8 @@ mod test {
 
         // Add some nodes
         for n in &nodes {
-            assert_eq!(true, t.contains(n.id()).is_none());
-            assert_eq!(true, t.create_or_update(n));
+            assert!(t.contains(n.id()).is_none());
+            assert!(t.create_or_update(n));
             assert_eq!(*n, t.contains(n.id()).unwrap());
         }
 

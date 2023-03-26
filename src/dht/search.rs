@@ -139,18 +139,10 @@ mod tests {
         );
 
         // Handle responses for node 4, 5
-        dht.handle_resp(
-            req_id,
-            &n4,
-            &Response::NodesFound(value_id, vec![]),
-        )
-        .unwrap();
-        dht.handle_resp(
-            req_id,
-            &n5,
-            &Response::NodesFound(value_id, vec![]),
-        )
-        .unwrap();
+        dht.handle_resp(req_id, &n4, &Response::NodesFound(value_id, vec![]))
+            .unwrap();
+        dht.handle_resp(req_id, &n5, &Response::NodesFound(value_id, vec![]))
+            .unwrap();
 
         // Update search state (re-start search)
         dht.update().unwrap();
@@ -182,8 +174,6 @@ mod tests {
 
         // Launch next search
         dht.update().unwrap();
-
-
 
         // Detect completion
         dht.update().unwrap();

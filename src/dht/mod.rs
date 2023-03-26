@@ -17,7 +17,7 @@ use std::task::{Context, Poll};
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
 
-use log::{debug, trace, warn, error};
+use log::{debug, error, trace, warn};
 
 use crate::Config;
 
@@ -102,30 +102,41 @@ where
             Request::FindNode(id) => {
                 let nodes = self.table.nearest(id, 0..self.config.k);
                 Response::NodesFound(id.clone(), nodes)
-            },
+            }
             Request::FindValue(id) => {
                 // Lookup the value
                 if let Some(values) = self.datastore.find(id) {
-                    debug!("FindValue request, {} values for id: {:?}", values.len(), id);
+                    debug!(
+                        "FindValue request, {} values for id: {:?}",
+                        values.len(),
+                        id
+                    );
                     Response::ValuesFound(id.clone(), values)
                 } else {
-                    debug!("FindValue request, no values found, returning closer nodes for id: {:?}", id);
+                    debug!(
+                        "FindValue request, no values found, returning closer nodes for id: {:?}",
+                        id
+                    );
                     let nodes = self.table.nearest(id, 0..self.config.k);
                     Response::NodesFound(id.clone(), nodes)
                 }
-            },
+            }
             Request::Store(id, value) => {
                 // Write value to local storage
                 let values = self.datastore.store(id, value);
                 // Reply to confirm write was completed
                 if !values.is_empty() {
-                    debug!("Store request, stored {} values for id: {:?}", values.len(), id);
+                    debug!(
+                        "Store request, stored {} values for id: {:?}",
+                        values.len(),
+                        id
+                    );
                     Response::ValuesFound(id.clone(), values)
                 } else {
                     debug!("Store request, ignored values for id: {:?}", id);
                     Response::NoResult
                 }
-            },
+            }
         };
 
         // Update record for sender
@@ -152,14 +163,20 @@ where
 
         debug!(
             "Operation {} response from {:?}: {}",
-            req_id, from.id(), resp
+            req_id,
+            from.id(),
+            resp
         );
         trace!("Response: {:?}", resp);
 
         // Check request is expected / from a valid peer and update state
         match op.nodes.get_mut(from.id()) {
             Some((_e, s)) if *s != RequestState::Active => {
-                warn!("Operation {} unexpected response from: {:?}", req_id, from.id());
+                warn!(
+                    "Operation {} unexpected response from: {:?}",
+                    req_id,
+                    from.id()
+                );
                 *s = RequestState::InvalidResponse;
                 return Ok(());
             }
@@ -173,13 +190,18 @@ where
         self.table.create_or_update(from);
 
         // Add responding node to nodes
-        op.nodes.entry(from.id().clone())
+        op.nodes
+            .entry(from.id().clone())
             .or_insert((from.clone(), RequestState::Complete));
 
         // Handle incoming response message
         let v = match &resp {
             Response::NodesFound(id, entries) if id == &op.target => {
-                debug!("Operation {}, adding {} nodes to map", req_id, entries.len());
+                debug!(
+                    "Operation {}, adding {} nodes to map",
+                    req_id,
+                    entries.len()
+                );
                 trace!("Entries: {:?}", entries);
 
                 for e in entries {
@@ -211,12 +233,19 @@ where
             Response::NodesFound(id, _entries) => {
                 debug!(
                     "Operation {}, invalid nodes response: {:?} from: {:?} (id: {:?})",
-                    req_id, resp, from.id(), id
+                    req_id,
+                    resp,
+                    from.id(),
+                    id
                 );
                 RequestState::InvalidResponse
             }
             Response::ValuesFound(id, values) if id == &op.target => {
-                debug!("Operation {}, adding {} values to map", req_id, values.len());
+                debug!(
+                    "Operation {}, adding {} values to map",
+                    req_id,
+                    values.len()
+                );
                 trace!("Values: {:?}", values);
 
                 // Add data to data list
@@ -227,7 +256,9 @@ where
             Response::ValuesFound(id, _values) => {
                 debug!(
                     "Operation {}, invalid values response from: {:?} (id: {:?})",
-                    req_id, from.id(), id
+                    req_id,
+                    from.id(),
+                    id
                 );
                 trace!("Invalid response: {:?}", resp);
                 RequestState::InvalidResponse
@@ -315,7 +346,10 @@ where
 
                     debug!(
                         "Initiating {} operation ({}), sending {} request to {} peers",
-                        &op.kind, req_id, req, nodes.len()
+                        &op.kind,
+                        req_id,
+                        req,
+                        nodes.len()
                     );
 
                     // Issue appropriate request
@@ -374,13 +408,13 @@ where
                     known.sort_by_key(|(k, _)| Id::xor(&op.target, k));
 
                     // Short-circuit to next search if active nodes have completed operations
-                    let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
+                    let active: Vec<_> = known[0..usize::min(known.len(), self.config.k)]
                         .iter()
                         .filter(|(_key, (_e, s))| *s == RequestState::Active)
                         .collect();
 
                     // Exit when no pending nodes remain within K bucket
-                    let pending: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
+                    let pending: Vec<_> = known[0..usize::min(known.len(), self.config.k)]
                         .iter()
                         .filter(|(_key, (_e, s))| *s == RequestState::Pending)
                         .collect();
@@ -482,7 +516,7 @@ where
                     // TODO: should a search be a find all then query, or a find values with short-circuits?
                     let req = match &op.kind {
                         OperationKind::Store(v, _) => Request::Store(op.target.clone(), v.clone()),
-                        OperationKind::FindValues(_) => Request::FindValue(op.target.clone()), 
+                        OperationKind::FindValues(_) => Request::FindValue(op.target.clone()),
                         _ => {
                             debug!("Operation {} entering done state", req_id);
                             op.state = OperationState::Done;
@@ -531,7 +565,7 @@ where
                     known.sort_by_key(|(k, _)| Id::xor(&op.target, k));
 
                     // Exit when no pending nodes remain
-                    let active: Vec<_> = (&known[0..usize::min(known.len(), self.config.k)])
+                    let active: Vec<_> = known[0..usize::min(known.len(), self.config.k)]
                         .iter()
                         .filter(|(_key, (_e, s))| *s == RequestState::Active)
                         .collect();
@@ -585,7 +619,6 @@ where
                             }
                         }
                         OperationKind::FindValues(tx) => {
-                            
                             // Flatten out response data
                             let mut flat_data: Vec<Data> =
                                 op.data.iter().flat_map(|(_k, v)| v.clone()).collect();
@@ -615,7 +648,7 @@ where
 
                             let res = if !op.data.is_empty() {
                                 let flat_ids: Vec<_> =
-                                    op.data.iter().map(|(k, _v)| k.clone()).collect();
+                                    op.data.keys().cloned().collect();
                                 let mut flat_nodes: Vec<_> = flat_ids
                                     .iter()
                                     .filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone()))
@@ -637,7 +670,6 @@ where
                             }
                         }
                     };
-
 
                     // TODO: remove from tracking
                     done.push(req_id.clone());

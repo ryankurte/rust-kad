@@ -66,9 +66,7 @@ where
 
     /// Find a node in the bucket
     pub fn find(&self, id: &Id) -> Option<Entry<Id, Info>> {
-        self.nodes
-            .iter()
-            .find(|n| *n.id() == *id).cloned()
+        self.nodes.iter().find(|n| *n.id() == *id).cloned()
     }
 
     /// Clone the list of nodes currently in the bucket
@@ -91,7 +89,7 @@ where
         if self.nodes.is_empty() {
             return None;
         }
-        self.nodes.get(self.nodes.len() - 1).cloned()
+        self.nodes.back().cloned()
     }
 
     /// Move a node to the start of the bucket
@@ -171,7 +169,7 @@ mod test {
     fn test_k_bucket_update() {
         let mut b = KBucket::<[u8; 1], u64>::new(4);
 
-        assert_eq!(true, b.find(&[0b0000]).is_none());
+        assert!(b.find(&[0b0000]).is_none());
 
         // Generate fake nodes
         let n1 = Entry::new([0b0000], 1);
@@ -181,20 +179,20 @@ mod test {
         let n5 = Entry::new([0b0100], 5);
 
         // Fill KBucket
-        assert_eq!(true, b.create_or_update(&n1));
+        assert!(b.create_or_update(&n1));
         assert_eq!(n1, b.find(n1.id()).unwrap());
 
-        assert_eq!(true, b.create_or_update(&n2));
+        assert!(b.create_or_update(&n2));
         assert_eq!(n2, b.find(n2.id()).unwrap());
 
-        assert_eq!(true, b.create_or_update(&n3));
+        assert!(b.create_or_update(&n3));
         assert_eq!(n3, b.find(n3.id()).unwrap());
 
-        assert_eq!(true, b.create_or_update(&n4));
+        assert!(b.create_or_update(&n4));
         assert_eq!(n4, b.find(n4.id()).unwrap());
 
         // Attempt to add to full KBucket
-        assert_eq!(false, b.create_or_update(&n5));
+        assert!(!b.create_or_update(&n5));
 
         // Check ordering
         assert_eq!(
@@ -203,7 +201,7 @@ mod test {
         );
 
         // Update node
-        assert_eq!(true, b.create_or_update(&n1));
+        assert!(b.create_or_update(&n1));
 
         // Check new ordering
         assert_eq!(
@@ -214,7 +212,7 @@ mod test {
         // Update existing item
         let mut n4a = n4.clone();
         n4a.set_info(&5);
-        assert_eq!(true, b.create_or_update(&n4a));
+        assert!(b.create_or_update(&n4a));
         assert_eq!(n4a, b.find(n4.id()).unwrap());
 
         // Check new ordering

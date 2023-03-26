@@ -15,8 +15,7 @@ pub enum Request<Id, Value> {
     Store(Id, Vec<Value>),
 }
 
-
-impl <Id: std::fmt::Debug, Value> std::fmt::Display for Request<Id, Value> {
+impl<Id: std::fmt::Debug, Value> std::fmt::Display for Request<Id, Value> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Ping => write!(f, "Ping"),
@@ -46,11 +45,15 @@ pub enum Response<Id, Info, Value> {
     NoResult,
 }
 
-impl <Id: std::fmt::Debug, Info, Value> std::fmt::Display for Response<Id, Info, Value> {
+impl<Id: std::fmt::Debug, Info, Value> std::fmt::Display for Response<Id, Info, Value> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NodesFound(id, entries) => write!(f, "NodesFound({:?}, {} nodes)", id, entries.len()),
-            Self::ValuesFound(id, values) => write!(f, "ValuesFound({:?}, {} values)", id, values.len()),
+            Self::NodesFound(id, entries) => {
+                write!(f, "NodesFound({:?}, {} nodes)", id, entries.len())
+            }
+            Self::ValuesFound(id, values) => {
+                write!(f, "ValuesFound({:?}, {} values)", id, values.len())
+            }
             Self::NoResult => write!(f, "NoResult"),
         }
     }

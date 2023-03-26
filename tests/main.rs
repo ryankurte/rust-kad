@@ -69,10 +69,7 @@ async fn integration() {
     // Build basic nodes
     let mut nodes = Vec::new();
     for i in 0..16 {
-        nodes.push(Entry::<[u8; 1], MockSync>::new(
-            [i * 16],
-            i as u64,
-        ));
+        nodes.push(Entry::<[u8; 1], MockSync>::new([i * 16], i as u64));
     }
     let n0 = &nodes[0];
 
@@ -86,7 +83,7 @@ async fn integration() {
         let (conn, _id) = peer.dht.connect(&[n0.clone()]).unwrap();
         conn.await.expect("Error connecting to network");
 
-        mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
+        mgr.peers.lock().unwrap().insert(*n.id(), peer);
     }
 
     println!("Testing locate across all nodes");
@@ -98,10 +95,10 @@ async fn integration() {
 
             let mut peer = { mgr.peers.lock().unwrap().remove(n1.id()).unwrap() };
 
-            let (locate, _req_id) = peer.dht.locate(n2.id().clone()).unwrap();
+            let (locate, _req_id) = peer.dht.locate(*n2.id()).unwrap();
             let _node = locate.await.expect("Error finding node in network");
 
-            mgr.peers.lock().unwrap().insert(n1.id().clone(), peer);
+            mgr.peers.lock().unwrap().insert(*n1.id(), peer);
         }
     }
 
@@ -114,7 +111,7 @@ async fn integration() {
         let (store, _req_id) = peer.dht.store(addr, val).unwrap();
         let _res = store.await.expect("Error storing value");
 
-        mgr.peers.lock().unwrap().insert(n0.id().clone(), peer);
+        mgr.peers.lock().unwrap().insert(*n0.id(), peer);
     }
 
     println!("Testing find values for each node");
@@ -123,8 +120,8 @@ async fn integration() {
 
         let (find, _req_id) = peer.dht.search(addr).unwrap();
         let val = find.await.expect("Error finding values");
-        assert!(val.len() > 0);
+        assert!(!val.is_empty());
 
-        mgr.peers.lock().unwrap().insert(n.id().clone(), peer);
+        mgr.peers.lock().unwrap().insert(*n.id(), peer);
     }
 }

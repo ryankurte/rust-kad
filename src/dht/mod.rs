@@ -647,8 +647,7 @@ where
                             // this allows us to check `op.data` for the nodes at which data has been stored
 
                             let res = if !op.data.is_empty() {
-                                let flat_ids: Vec<_> =
-                                    op.data.keys().cloned().collect();
+                                let flat_ids: Vec<_> = op.data.keys().cloned().collect();
                                 let mut flat_nodes: Vec<_> = flat_ids
                                     .iter()
                                     .filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone()))

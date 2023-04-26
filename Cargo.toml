@@ -8,29 +8,28 @@ name = "kad"
 repository = "https://github.com/ryankurte/rust-kad"
 version = "0.6.1"
 
+[features]
+clap = [ "dep:clap" ]
+
+default = [ "clap" ]
+
+
 [dependencies]
 async-trait = "0.1.19"
 futures = "0.3.1"
 futures-timer = "0.1.1"
 humantime = "1.2.0"
 rand = "0.5.5"
-structopt = "0.3.7"
 strum = "0.23.0"
 strum_macros = "0.21.1"
 tracing = "0.1.10"
+clap = { version = "4.2.1", features = [ "derive" ], optional = true }
+log = { features = ["max_level_debug"], version = "0.4.6" }
+num = { features = ["rand"], version = "0.2.0" }
 
-[dependencies.log]
-features = ["max_level_debug"]
-version = "0.4.6"
-
-[dependencies.num]
-features = ["rand"]
-version = "0.2.0"
 
 [dev-dependencies]
 rr-mux = "0.10.0"
 simplelog = "0.8.0"
+async-std = { version = "1.7.0", features = ["attributes"] }
 
-[dev-dependencies.async-std]
-features = ["attributes"]
-version = "1.7.0"

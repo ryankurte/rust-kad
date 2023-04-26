@@ -9,8 +9,6 @@ use std::time::Duration;
 
 use futures::channel::mpsc::Sender;
 
-use structopt::StructOpt;
-
 pub mod common;
 use crate::common::*;
 
@@ -28,25 +26,29 @@ pub mod prelude;
 pub mod mock;
 
 /// DHT Configuration object
-#[derive(PartialEq, Clone, Debug, StructOpt)]
+#[derive(PartialEq, Clone, Debug)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct Config {
-    #[structopt(long = "dht-bucket-size", default_value = "20")]
+    #[cfg_attr(feature = "clap", clap(long = "dht-bucket-size", default_value = "20"))]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
 
-    #[structopt(long = "dht-concurrency", default_value = "4")]
+    #[cfg_attr(feature = "clap", clap(long = "dht-concurrency", default_value = "4"))]
     /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
 
-    #[structopt(long = "dht-recursion-limit", default_value = "10")]
+    #[cfg_attr(
+        feature = "clap",
+        clap(long = "dht-recursion-limit", default_value = "10")
+    )]
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
-    #[structopt(long = "dht-search-timeout", parse(try_from_str = parse_duration), default_value = "2s")]
+    #[cfg_attr(feature = "clap", clap(long = "dht-search-timeout", value_parser = parse_duration, default_value = "2s"))]
     /// Timeout for search iterations with missing responses
     pub search_timeout: Duration,
 
-    #[structopt(long = "dht-node-timeout", parse(try_from_str = parse_duration), default_value = "15m")]
+    #[cfg_attr(feature = "clap", clap(long = "dht-node-timeout", value_parser = parse_duration, default_value = "15m"))]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
 }

@@ -145,19 +145,21 @@ where
         Ok(resp)
     }
 
-    // Receive responses and update internal state
+    /// Receive responses and update internal state
+    /// 
+    /// returns true for handled responses, false for unhandled, errors in error conditions.
     pub fn handle_resp(
         &mut self,
         req_id: ReqId,
         from: &Entry<Id, Info>,
         resp: &Response<Id, Info, Data>,
-    ) -> Result<(), Error> {
+    ) -> Result<bool, Error> {
         // Locate matching operation
         let mut op = match self.operations.remove(&req_id) {
             Some(v) => v,
             None => {
                 warn!("No matching operation for request id: {}", req_id);
-                return Ok(());
+                return Ok(false);
             }
         };
 
@@ -178,7 +180,7 @@ where
                     from.id()
                 );
                 *s = RequestState::InvalidResponse;
-                return Ok(());
+                return Ok(false);
             }
             Some((_e, s)) if *s == RequestState::Active => {
                 *s = RequestState::Complete;
@@ -283,7 +285,7 @@ where
         // Replace operation
         self.operations.insert(req_id, op);
 
-        Ok(())
+        Ok(true)
     }
 
     // Create a new operation
@@ -608,10 +610,13 @@ where
                             }
                         }
                         OperationKind::FindNode(tx) => {
-                            trace!("Found nodes: {:?}", op.nodes);
+                            debug!("Found nodes: {:?}", op.nodes);
                             let res = match op.nodes.get(&op.target) {
                                 Some((n, _s)) => tx.clone().try_send(Ok(n.clone())),
-                                None => tx.clone().try_send(Err(Error::NotFound)),
+                                None => {
+                                    debug!("FindNode no matches for {:?}", &op.target);
+                                    tx.clone().try_send(Err(Error::NotFound))
+                                },
                             };
 
                             if let Err(e) = res {
@@ -647,7 +652,8 @@ where
                             // this allows us to check `op.data` for the nodes at which data has been stored
 
                             let res = if !op.data.is_empty() {
-                                let flat_ids: Vec<_> = op.data.keys().cloned().collect();
+                                let flat_ids: Vec<_> =
+                                    op.data.keys().cloned().collect();
                                 let mut flat_nodes: Vec<_> = flat_ids
                                     .iter()
                                     .filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone()))

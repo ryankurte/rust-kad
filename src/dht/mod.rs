@@ -364,7 +364,8 @@ where
 
                     // Set to search state
                     debug!("Operation {} entering searching state", req_id);
-                    op.state = OperationState::Searching(0)
+                    op.state = OperationState::Searching(0);
+                    op.last_update = Instant::now();
                 }
                 // Awaiting response to connect message
                 OperationState::Connecting => {
@@ -394,6 +395,7 @@ where
                         // Short-circuit if we didn't receive other peer information
                         if pending > 0 {
                             op.state = OperationState::Search(0);
+                            op.last_update = Instant::now();
                         } else {
                             op.state = OperationState::Done;
                         }
@@ -437,6 +439,7 @@ where
                         (0, 0, _, _) => {
                             debug!("Operation {} search complete!", req_id);
                             op.state = OperationState::Request;
+                             op.last_update = Instant::now();
                         }
                         // No active nodes, all replies received, re-start search
                         (0, _, _, _) => {
@@ -445,6 +448,7 @@ where
                                 req_id
                             );
                             op.state = OperationState::Search(n + 1);
+                             op.last_update = Instant::now();
                         }
                         // Search iteration timeout
                         (_, _, true, _) => {
@@ -458,6 +462,7 @@ where
                             }
 
                             op.state = OperationState::Search(n + 1);
+                            op.last_update = Instant::now();
                         }
                         _ => (),
                     }
@@ -468,6 +473,7 @@ where
                     if n > self.config.max_recursion {
                         debug!("Reached recursion limit, aborting search {}", req_id);
                         op.state = OperationState::Pending;
+                        op.last_update = Instant::now();
                         continue;
                     }
 
@@ -491,6 +497,7 @@ where
                     // Exit search when we have no more requests to make
                     if n == 0 {
                         op.state = OperationState::Request;
+                        op.last_update = Instant::now();
                     }
 
                     // Launch next set of requests
@@ -512,6 +519,7 @@ where
                     // Update search state
                     debug!("Operation {} entering searching state", req_id);
                     op.state = OperationState::Searching(n);
+                    op.last_update = Instant::now();
                 }
                 // Issue find / store operation following search
                 OperationState::Request => {
@@ -522,6 +530,7 @@ where
                         _ => {
                             debug!("Operation {} entering done state", req_id);
                             op.state = OperationState::Done;
+                            op.last_update = Instant::now();
                             continue;
                         }
                     };
@@ -558,6 +567,7 @@ where
                     }
 
                     op.state = OperationState::Pending;
+                    op.last_update = Instant::now();
                 }
                 // Currently awaiting request responses
                 OperationState::Pending => {
@@ -567,7 +577,7 @@ where
                     known.sort_by_key(|(k, _)| Id::xor(&op.target, k));
 
                     // Exit when no pending nodes remain
-                    let active: Vec<_> = known[0..usize::min(known.len(), self.config.k)]
+                    let active: Vec<_> = known
                         .iter()
                         .filter(|(_key, (_e, s))| *s == RequestState::Active)
                         .collect();
@@ -579,8 +589,11 @@ where
                         .map(|d| d > search_timeout)
                         .unwrap_or(false);
 
-                    if active.is_empty() || expired {
-                        debug!("Operation {} ({}) entering done state", req_id, &op.kind);
+                    if active.is_empty() {
+                        debug!("Operation {} ({}) requests complete, entering done state", req_id, &op.kind);
+                        op.state = OperationState::Done;
+                    } else if expired {
+                        debug!("Operation {} ({}) expired, entering done state", req_id, &op.kind);
                         op.state = OperationState::Done;
                     }
                 }

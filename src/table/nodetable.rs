@@ -13,6 +13,10 @@ use crate::common::{DatabaseId, Entry};
 // Generic Node Table implementation
 // This keeps track of known nodes
 pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
+    type NodeIter<'a>: Iterator<Item = &'a Entry<Id, Info>>
+    where
+        Self: 'a;
+
     /// Return available number of buckets
     fn buckets(&self) -> usize;
 
@@ -42,6 +46,9 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
 
     /// Fetch information from each bucket
     fn bucket_info(&self) -> Vec<BucketInfo>;
+
+    /// Iterate through all nodes in the table
+    fn entries<'b>(&'b self) -> Self::NodeIter<'b>;
 }
 
 // BucketInfo contains information about a given bucket

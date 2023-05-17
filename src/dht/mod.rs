@@ -146,7 +146,7 @@ where
     }
 
     /// Receive responses and update internal state
-    /// 
+    ///
     /// returns true for handled responses, false for unhandled, errors in error conditions.
     pub fn handle_resp(
         &mut self,
@@ -439,7 +439,7 @@ where
                         (0, 0, _, _) => {
                             debug!("Operation {} search complete!", req_id);
                             op.state = OperationState::Request;
-                             op.last_update = Instant::now();
+                            op.last_update = Instant::now();
                         }
                         // No active nodes, all replies received, re-start search
                         (0, _, _, _) => {
@@ -448,7 +448,7 @@ where
                                 req_id
                             );
                             op.state = OperationState::Search(n + 1);
-                             op.last_update = Instant::now();
+                            op.last_update = Instant::now();
                         }
                         // Search iteration timeout
                         (_, _, true, _) => {
@@ -590,10 +590,16 @@ where
                         .unwrap_or(false);
 
                     if active.is_empty() {
-                        debug!("Operation {} ({}) requests complete, entering done state", req_id, &op.kind);
+                        debug!(
+                            "Operation {} ({}) requests complete, entering done state",
+                            req_id, &op.kind
+                        );
                         op.state = OperationState::Done;
                     } else if expired {
-                        debug!("Operation {} ({}) expired, entering done state", req_id, &op.kind);
+                        debug!(
+                            "Operation {} ({}) expired, entering done state",
+                            req_id, &op.kind
+                        );
                         op.state = OperationState::Done;
                     }
                 }
@@ -629,7 +635,7 @@ where
                                 None => {
                                     debug!("FindNode no matches for {:?}", &op.target);
                                     tx.clone().try_send(Err(Error::NotFound))
-                                },
+                                }
                             };
 
                             if let Err(e) = res {
@@ -665,8 +671,7 @@ where
                             // this allows us to check `op.data` for the nodes at which data has been stored
 
                             let res = if !op.data.is_empty() {
-                                let flat_ids: Vec<_> =
-                                    op.data.keys().cloned().collect();
+                                let flat_ids: Vec<_> = op.data.keys().cloned().collect();
                                 let mut flat_nodes: Vec<_> = flat_ids
                                     .iter()
                                     .filter_map(|id| op.nodes.get(id).map(|(e, _s)| e.clone()))

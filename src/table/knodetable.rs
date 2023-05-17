@@ -1,4 +1,6 @@
+use std::collections::vec_deque;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 /**
  * rust-kad
  * Kademlia Node Table Implementation
@@ -72,6 +74,8 @@ where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
 {
+    type NodeIter<'a> = KNodeIter<'a, Id, Info>;
+
     fn buckets(&self) -> usize {
         self.buckets.len()
     }
@@ -151,6 +155,56 @@ where
         }
         info
     }
+
+    /// Iterate through entries in the node table
+    fn entries<'b>(&'b self) -> Self::NodeIter<'b> {
+        KNodeIter {
+            ctx: self,
+            bucket_index: 0,
+            entry_index: 0,
+        }
+    }
+}
+
+pub struct KNodeIter<'a, Id, Info> {
+    ctx: &'a KNodeTable<Id, Info>,
+    bucket_index: usize,
+    entry_index: usize,
+}
+
+impl<'a, Id, Info> Iterator for KNodeIter<'a, Id, Info>
+where
+    Id: DatabaseId + Clone + 'static,
+    Info: Clone + Debug + 'static,
+{
+    type Item = &'a Entry<Id, Info>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // If we have no buckets, return
+        if self.ctx.buckets.len() == 0 {
+            return None;
+        }
+
+        // If we're out of entries in a bucket, look for the next bucket
+        if self.ctx.buckets[self.bucket_index].node_count() <= self.entry_index {
+            // If we're out of buckets, return
+            if self.bucket_index + 1 >= self.ctx.buckets.len() {
+                return None;
+            }
+
+            // Otherwise, increment the bucket index and reset the entry index
+            self.bucket_index += 1;
+            self.entry_index = 0;
+        }
+
+        // Grab the current entry
+        let v = self.ctx.buckets[self.bucket_index].node(self.entry_index);
+
+        // Increment entry index
+        self.entry_index += 1;
+
+        Some(v)
+    }
 }
 
 #[cfg(test)]
@@ -187,5 +241,30 @@ mod test {
             vec![nodes[0].clone(), nodes[1].clone()],
             t.nearest(&[0b0010], 0..2)
         );
+    }
+
+    #[test]
+    fn test_k_node_iter() {
+        let n = Entry::new([0b0100], 1);
+
+        let mut t = KNodeTable::<[u8; 1], u64>::new(*n.id(), 2, 4);
+
+        let nodes = vec![
+            Entry::new([0b0000], 1),
+            Entry::new([0b0001], 2),
+            Entry::new([0b0110], 3),
+            Entry::new([0b1011], 4),
+        ];
+
+        // Add some nodes
+        for n in &nodes {
+            assert!(t.contains(n.id()).is_none());
+            assert!(t.create_or_update(n));
+            assert_eq!(*n, t.contains(n.id()).unwrap());
+        }
+
+        let mut n1: Vec<_> = t.entries().map(|e| e.clone()).collect();
+        n1.sort_by_key(|e| e.id().clone());
+        assert_eq!(n1, nodes);
     }
 }

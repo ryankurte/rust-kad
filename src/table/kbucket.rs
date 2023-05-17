@@ -7,7 +7,7 @@
  */
 use crate::common::{DatabaseId, Entry};
 
-use std::collections::VecDeque;
+use std::collections::{vec_deque::Iter, VecDeque};
 use std::fmt::Debug;
 use std::time::Instant;
 
@@ -158,6 +158,15 @@ where
         if replace && self.nodes.len() < self.bucket_size && self.pending.is_some() {
             self.nodes.push_back(self.pending.take().unwrap());
         }
+    }
+
+    // Iterate through entries in the bucket
+    pub fn iter(&self) -> Iter<Entry<Id, Info>> {
+        self.nodes.iter()
+    }
+
+    pub(crate) fn node(&self, index: usize) -> &Entry<Id, Info> {
+        &self.nodes[index]
     }
 }
 

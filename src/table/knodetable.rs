@@ -1,6 +1,3 @@
-use std::collections::vec_deque;
-use std::fmt::Debug;
-use std::marker::PhantomData;
 /**
  * rust-kad
  * Kademlia Node Table Implementation
@@ -8,6 +5,8 @@ use std::marker::PhantomData;
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
+
+use std::fmt::Debug;
 use std::ops::Range;
 use std::time::Instant;
 
@@ -180,25 +179,38 @@ where
     type Item = &'a Entry<Id, Info>;
 
     fn next(&mut self) -> Option<Self::Item> {
+
         // If we have no buckets, return
         if self.ctx.buckets.len() == 0 {
             return None;
         }
 
+        let mut current = &self.ctx.buckets[self.bucket_index];
+
         // If we're out of entries in a bucket, look for the next bucket
-        if self.ctx.buckets[self.bucket_index].node_count() <= self.entry_index {
-            // If we're out of buckets, return
-            if self.bucket_index + 1 >= self.ctx.buckets.len() {
+        if self.entry_index >= current.node_count() {
+            // Find the next bucket containing one or more nodes
+            let mut next_bucket = 0;
+            for i in self.bucket_index+1..self.ctx.buckets.len() {
+                if self.ctx.buckets[i].node_count() > 0 {
+                    next_bucket = i;
+                    break;
+                }
+            }
+            
+            // If we have no more nodes, return none
+            if next_bucket == 0 {
                 return None;
             }
 
-            // Otherwise, increment the bucket index and reset the entry index
-            self.bucket_index += 1;
+            // Update the bucket index
+            current = &self.ctx.buckets[next_bucket];
+            self.bucket_index = next_bucket;
             self.entry_index = 0;
         }
 
         // Grab the current entry
-        let v = self.ctx.buckets[self.bucket_index].node(self.entry_index);
+        let v = current.node(self.entry_index);
 
         // Increment entry index
         self.entry_index += 1;
@@ -257,14 +269,12 @@ mod test {
         ];
 
         // Add some nodes
-        for n in &nodes {
-            assert!(t.contains(n.id()).is_none());
+        for (i, n) in nodes.iter().enumerate() {
             assert!(t.create_or_update(n));
-            assert_eq!(*n, t.contains(n.id()).unwrap());
-        }
 
-        let mut n1: Vec<_> = t.entries().map(|e| e.clone()).collect();
-        n1.sort_by_key(|e| e.id().clone());
-        assert_eq!(n1, nodes);
+            let mut n1: Vec<_> = t.entries().map(|e| e.clone()).collect();
+            n1.sort_by_key(|e| e.id().clone());
+            assert_eq!(&n1, &nodes[..i+1]);
+        }
     }
 }

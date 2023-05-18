@@ -5,7 +5,6 @@
  * https://github.com/ryankurte/rust-kad
  * Copyright 2018 Ryan Kurte
  */
-
 use std::fmt::Debug;
 use std::ops::Range;
 use std::time::Instant;
@@ -93,6 +92,8 @@ where
 
     /// Find the nearest nodes to the provided Id in the given range
     fn nearest(&self, id: &Id, range: Range<usize>) -> Vec<Entry<Id, Info>> {
+        // TODO: this is exceedingly inefficient, replace with iter and filters.
+
         // Create a list of all nodes
         let mut all: Vec<_> = self
             .buckets
@@ -141,18 +142,18 @@ where
     }
 
     /// Fetch information from each bucket
-    fn bucket_info(&self) -> Vec<BucketInfo> {
-        let mut info = Vec::with_capacity(self.buckets.len());
-
-        for i in 0..self.buckets.len() {
-            let b = &self.buckets[i];
-            info.push(BucketInfo {
-                index: i,
-                nodes: b.node_count(),
-                updated: b.updated(),
-            });
+    fn bucket_info(&self, index: usize) -> Option<BucketInfo> {
+        if index >= self.buckets.len() {
+            return None;
         }
-        info
+
+        let b = &self.buckets[index];
+
+        Some(BucketInfo {
+            index,
+            nodes: b.node_count(),
+            updated: b.updated(),
+        })
     }
 
     /// Iterate through entries in the node table
@@ -179,7 +180,6 @@ where
     type Item = &'a Entry<Id, Info>;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         // If we have no buckets, return
         if self.ctx.buckets.len() == 0 {
             return None;
@@ -191,13 +191,13 @@ where
         if self.entry_index >= current.node_count() {
             // Find the next bucket containing one or more nodes
             let mut next_bucket = 0;
-            for i in self.bucket_index+1..self.ctx.buckets.len() {
+            for i in self.bucket_index + 1..self.ctx.buckets.len() {
                 if self.ctx.buckets[i].node_count() > 0 {
                     next_bucket = i;
                     break;
                 }
             }
-            
+
             // If we have no more nodes, return none
             if next_bucket == 0 {
                 return None;
@@ -274,7 +274,7 @@ mod test {
 
             let mut n1: Vec<_> = t.entries().map(|e| e.clone()).collect();
             n1.sort_by_key(|e| e.id().clone());
-            assert_eq!(&n1, &nodes[..i+1]);
+            assert_eq!(&n1, &nodes[..i + 1]);
         }
     }
 }

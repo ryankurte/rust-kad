@@ -1,104 +1,92 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use tracing::{debug, instrument, warn};
 
-use futures::channel::mpsc;
-use futures::prelude::*;
-
+use super::{find_nearest, SearchOptions};
 use crate::common::*;
-use crate::store::Datastore;
-use crate::table::NodeTable;
 
-use super::operation::{Operation, RequestState};
-use super::{Dht, OperationKind, OperationState};
-
-/// Future returned by locate operation
-/// Resolves into node entry or error on completion
-pub struct StoreFuture<Id, Info> {
-    rx: mpsc::Receiver<Result<Vec<Entry<Id, Info>>, Error>>,
+pub trait Store<Id, Info, Data> {
+    /// Store DHT data at the provided ID
+    async fn store(&self, id: Id, data: Vec<Data>, opts: SearchOptions)
+        -> Result<Vec<Data>, Error>;
 }
 
-impl<Id, Info> Future for StoreFuture<Id, Info> {
-    type Output = Result<Vec<Entry<Id, Info>>, Error>;
-
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.rx.poll_next_unpin(ctx) {
-            Poll::Ready(Some(r)) => Poll::Ready(r),
-            _ => Poll::Pending,
-        }
-    }
-}
-
-impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
+impl<T, Id, Info, Data> Store<Id, Info, Data> for T
 where
-    Id: DatabaseId + Clone + Sized + Send + 'static,
-    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
-    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
-    ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-    Table: NodeTable<Id, Info> + Send + 'static,
-    Store: Datastore<Id, Data> + Send + 'static,
+    T: super::Base<Id, Info, Data>,
+    Id: DatabaseId + Clone + Debug + 'static,
+    Info: Clone + Debug + 'static,
+    Data: Clone + Debug + 'static,
 {
-    /// Store data in the DHT by ID
-    pub fn store(
-        &mut self,
-        target: Id,
+    /// Store DHT data at the provided ID
+    #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
+    async fn store(
+        &self,
+        id: Id,
         data: Vec<Data>,
-    ) -> Result<(StoreFuture<Id, Info>, ReqId), Error> {
-        // Create an operation for the provided target
-        let req_id = ReqId::generate();
-        let (done_tx, done_rx) = mpsc::channel(1);
+        opts: SearchOptions,
+    ) -> Result<Vec<Data>, Error> {
+        // Write to our own store
+        self.store_data(id.clone(), data.clone()).await?;
 
-        // Add the data to our own storage
-        self.datastore_mut().store(&target, &data);
+        // Fetch nearest nodes from the table
+        let nearest = self.get_nearest(id.clone()).await?;
+        if nearest.len() == 0 {
+            return Err(Error::NoPeers);
+        }
 
-        // Register and start operation
-        self.exec(req_id.clone(), target, OperationKind::Store(data, done_tx))?;
+        // Perform DHT lookup for nearest nodes to the search ID
+        let resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
-        // Return locate future to caller
-        Ok((StoreFuture { rx: done_rx }, req_id))
-    }
+        // limit to closest subset based on concurrency
+        let count = resolved.len().min(opts.concurrency);
 
-    /// Store data with an pre-provided list of peers, skipping the search step
-    pub fn store_peers<'a, P: Iterator<Item = &'a Entry<Id, Info>>>(
-        &mut self,
-        target: Id,
-        data: Vec<Data>,
-        peers: P,
-    ) -> Result<(StoreFuture<Id, Info>, ReqId), Error> {
-        // Create an operation for the provided target
-        let req_id = ReqId::generate();
-        let (done_tx, done_rx) = mpsc::channel(1);
+        debug!("Issuing Store request to {} peers", count);
 
-        let kind = OperationKind::Store(data, done_tx);
-        let mut op = Operation::new(req_id.clone(), target, kind);
+        // Issue StoreValues requests
+        let peers = resolved[..count].iter().map(|p| p.clone()).collect();
+        let mut resps = match self
+            .net_req(peers, Request::Store(id.clone(), data.clone()))
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Store request failed: {:?}", e);
+                return Err(e.into());
+            }
+        };
 
-        // Patch state and nodes for store
-        op.state = OperationState::Request;
-        op.nodes = peers
-            .map(|e| (e.id().clone(), (e.clone(), RequestState::Complete)))
-            .collect();
+        // Handle responses
+        let mut values = vec![];
+        for p in resolved {
+            match resps.remove(p.id()) {
+                Some(resp) => {
+                    // Add located values to list
+                    if let Response::ValuesFound(_id, mut v) = resp {
+                        values.append(&mut v);
+                    }
+                }
+                None => (),
+            }
+        }
 
-        // Add to operation registry
-        self.operations.insert(req_id.clone(), op);
+        // Apply reducer to values
+        let values = self.reduce(id.clone(), values).await?;
 
-        Ok((StoreFuture { rx: done_rx }, req_id))
+        // Return reduced stored values
+        // TODO: would it be more useful to return store information (number of peers, actual peers?)
+        Ok(values)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use log::*;
     use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
 
-    use crate::store::HashMapStore;
-    use crate::table::KNodeTable;
-    use crate::{Config, Dht};
-
     use super::*;
+    use crate::dht::base::tests::{TestCore, TestOp};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_store() {
         let _ = SimpleLogger::init(LevelFilter::Debug, LogConfig::default());
 
@@ -109,123 +97,77 @@ mod tests {
         let n4 = Entry::new([0b1001], 400);
         let n5 = Entry::new([0b1010], 400);
 
+        // Setup value to be stored
         let (value_id, value_data) = ([0b1100], 500);
 
-        // Create configuration
-        let mut config = Config::default();
-        config.concurrency = 2;
-        config.k = 2;
-
-        // Inject initial nodes into the table
-        let store = HashMapStore::new();
-        let mut table = KNodeTable::new(*n1.id(), 2, 4);
-        table.create_or_update(&n2);
-        table.create_or_update(&n3);
-
-        // Instantiated DHT
-        let (tx, mut rx) = mpsc::channel(10);
-        let mut dht: Dht<_, u32, u32, u16> = Dht::custom(*n1.id(), config, tx, table, store);
-
-        info!("Start store");
-        // Issue lookup
-        let (store, req_id) = dht
-            .store(value_id, vec![value_data])
-            .expect("Error starting lookup");
-
-        info!("Search round 0");
-        // Start the first search pass
-        dht.update().unwrap();
-
-        // Check requests (query node 2, 3), find node 4
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n3.clone(), Request::FindNode(value_id)))
-        );
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n2.clone(), Request::FindNode(value_id)))
-        );
-
-        // Handle responses (response from 2, 3), node 4, 5 known
-        dht.handle_resp(
-            req_id,
-            &n3,
-            &Response::NodesFound(value_id, vec![n4.clone()]),
-        )
-        .unwrap();
-        dht.handle_resp(
-            req_id,
-            &n2,
-            &Response::NodesFound(value_id, vec![n5.clone()]),
-        )
-        .unwrap();
-
-        info!("Search round 1");
-
-        // Update search state (re-start search)
-        dht.update().unwrap();
-        dht.update().unwrap();
-
-        // Check requests (query node 4, 5)
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindNode(value_id)))
-        );
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindNode(value_id)))
+        // Setup testcore with expectations
+        let c = TestCore::new(
+            n1.id().clone(),
+            &[
+                // Before we start, write to our store
+                TestOp::Store(value_id, vec![value_data]),
+                // First lookup for known closest nodes
+                TestOp::GetNearest(value_id, vec![n2.clone(), n3.clone()]),
+                // Then issue FindNodes to these
+                TestOp::net_req(
+                    vec![n2.clone(), n3.clone()],
+                    Request::FindNode(value_id),
+                    &[
+                        (
+                            n2.id().clone(),
+                            Response::NodesFound(value_id, vec![n4.clone()]),
+                        ),
+                        (
+                            n3.id().clone(),
+                            Response::NodesFound(value_id, vec![n5.clone()]),
+                        ),
+                    ],
+                ),
+                // And another round of FindNodes to the newly discovered nodes
+                TestOp::net_req(
+                    vec![n4.clone(), n5.clone()],
+                    Request::FindNode(value_id),
+                    &[
+                        (n4.id().clone(), Response::NodesFound(value_id, vec![])),
+                        (n5.id().clone(), Response::NodesFound(value_id, vec![])),
+                    ],
+                ),
+                // And finally a FindValues to the nearest set of nodes
+                TestOp::net_req(
+                    vec![n4.clone(), n5.clone()],
+                    Request::Store(value_id, vec![value_data]),
+                    &[
+                        (
+                            n4.id().clone(),
+                            Response::ValuesFound(value_id, vec![value_data]),
+                        ),
+                        (
+                            n5.id().clone(),
+                            Response::ValuesFound(value_id, vec![value_data]),
+                        ),
+                    ],
+                ),
+                TestOp::Reduce(value_id, vec![500, 500]),
+            ],
         );
 
-        // Handle responses for node 4, 5
-        dht.handle_resp(req_id, &n4, &Response::NodesFound(value_id, vec![]))
-            .unwrap();
-        dht.handle_resp(req_id, &n5, &Response::NodesFound(value_id, vec![]))
+        // Execute search
+        let r = c
+            .store(
+                value_id,
+                vec![value_data],
+                SearchOptions {
+                    depth: 3,
+                    concurrency: 2,
+                },
+            )
+            .await
             .unwrap();
 
-        info!("Store round");
+        // Check response is as expected
+        assert_eq!(&r, &[value_data]);
 
-        // Launch store
-        dht.update().unwrap();
-        // Detect completion
-        dht.update().unwrap();
-
-        // Check requests (store node 4, 5)
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((
-                req_id,
-                n4.clone(),
-                Request::Store(value_id, vec![value_data])
-            ))
-        );
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((
-                req_id,
-                n5.clone(),
-                Request::Store(value_id, vec![value_data])
-            ))
-        );
-
-        // Handle responses for node 4, 5
-        dht.handle_resp(
-            req_id,
-            &n4,
-            &Response::ValuesFound(value_id, vec![value_data]),
-        )
-        .unwrap();
-        dht.handle_resp(
-            req_id,
-            &n5,
-            &Response::ValuesFound(value_id, vec![value_data]),
-        )
-        .unwrap();
-
-        // Finalise operation
-        dht.update().unwrap();
-        dht.update().unwrap();
-
-        info!("Expecting store completion");
-        assert_eq!(store.await, Ok(vec![n4.clone(), n5.clone()]));
+        // Finalise test
+        c.finalise();
     }
 }

@@ -45,7 +45,7 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
     fn remove_entry(&mut self, id: &Id);
 
     /// Fetch information from each bucket
-    fn bucket_info(&self) -> Vec<BucketInfo>;
+    fn bucket_info(&self, index: usize) -> Option<BucketInfo>;
 
     /// Iterate through all nodes in the table
     fn entries<'b>(&'b self) -> Self::NodeIter<'b>;

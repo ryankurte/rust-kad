@@ -1,68 +1,80 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use tracing::{debug, instrument, warn};
 
-use futures::channel::mpsc;
-use futures::prelude::*;
-
+use super::{find_nearest, Base, SearchOptions};
 use crate::common::*;
-use crate::store::Datastore;
-use crate::table::NodeTable;
 
-use super::{Dht, OperationKind};
-
-pub struct SearchFuture<Data> {
-    rx: mpsc::Receiver<Result<Vec<Data>, Error>>,
+pub trait Search<Id, Info, Data> {
+    /// Search for DHT stored values at a specific ID
+    async fn search(&self, id: Id, opts: SearchOptions) -> Result<Vec<Data>, Error>;
 }
 
-impl<Data> Future for SearchFuture<Data> {
-    type Output = Result<Vec<Data>, Error>;
-
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.rx.poll_next_unpin(ctx) {
-            Poll::Ready(Some(r)) => Poll::Ready(r),
-            _ => Poll::Pending,
-        }
-    }
-}
-
-impl<Id, Info, Data, ReqId, Table, Store> Dht<Id, Info, Data, ReqId, Table, Store>
+impl<T, Id, Info, Data> Search<Id, Info, Data> for T
 where
-    Id: DatabaseId + Clone + Sized + Send + 'static,
-    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
-    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
-    ReqId: RequestId + Clone + Sized + Display + Debug + Send + 'static,
-    Table: NodeTable<Id, Info> + Send + 'static,
-    Store: Datastore<Id, Data> + Send + 'static,
+    T: Base<Id, Info, Data>,
+    Id: DatabaseId + Clone + Debug + 'static,
+    Info: Clone + Debug + 'static,
 {
-    /// Search for values at a target ID in the DHT
-    pub fn search(&mut self, target: Id) -> Result<(SearchFuture<Data>, ReqId), Error> {
-        // Create an operation for the provided target
-        let req_id = ReqId::generate();
-        let (done_tx, done_rx) = mpsc::channel(1);
+    /// Search for DHT stored values at a specific ID
+    #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
+    async fn search(&self, id: Id, opts: SearchOptions) -> Result<Vec<Data>, Error> {
+        // Fetch nearest nodes from the table
+        let nearest = self.get_nearest(id.clone()).await?;
+        if nearest.len() == 0 {
+            return Err(Error::NoPeers);
+        }
 
-        // Register and start operation
-        self.exec(req_id.clone(), target, OperationKind::FindValues(done_tx))?;
+        // Perform DHT lookup for nearest nodes to the search ID
+        let resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
-        // Return locate future to caller
-        Ok((SearchFuture { rx: done_rx }, req_id))
+        // Search for values using these nearest nodes
+
+        // limit to closest subset based on concurrency
+        let count = resolved.len().min(opts.concurrency);
+
+        debug!("Issuing FindValues request to {} peers", count);
+
+        // Issue FindValues request
+        let peers = resolved[..count].iter().map(|p| p.clone()).collect();
+        let mut resps = match self.net_req(peers, Request::FindValue(id.clone())).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("FindValue request failed: {:?}", e);
+                return Err(e.into());
+            }
+        };
+
+        // Handle responses
+        let mut values = vec![];
+        for p in resolved {
+            match resps.remove(p.id()) {
+                Some(resp) => {
+                    // Add located values to list
+                    if let Response::ValuesFound(_id, mut v) = resp {
+                        values.append(&mut v);
+                    }
+                }
+                None => (),
+            }
+        }
+
+        // Apply reducer to values
+        let values = self.reduce(id.clone(), values).await?;
+
+        // Return reduced values
+        Ok(values)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use log::*;
     use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
 
-    use crate::store::HashMapStore;
-    use crate::table::KNodeTable;
-    use crate::{Config, Dht};
-
     use super::*;
+    use crate::dht::base::tests::{TestCore, TestOp};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_search() {
         let _ = SimpleLogger::init(LevelFilter::Debug, LogConfig::default());
 
@@ -73,113 +85,74 @@ mod tests {
         let n4 = Entry::new([0b1001], 400);
         let n5 = Entry::new([0b1010], 400);
 
+        // Setup value to be stored
         let (value_id, value_data) = ([0b1100], 500);
 
-        // Create configuration
-        let mut config = Config::default();
-        config.concurrency = 2;
-        config.k = 2;
-
-        // Inject initial nodes into the table
-        let store = HashMapStore::new();
-        let mut table = KNodeTable::new(*n1.id(), 2, 4);
-        table.create_or_update(&n2);
-        table.create_or_update(&n3);
-
-        // Instantiated DHT
-        let (tx, mut rx) = mpsc::channel(10);
-        let mut dht: Dht<_, u32, u32, u16> = Dht::custom(*n1.id(), config, tx, table, store);
-
-        info!("Start locate");
-        // Issue lookup
-        let (search, req_id) = dht.search(value_id).expect("Error starting lookup");
-
-        info!("Search round 0");
-        // Start the first search pass
-        dht.update().unwrap();
-
-        // Check requests (query node 2, 3), find node 4
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n3.clone(), Request::FindNode(value_id)))
-        );
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n2.clone(), Request::FindNode(value_id)))
-        );
-
-        // Handle responses (response from 2, 3), node 4, 5 known
-        dht.handle_resp(
-            req_id,
-            &n2,
-            &Response::NodesFound(value_id, vec![n4.clone()]),
-        )
-        .unwrap();
-        dht.handle_resp(
-            req_id,
-            &n3,
-            &Response::NodesFound(value_id, vec![n5.clone()]),
-        )
-        .unwrap();
-
-        info!("Search round 1");
-
-        // Update search state (re-start search)
-        dht.update().unwrap();
-        dht.update().unwrap();
-
-        // Check requests (query node 4, 5)
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindNode(value_id)))
-        );
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindNode(value_id)))
+        // Setup testcore with expectations
+        let c = TestCore::new(
+            n1.id().clone(),
+            &[
+                // First lookup for known closest nodes
+                TestOp::GetNearest(value_id, vec![n2.clone(), n3.clone()]),
+                // Then issue FindNodes to these
+                TestOp::net_req(
+                    vec![n2.clone(), n3.clone()],
+                    Request::FindNode(value_id),
+                    &[
+                        (
+                            n2.id().clone(),
+                            Response::NodesFound(value_id, vec![n4.clone()]),
+                        ),
+                        (
+                            n3.id().clone(),
+                            Response::NodesFound(value_id, vec![n5.clone()]),
+                        ),
+                    ],
+                ),
+                // And another round of FindNodes to the newly discovered nodes
+                TestOp::net_req(
+                    vec![n4.clone(), n5.clone()],
+                    Request::FindNode(value_id),
+                    &[
+                        (n4.id().clone(), Response::NodesFound(value_id, vec![])),
+                        (n5.id().clone(), Response::NodesFound(value_id, vec![])),
+                    ],
+                ),
+                // And finally a FindValues to the nearest set of nodes
+                TestOp::net_req(
+                    vec![n4.clone(), n5.clone()],
+                    Request::FindValue(value_id),
+                    &[
+                        (
+                            n4.id().clone(),
+                            Response::ValuesFound(value_id, vec![value_data]),
+                        ),
+                        (
+                            n5.id().clone(),
+                            Response::ValuesFound(value_id, vec![value_data]),
+                        ),
+                    ],
+                ),
+                TestOp::Reduce(value_id, vec![500, 500]),
+            ],
         );
 
-        // Handle responses for node 4, 5
-        dht.handle_resp(req_id, &n4, &Response::NodesFound(value_id, vec![]))
-            .unwrap();
-        dht.handle_resp(req_id, &n5, &Response::NodesFound(value_id, vec![]))
+        // Execute search
+        let r = c
+            .search(
+                value_id,
+                SearchOptions {
+                    depth: 3,
+                    concurrency: 2,
+                },
+            )
+            .await
             .unwrap();
 
-        // Update search state (re-start search)
-        dht.update().unwrap();
-        dht.update().unwrap();
+        // Check response is as expected
+        assert_eq!(&r, &[value_data]);
 
-        // Check requests (query node 4, 5)
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n4.clone(), Request::FindValue(value_id)))
-        );
-        assert_eq!(
-            rx.try_next().unwrap(),
-            Some((req_id, n5.clone(), Request::FindValue(value_id)))
-        );
-
-        // Handle responses for node 4, 5
-        dht.handle_resp(
-            req_id,
-            &n4,
-            &Response::ValuesFound(value_id, vec![value_data]),
-        )
-        .unwrap();
-        dht.handle_resp(
-            req_id,
-            &n5,
-            &Response::ValuesFound(value_id, vec![value_data]),
-        )
-        .unwrap();
-
-        // Launch next search
-        dht.update().unwrap();
-
-        // Detect completion
-        dht.update().unwrap();
-        dht.update().unwrap();
-
-        info!("Expecting search completion");
-        assert_eq!(search.await, Ok(vec![value_data, value_data]));
+        // Finalise test
+        c.finalise();
     }
 }

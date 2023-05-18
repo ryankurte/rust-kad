@@ -2,7 +2,9 @@
 //! A Kademlia DHT implementation in Rust
 //!
 //! https://github.com/ryankurte/rust-kad
-//! Copyright 2018 Ryan Kurte
+//! Copyright 2018-2023 Ryan Kurte
+
+#![feature(async_fn_in_trait)]
 
 use std::fmt::{Debug, Display};
 use std::time::Duration;
@@ -19,7 +21,7 @@ pub mod store;
 use store::HashMapStore;
 
 pub mod dht;
-use dht::Dht;
+use dht::{Dht, RequestSender};
 
 pub mod prelude;
 
@@ -51,6 +53,10 @@ pub struct Config {
     #[cfg_attr(feature = "clap", clap(long = "dht-node-timeout", value_parser = parse_duration, default_value = "15m"))]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
+
+    #[cfg_attr(feature = "clap", clap(long = "dht-update-period", value_parser = parse_duration, default_value = "15m"))]
+    /// Period for bucket updates
+    pub update_period: Duration,
 }
 
 fn parse_duration(s: &str) -> Result<Duration, humantime::DurationError> {
@@ -67,27 +73,33 @@ impl Default for Config {
             max_recursion: 10,
             search_timeout: Duration::from_secs(2),
             node_timeout: Duration::from_secs(15 * 60 * 60),
+            update_period: Duration::from_secs(15 * 60 * 60),
         }
     }
 }
 
 /// Standard DHT implementation using included KNodeTable and HashMapStore implementations
-pub type StandardDht<Id, Info, Data, ReqId> =
-    Dht<Id, Info, Data, ReqId, KNodeTable<Id, Info>, HashMapStore<Id, Data>>;
+pub type StandardDht<Id, Info, Data> = Dht<
+    Id,
+    Info,
+    Data,
+    RequestSender<Id, Info, Data>,
+    KNodeTable<Id, Info>,
+    HashMapStore<Id, Data>,
+>;
 
-impl<Id, Info, Data, ReqId> Dht<Id, Info, Data, ReqId>
+impl<Id, Info, Data> Dht<Id, Info, Data>
 where
     Id: DatabaseId + Clone + Send + 'static,
     Info: PartialEq + Clone + Debug + Send + 'static,
     Data: PartialEq + Clone + Debug + Send + 'static,
-    ReqId: RequestId + Clone + Display + Send + 'static,
 {
     /// Create a new DHT using the standard node table and data store implementations
     pub fn standard(
         id: Id,
         config: Config,
-        req_sink: Sender<(ReqId, Entry<Id, Info>, Request<Id, Data>)>,
-    ) -> StandardDht<Id, Info, Data, ReqId> {
+        req_sink: RequestSender<Id, Info, Data>,
+    ) -> StandardDht<Id, Info, Data> {
         let table = KNodeTable::new(id.clone(), config.k, id.max_bits());
         let store = HashMapStore::new();
         Dht::custom(id, config, req_sink, table, store)

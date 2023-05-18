@@ -2,60 +2,50 @@ use std::fmt::Debug;
 
 use tracing::{debug, instrument};
 
-use super::SearchOptions;
+use super::{find_nearest, SearchOptions};
 use crate::common::*;
-use crate::dht::find_nearest;
 
-pub trait Connect<Id, Info, Data> {
-    /// Connect to the DHT using the provided peers
-    async fn connect(
-        &self,
-        peers: Vec<Entry<Id, Info>>,
-        opts: SearchOptions,
-    ) -> Result<Vec<Entry<Id, Info>>, Error>;
+pub trait Lookup<Id, Info, Data> {
+    /// Lookup a specific peer via the DHT
+    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<Entry<Id, Info>, Error>;
 }
 
-impl<T, Id, Info, Data> Connect<Id, Info, Data> for T
+impl<T, Id, Info, Data> Lookup<Id, Info, Data> for T
 where
     T: super::Base<Id, Info, Data>,
     Id: DatabaseId + Clone + Debug + 'static,
     Info: Clone + Debug + 'static,
     Data: Clone + Debug + 'static,
 {
-    /// Connect to the DHT using the provided peers
-    #[instrument(skip(self, peers, opts))]
-    async fn connect(
-        &self,
-        peers: Vec<Entry<Id, Info>>,
-        opts: SearchOptions,
-    ) -> Result<Vec<Entry<Id, Info>>, Error> {
-        debug!("Connect {:?} -> {:?}", self.our_id(), peers);
+    /// Lookup a specific peer via the DHT
+    #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
+    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<Entry<Id, Info>, Error> {
+        // Fetch nearest nodes from the table
+        let nearest = self.get_nearest(id.clone()).await?;
+        if nearest.len() == 0 {
+            return Err(Error::NoPeers);
+        }
 
-        // Lookup peers near our address using the provided new peers
-        let nearest = find_nearest(self, self.our_id(), peers, opts.clone()).await?;
+        // Perform DHT lookup for nearest nodes to the search ID
+        let resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
-        // TODO: Register ourselves with these peers
-        // If this is required? the act of polling for nodes should
-        // do everything we need...
-
-        // Update our peer database
-        self.update_peers(nearest.clone()).await?;
-
-        // return registered peers
-        Ok(nearest)
+        match resolved.iter().find(|p| p.id() == &id) {
+            Some(v) => Ok(v.clone()),
+            None => Err(Error::NotFound),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
 
     use crate::dht::base::tests::{TestCore, TestOp};
-    use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
 
     use super::*;
 
     #[tokio::test]
-    async fn test_connect() {
+    async fn test_lookup() {
         let _ = SimpleLogger::init(LevelFilter::Debug, LogConfig::default());
 
         // Setup nodes
@@ -65,13 +55,15 @@ mod tests {
         let n4 = Entry::new([0b1001], 400);
         let n5 = Entry::new([0b1010], 400);
 
-        let target_id = *n1.id();
+        let target_id = *n5.id();
 
         // Setup testcore with expectations
         let c = TestCore::new(
             n1.id().clone(),
             &[
-                // Issue FindNodes to new peer(s)
+                // First lookup for known closest nodes
+                TestOp::GetNearest(target_id, vec![n2.clone(), n3.clone()]),
+                // Then issue FindNodes to these
                 TestOp::net_req(
                     vec![n2.clone(), n3.clone()],
                     Request::FindNode(target_id),
@@ -95,15 +87,13 @@ mod tests {
                         (n5.id().clone(), Response::NodesFound(target_id, vec![])),
                     ],
                 ),
-                // And finally update the DHT with these nodes
-                TestOp::update_peers(vec![n2.clone(), n3.clone(), n4.clone(), n5.clone()]),
             ],
         );
 
         // Execute search
         let r = c
-            .connect(
-                vec![n2.clone(), n3.clone()],
+            .lookup(
+                n5.id().clone(),
                 SearchOptions {
                     depth: 3,
                     concurrency: 2,
@@ -113,10 +103,7 @@ mod tests {
             .unwrap();
 
         // Check response is as expected
-        let mut e = vec![n2, n3, n4, n5];
-        e.sort_by_key(|p| DatabaseId::xor(n1.id(), p.id()));
-
-        assert_eq!(&r, &e);
+        assert_eq!(&r, &n5);
 
         // Finalise test
         c.finalise();

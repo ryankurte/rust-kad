@@ -15,8 +15,12 @@ use super::kbucket::KBucket;
 use super::nodetable::{BucketInfo, NodeTable};
 
 /// KNodeTable Implementation
-/// This uses a flattened approach whereby buckets are pre-allocated and indexed by their distance from the local Id
+/// This uses a flattened approximation whereby buckets are pre-allocated and indexed by their distance from the local Id
 /// as a simplification of the allocation based branching approach introduced in the paper.
+//
+// TODO: some assumptions here are not ideal, for example, bucket 0 will only ever contain the single entry where target == id.
+// and the lower index buckets may not be possible to fill to bucket_size / should probably offset bucket count based on bucket
+// size to compensate (eg. if buckets are sized for two entries, reduce distance by 1 bit)
 pub struct KNodeTable<Id, Info> {
     id: Id,
     buckets: Vec<KBucket<Id, Info>>,
@@ -27,10 +31,12 @@ where
     Id: DatabaseId + Clone + 'static,
     Info: Clone + Debug + 'static,
 {
-    /// Create a new KNodeTable with the provded bucket and hash sizes
+    /// Create a new KNodeTable with the provided bucket and hash sizes
+    // TODO: hash_size approx isn't -quite- right and the use of the wrong hash size results in bucket indexing errors... 
+    // perhaps this could be abstracted / const generic-ified to make it more resilient?
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Info> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size).map(|_| KBucket::new(bucket_size)).collect();
+        let buckets = (0..hash_size + 1).map(|_| KBucket::new(bucket_size)).collect();
         // Generate KNodeTable object
         KNodeTable { id, buckets }
     }
@@ -56,9 +62,9 @@ where
     fn bucket_index(&self, id: &Id) -> usize {
         // Find difference
         let diff = KNodeTable::<Id, Info>::distance(&self.id, id);
-        assert!(!diff.is_zero(), "Distance cannot be zero");
 
-        diff.bits() - 1
+        // Count bits of difference
+        diff.bits()
     }
 
     #[allow(dead_code)]
@@ -223,6 +229,39 @@ where
 mod test {
     use super::*;
     use super::{KNodeTable, NodeTable};
+
+    #[test]
+    fn test_k_node_buckets() {
+        let table = KNodeTable::<[u8; 1], u64>::new([0b1000], 10, 4);
+
+        let tests = &[
+            // Our ID ends ip in the zero-th bucket
+            // (TODO: do we _need_ this bucket at all? should combine with first bucket?)
+            ([0b1000], 0),
+            // Next is one bit distance
+            ([0b1001], 1),
+            // Then two bit distance
+            ([0b1010], 2),
+            ([0b1011], 2),
+            // Three bit distance
+            ([0b1100], 3),
+            ([0b1101], 3),
+            ([0b1110], 3),
+            ([0b1111], 3),
+            // And four bit distance
+            ([0b0001], 4),
+            ([0b0010], 4),
+            ([0b0011], 4),
+            ([0b0100], 4),
+            ([0b0101], 4),
+            ([0b0110], 4),
+            ([0b0111], 4),
+        ];
+
+        for (id, index) in tests {
+            assert_eq!(table.bucket_index(&id), *index, "Expected bucket {index} for id {id:?}");
+        }
+    }
 
     #[test]
     fn test_k_node_table() {

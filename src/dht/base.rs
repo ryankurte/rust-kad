@@ -2,12 +2,13 @@
 //! support higher-level operations while enabling isolated testing.
 
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 use futures::{
     channel::mpsc::{channel, Sender},
     SinkExt, StreamExt,
 };
-use tracing::{error, warn};
+use tracing::{error, warn, debug};
 
 use crate::common::{Entry, Error, Request, Response};
 
@@ -37,7 +38,7 @@ pub trait Base<Id, Info, Data>: Sync + Send {
 }
 
 /// Async DHT handle implementing [Base] for higher-level DHT operations
-pub struct DhtHandle<Id, Info, Data> {
+pub struct DhtHandle<Id: Debug, Info: Debug, Data: Debug> {
     pub(crate) id: Id,
     pub(crate) tx: Sender<(
         OpReq<Id, Info, Data>,
@@ -45,7 +46,7 @@ pub struct DhtHandle<Id, Info, Data> {
     )>,
 }
 
-impl<Id, Info, Data> DhtHandle<Id, Info, Data> {
+impl<Id: Debug, Info: Debug, Data: Debug> DhtHandle<Id, Info, Data> {
     /// Execute an operation via remote channel
     async fn exec(&self, req: OpReq<Id, Info, Data>) -> Result<OpResp<Id, Info, Data>, Error> {
         let (resp_tx, mut resp_rx) = channel(1);
@@ -56,7 +57,12 @@ impl<Id, Info, Data> DhtHandle<Id, Info, Data> {
             return Err(Error::Connector);
         };
 
-        match resp_rx.next().await {
+        // Await response
+        let r = resp_rx.next().await;
+
+        debug!("response: {:?}", r);
+
+        match r {
             Some(Ok(r)) => Ok(r),
             Some(Err(e)) => Err(e),
             None => {
@@ -68,7 +74,7 @@ impl<Id, Info, Data> DhtHandle<Id, Info, Data> {
 }
 
 /// [Base] implementation for [DhtHandle]
-impl<Id: Clone + Sync + Send, Info: Clone + Sync + Send, Data: Clone + Sync + Send>
+impl<Id: Clone + Debug + Sync + Send, Info: Clone + Debug + Sync + Send, Data: Clone + Debug + Sync + Send>
     Base<Id, Info, Data> for DhtHandle<Id, Info, Data>
 {
     fn our_id(&self) -> Id {

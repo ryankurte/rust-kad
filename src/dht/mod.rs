@@ -375,9 +375,14 @@ where
                     });
                 }
             }
+
+            ctx.waker().clone().wake();
         }
 
         // Perform maintenance on the node table
+
+        // Send keepalives to expiring nodes
+
 
         // Periodically update buckets
         #[cfg(nope)]

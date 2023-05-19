@@ -8,7 +8,7 @@ use crate::common::*;
 pub trait Store<Id, Info, Data> {
     /// Store DHT data at the provided ID
     async fn store(&self, id: Id, data: Vec<Data>, opts: SearchOptions)
-        -> Result<Vec<Data>, Error>;
+        -> Result<Vec<Entry<Id, Info>>, Error>;
 }
 
 impl<T, Id, Info, Data> Store<Id, Info, Data> for T
@@ -25,7 +25,7 @@ where
         id: Id,
         data: Vec<Data>,
         opts: SearchOptions,
-    ) -> Result<Vec<Data>, Error> {
+    ) -> Result<Vec<Entry<Id, Info>>, Error> {
         // Write to our own store
         self.store_data(id.clone(), data.clone()).await?;
 
@@ -36,7 +36,7 @@ where
         }
 
         // Perform DHT lookup for nearest nodes to the search ID
-        let resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
+        let mut resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
         // limit to closest subset based on concurrency
         let count = resolved.len().min(opts.concurrency);
@@ -58,24 +58,26 @@ where
 
         // Handle responses
         let mut values = vec![];
-        for p in resolved {
+
+        let peers = resolved.drain(..).filter_map(|p| {
             match resps.remove(p.id()) {
                 Some(resp) => {
                     // Add located values to list
                     if let Response::ValuesFound(_id, mut v) = resp {
                         values.append(&mut v);
                     }
+                    Some(p)
                 }
-                None => (),
+                None => None,
             }
-        }
+        }).collect();
 
         // Apply reducer to values
-        let values = self.reduce(id.clone(), values).await?;
+        let _values = self.reduce(id.clone(), values).await?;
 
         // Return reduced stored values
         // TODO: would it be more useful to return store information (number of peers, actual peers?)
-        Ok(values)
+        Ok(peers)
     }
 }
 
@@ -165,7 +167,7 @@ mod tests {
             .unwrap();
 
         // Check response is as expected
-        assert_eq!(&r, &[value_data]);
+        assert_eq!(&r, &[n4.clone(), n5.clone()]);
 
         // Finalise test
         c.finalise();

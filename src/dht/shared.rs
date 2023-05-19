@@ -12,7 +12,7 @@ use std::time::Instant;
 use futures::channel::mpsc::Sender;
 use tracing::{debug, warn};
 
-use crate::common::*;
+use crate::{common::*, Config};
 
 use super::Base;
 
@@ -31,6 +31,12 @@ pub enum RequestState {
 pub struct SearchOptions {
     pub depth: usize,
     pub concurrency: usize,
+}
+
+impl From<&Config> for SearchOptions {
+    fn from(value: &Config) -> Self {
+        Self { depth: value.max_recursion, concurrency: value.concurrency }
+    }
 }
 
 impl Default for SearchOptions {

@@ -1,20 +1,15 @@
-use std::collections::HashMap;
-/**
- * rust-kad
- * Kademlia base operation, used in the implementation of connect / locate / search / store functions
- *
- * https://github.com/ryankurte/rust-kad
- * Copyright 2018 Ryan Kurte
- */
-use std::fmt::{Debug, Display};
-use std::time::Instant;
+//! Shared / helpers for high level DHT operations
+//!
+// https://github.com/ryankurte/rust-kad
+// Copyright 2018-2023 ryan kurte
 
-use futures::channel::mpsc::Sender;
+use std::collections::HashMap;
+use std::fmt::Debug;
+
 use tracing::{debug, warn};
 
-use crate::{common::*, Config};
-
 use super::Base;
+use crate::{common::*, Config};
 
 /// RequestState is used to store the state of pending requests
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -35,7 +30,10 @@ pub struct SearchOptions {
 
 impl From<&Config> for SearchOptions {
     fn from(value: &Config) -> Self {
-        Self { depth: value.max_recursion, concurrency: value.concurrency }
+        Self {
+            depth: value.max_recursion,
+            concurrency: value.concurrency,
+        }
     }
 }
 

@@ -32,11 +32,13 @@ where
     Info: Clone + Debug + 'static,
 {
     /// Create a new KNodeTable with the provided bucket and hash sizes
-    // TODO: hash_size approx isn't -quite- right and the use of the wrong hash size results in bucket indexing errors... 
+    // TODO: hash_size approx isn't -quite- right and the use of the wrong hash size results in bucket indexing errors...
     // perhaps this could be abstracted / const generic-ified to make it more resilient?
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Info> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size + 1).map(|_| KBucket::new(bucket_size)).collect();
+        let buckets = (0..hash_size + 1)
+            .map(|_| KBucket::new(bucket_size))
+            .collect();
         // Generate KNodeTable object
         KNodeTable { id, buckets }
     }
@@ -259,7 +261,11 @@ mod test {
         ];
 
         for (id, index) in tests {
-            assert_eq!(table.bucket_index(&id), *index, "Expected bucket {index} for id {id:?}");
+            assert_eq!(
+                table.bucket_index(&id),
+                *index,
+                "Expected bucket {index} for id {id:?}"
+            );
         }
     }
 

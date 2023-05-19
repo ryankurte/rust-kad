@@ -8,7 +8,7 @@ use futures::{
     channel::mpsc::{channel, Sender},
     SinkExt, StreamExt,
 };
-use tracing::{error, warn, debug};
+use tracing::{debug, error, warn};
 
 use crate::common::{Entry, Error, Request, Response};
 
@@ -74,8 +74,11 @@ impl<Id: Debug, Info: Debug, Data: Debug> DhtHandle<Id, Info, Data> {
 }
 
 /// [Base] implementation for [DhtHandle]
-impl<Id: Clone + Debug + Sync + Send, Info: Clone + Debug + Sync + Send, Data: Clone + Debug + Sync + Send>
-    Base<Id, Info, Data> for DhtHandle<Id, Info, Data>
+impl<
+        Id: Clone + Debug + Sync + Send,
+        Info: Clone + Debug + Sync + Send,
+        Data: Clone + Debug + Sync + Send,
+    > Base<Id, Info, Data> for DhtHandle<Id, Info, Data>
 {
     fn our_id(&self) -> Id {
         self.id.clone()
@@ -93,7 +96,6 @@ impl<Id: Clone + Debug + Sync + Send, Info: Clone + Debug + Sync + Send, Data: C
         match self.exec(OpReq::UpdatePeers(peers)).await {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
-            _ => unimplemented!(),
         }
     }
 
@@ -101,7 +103,6 @@ impl<Id: Clone + Debug + Sync + Send, Info: Clone + Debug + Sync + Send, Data: C
         match self.exec(OpReq::Store(id, data)).await {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
-            _ => unimplemented!(),
         }
     }
 
@@ -234,10 +235,11 @@ pub mod tests {
             }
         }
 
-        async fn store_data(&self, id: Id, data: Vec<Data>) -> Result<(), Error> {
+        async fn store_data(&self, id: Id, mut data: Vec<Data>) -> Result<(), Error> {
             let op = self.op();
+            data.sort();
             match op {
-                Some(TestOp::Store(i, _data)) if id == i => Ok(()),
+                Some(TestOp::Store(i, d)) if id == i && data == d => Ok(()),
                 _ => panic!(
                     "unexpected store_data for id: {:?} (expected: {:?})",
                     id, op

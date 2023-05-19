@@ -6,10 +6,8 @@
 
 #![feature(async_fn_in_trait)]
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::time::Duration;
-
-use futures::channel::mpsc::Sender;
 
 pub mod common;
 use crate::common::*;

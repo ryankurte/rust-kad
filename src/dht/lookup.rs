@@ -1,6 +1,11 @@
+//! DHT Lookup operation
+//!
+// https://github.com/ryankurte/rust-kad
+// Copyright 2018-2023 ryan kurte
+
 use std::fmt::Debug;
 
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 use super::{find_nearest, SearchOptions};
 use crate::common::*;

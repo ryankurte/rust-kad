@@ -1,3 +1,8 @@
+//! DHT Store operation
+//!
+// https://github.com/ryankurte/rust-kad
+// Copyright 2018-2023 ryan kurte
+
 use std::fmt::Debug;
 
 use tracing::{debug, instrument, warn};
@@ -7,8 +12,12 @@ use crate::common::*;
 
 pub trait Store<Id, Info, Data> {
     /// Store DHT data at the provided ID
-    async fn store(&self, id: Id, data: Vec<Data>, opts: SearchOptions)
-        -> Result<Vec<Entry<Id, Info>>, Error>;
+    async fn store(
+        &self,
+        id: Id,
+        data: Vec<Data>,
+        opts: SearchOptions,
+    ) -> Result<Vec<Entry<Id, Info>>, Error>;
 }
 
 impl<T, Id, Info, Data> Store<Id, Info, Data> for T
@@ -59,18 +68,21 @@ where
         // Handle responses
         let mut values = vec![];
 
-        let peers = resolved.drain(..).filter_map(|p| {
-            match resps.remove(p.id()) {
-                Some(resp) => {
-                    // Add located values to list
-                    if let Response::ValuesFound(_id, mut v) = resp {
-                        values.append(&mut v);
+        let peers = resolved
+            .drain(..)
+            .filter_map(|p| {
+                match resps.remove(p.id()) {
+                    Some(resp) => {
+                        // Add located values to list
+                        if let Response::ValuesFound(_id, mut v) = resp {
+                            values.append(&mut v);
+                        }
+                        Some(p)
                     }
-                    Some(p)
+                    None => None,
                 }
-                None => None,
-            }
-        }).collect();
+            })
+            .collect();
 
         // Apply reducer to values
         let _values = self.reduce(id.clone(), values).await?;

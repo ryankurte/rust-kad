@@ -1,11 +1,9 @@
+//! DHT implementation and high-level operations
+//!
+// https://github.com/ryankurte/rust-kad
+// Copyright 2018-2023 ryan kurte
+
 use std::collections::HashMap;
-/**
- * rust-kad
- * Kademlia core implementation
- *
- * https://github.com/ryankurte/rust-kad
- * Copyright 2018 Ryan Kurte
- */
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -382,7 +380,6 @@ where
         // Perform maintenance on the node table
 
         // Send keepalives to expiring nodes
-
 
         // Periodically update buckets
         #[cfg(nope)]

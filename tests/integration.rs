@@ -15,7 +15,7 @@ use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
 use tracing::{debug, error};
 
 use kad::common::*;
-use kad::dht::{Base, Connect, Dht, Lookup, ResponseSender, Search, SearchOptions, Store};
+use kad::dht::{Base, Connect, Dht, ResponseSender, Search, SearchOptions, Store};
 use kad::Config;
 
 type PeerMap<Id, Info, Data> = HashMap<Id, Dht<Id, Info, Data>>;

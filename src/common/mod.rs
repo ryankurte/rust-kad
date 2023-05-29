@@ -1,5 +1,5 @@
 pub mod id;
-pub use self::id::{DatabaseId, RequestId};
+pub use self::id::DatabaseId;
 
 pub mod entry;
 pub use self::entry::Entry;

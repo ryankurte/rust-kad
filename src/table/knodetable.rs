@@ -24,6 +24,8 @@ use super::nodetable::{BucketInfo, NodeTable};
 pub struct KNodeTable<Id, Info> {
     id: Id,
     buckets: Vec<KBucket<Id, Info>>,
+    hash_size: usize,
+    bucket_size: usize,
 }
 
 impl<Id, Info> KNodeTable<Id, Info>
@@ -36,11 +38,14 @@ where
     // perhaps this could be abstracted / const generic-ified to make it more resilient?
     pub fn new(id: Id, bucket_size: usize, hash_size: usize) -> KNodeTable<Id, Info> {
         // Create a new bucket and assign own Id
-        let buckets = (0..hash_size + 1)
-            .map(|_| KBucket::new(bucket_size))
-            .collect();
+        let buckets = vec![KBucket::new(bucket_size)];
         // Generate KNodeTable object
-        KNodeTable { id, buckets }
+        KNodeTable {
+            id,
+            buckets,
+            bucket_size,
+            hash_size,
+        }
     }
 
     // Calculate the distance between two Ids.
@@ -54,6 +59,7 @@ where
         &self.buckets[index]
     }
 
+    /// Fetch a mutable reference to the bucket containing the provided Id
     fn bucket_mut(&mut self, id: &Id) -> &mut KBucket<Id, Info> {
         let index = self.bucket_index(id);
         &mut self.buckets[index]
@@ -65,13 +71,87 @@ where
         // Find difference
         let diff = KNodeTable::<Id, Info>::distance(&self.id, id);
 
-        // Count bits of difference
-        diff.bits()
+        // Count bits of difference for distance
+        let dist = diff.bits();
+
+        // Limit by number of buckets
+        let count = self.buckets.len();
+
+        // Compute bucket index
+        let n = dist_to_idx(self.hash_size, count, dist);
+
+        println!("Bucket id {id:?} diff: {diff:?} dist: {dist} index: {n} (/{count})");
+
+        n
     }
 
     #[allow(dead_code)]
     fn update_buckets(&self) {
         unimplemented!()
+    }
+
+    /// Split the deepest bucket (always last in the list)
+    fn split(&mut self) {
+        println!("Split bucket {}", self.buckets.len() - 1);
+
+        // Remove old deepest bucket
+        let old_bucket = self.buckets.pop().unwrap();
+
+        // Create new split buckets
+        self.buckets.push(KBucket::new(self.bucket_size));
+        self.buckets.push(KBucket::new(self.bucket_size));
+
+        // Re-insert nodes
+        for n in old_bucket.nodes() {
+            let bucket = self.bucket_mut(n.id());
+            bucket.create_or_update(&n);
+        }
+    }
+
+    /// Check whether a split is required
+    fn check_split(&self, id: &Id) -> bool {
+        // Lookup bucket containing node
+        let bucket_index = self.bucket_index(id);
+
+        // Only the deepest bucket can be split
+        if bucket_index != self.buckets.len() - 1 || self.buckets.len() >= self.hash_size {
+            return false;
+        }
+
+        // Only required if the bucket does not already contain the node and is full
+        if self.buckets[bucket_index].find(id).is_some()
+            || self.buckets[bucket_index].node_count() < self.bucket_size
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// Compute the base [Id] for a bucket by index
+    fn bucket_id(&self, index: usize) -> Id {
+        let count = self.buckets.len();
+
+        // Last bucket always centred around us
+        if index == count - 1 {
+            return self.id.clone();
+        }
+
+        // Prior buckets differ by first n bits
+
+        // Compute bit to flip
+        let flip = Id::from_bit(self.hash_size - index - 1);
+
+        // Compute flipped ID
+        let inv = Id::xor(&self.id, &flip);
+
+        // Mask out lower bits
+        let n = index + 1;
+        let m = inv.mask(n);
+
+        println!("index: {index:} inv: {inv:?} n: {n:} m: {m:?}");
+
+        m
     }
 }
 
@@ -82,6 +162,7 @@ where
 {
     type NodeIter<'a> = KNodeIter<'a, Id, Info>;
 
+    /// Fetch the number of buckets in the NodeTable
     fn buckets(&self) -> usize {
         self.buckets.len()
     }
@@ -91,11 +172,27 @@ where
         if node.id() == &self.id {
             return false;
         }
+        let node_id = node.id();
 
-        let bucket = self.bucket_mut(node.id());
+        // Check whether the target bucket needs to be split
+        if self.check_split(node_id) {
+            self.split();
+        }
+
+        println!("Create/update node {node:?}");
+
+        // Create / update the node
         let mut node = node.clone();
         node.set_seen(Instant::now());
-        bucket.create_or_update(&node)
+
+        let bucket = self.bucket_mut(&node_id);
+        let updated = bucket.create_or_update(&node);
+
+        if !updated {
+            println!("No space in bucket for node {:?}", node_id);
+        }
+
+        updated
     }
 
     /// Find the nearest nodes to the provided Id in the given range
@@ -150,7 +247,7 @@ where
     }
 
     /// Fetch information from each bucket
-    fn bucket_info(&self, index: usize) -> Option<BucketInfo> {
+    fn bucket_info(&self, index: usize) -> Option<BucketInfo<Id>> {
         if index >= self.buckets.len() {
             return None;
         }
@@ -159,6 +256,7 @@ where
 
         Some(BucketInfo {
             index,
+            id: self.bucket_id(index),
             nodes: b.node_count(),
             updated: b.updated(),
         })
@@ -227,45 +325,248 @@ where
     }
 }
 
+/// Compute bucket index from distance metric
+fn dist_to_idx(hash_bits: usize, bucket_count: usize, dist: usize) -> usize {
+    let offset = hash_bits - dist;
+    let n = offset.min(bucket_count - 1);
+    n
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use super::{KNodeTable, NodeTable};
 
+    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    struct TestId([u8; 1]);
+
+    impl Debug for TestId {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "0b{:08b}", self.0[0])
+        }
+    }
+
+    impl From<u8> for TestId {
+        fn from(value: u8) -> Self {
+            Self([value])
+        }
+    }
+
+    impl AsRef<[u8]> for TestId {
+        fn as_ref(&self) -> &[u8] {
+            &self.0
+        }
+    }
+
+    impl AsMut<[u8]> for TestId {
+        fn as_mut(&mut self) -> &mut [u8] {
+            &mut self.0
+        }
+    }
+
+    #[test]
+    fn test_id() {
+        let mut a = TestId::from(0b1000_0001);
+        a.as_mut()[0] = 0;
+        assert_eq!(a.as_ref(), &[0]);
+    }
+
+    #[test]
+    fn test_distances() {
+        let tests = &[
+            ([0b1000], [0b1001], [1]),
+            ([0b1000], [0b1010], [2]),
+            ([0b1000], [0b1011], [3]),
+            ([0b1000], [0b1100], [4]),
+            ([0b1000], [0b0000], [8]),
+            ([0b1000], [0b0001], [9]),
+            ([0b1000], [0b0010], [10]),
+            ([0b1000], [0b0011], [11]),
+            ([0b1000], [0b0100], [12]),
+            ([0b1000], [0b0101], [13]),
+            ([0b1000], [0b0110], [14]),
+            ([0b1000], [0b0111], [15]),
+        ];
+
+        for (a, b, d) in tests {
+            let d1 = KNodeTable::<[u8; 1], u64>::distance(&a, &b);
+            assert_eq!(&d1, d);
+        }
+    }
+
+    #[test]
+    fn test_dist_to_idx() {
+        let tests = &[
+            // Single bucket, everything ends up there
+            (4, 1, 4, 0),
+            (4, 1, 3, 0),
+            (4, 1, 2, 0),
+            (4, 1, 1, 0),
+            (4, 1, 0, 0),
+            // Two buckets, dist >= 4 in first, everything else
+            // in the second
+            (4, 2, 4, 0),
+            (4, 2, 3, 1),
+            (4, 2, 2, 1),
+            (4, 2, 1, 1),
+            (4, 2, 0, 1),
+            // Three buckets, dist >= 4 in the first, dist >= 3
+            // in the second, everything else in the third
+            (4, 3, 4, 0),
+            (4, 3, 3, 1),
+            (4, 3, 2, 2),
+            (4, 3, 1, 2),
+            (4, 3, 0, 2),
+        ];
+
+        for (bits, count, dist, idx) in tests {
+            let n = dist_to_idx(*bits, *count, *dist);
+
+            assert_eq!(n, *idx);
+        }
+    }
+
+    #[test]
+    fn test_bucket_indicies_simple() {
+        let mut table = KNodeTable::<TestId, u64>::new(0b1000_0000.into(), 2, 8);
+
+        // With a single bucket, everything ends up in the same place
+        assert_eq!(table.bucket_index(&TestId::from(0b1001_0000)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b0001_0000)), 0);
+
+        println!("2x");
+
+        // With two buckets, nearer values end up in the second
+        table.buckets.push(KBucket::new(table.bucket_size));
+
+        assert_eq!(table.bucket_index(&TestId::from(0b1000_0001)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b1010_0000)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b0101_0000)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b0111_0000)), 0);
+
+        println!("3x");
+
+        // With three buckets, nearest values end up in the third
+        table.buckets.push(KBucket::new(table.bucket_size));
+
+        assert_eq!(table.bucket_index(&TestId::from(0b1000_0001)), 2);
+        assert_eq!(table.bucket_index(&TestId::from(0b1100_0001)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b1110_0000)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b1111_0000)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b0001_0000)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b0011_0000)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b0111_0000)), 0);
+    }
+
+    #[test]
+    fn test_bucket_indicies_simple_inv() {
+        let mut table = KNodeTable::<TestId, u64>::new(0b0000.into(), 2, 4);
+
+        // With a single bucket, everything ends up in the same place
+        assert_eq!(table.bucket_index(&TestId::from(0b1001)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b0001)), 0);
+
+        println!("2x");
+
+        // With two buckets, nearer values end up in the second
+        table.buckets.push(KBucket::new(table.bucket_size));
+
+        assert_eq!(table.bucket_index(&TestId::from(0b0001)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b0010)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b0100)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b1000)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b1001)), 0);
+
+        println!("3x");
+
+        // With three buckets, nearest values end up in the third
+        table.buckets.push(KBucket::new(table.bucket_size));
+
+        assert_eq!(table.bucket_index(&TestId::from(0b0001)), 2);
+        assert_eq!(table.bucket_index(&TestId::from(0b0010)), 2);
+        assert_eq!(table.bucket_index(&TestId::from(0b0100)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b0111)), 1);
+        assert_eq!(table.bucket_index(&TestId::from(0b1000)), 0);
+        assert_eq!(table.bucket_index(&TestId::from(0b1111)), 0);
+    }
+
     #[test]
     fn test_k_node_buckets() {
-        let table = KNodeTable::<[u8; 1], u64>::new([0b1000], 10, 4);
+        let mut table = KNodeTable::<[u8; 1], u64>::new([0b1000], 2, 4);
 
         let tests = &[
-            // Our ID ends ip in the zero-th bucket
-            // (TODO: do we _need_ this bucket at all? should combine with first bucket?)
-            ([0b1000], 0),
-            // Next is one bit distance
-            ([0b1001], 1),
+            // First pair end up in the same bucket
+            ([0b0001], 0),
+            ([0b1001], 0),
+            // Next node causes a split
+            ([0b0010], 0),
             // Then two bit distance
-            ([0b1010], 2),
+            ([0b1010], 1),
+            // Causing another split
+            ([0b1101], 1),
             ([0b1011], 2),
-            // Three bit distance
-            ([0b1100], 3),
-            ([0b1101], 3),
-            ([0b1110], 3),
-            ([0b1111], 3),
-            // And four bit distance
-            ([0b0001], 4),
-            ([0b0010], 4),
-            ([0b0011], 4),
-            ([0b0100], 4),
-            ([0b0101], 4),
-            ([0b0110], 4),
-            ([0b0111], 4),
         ];
 
         for (id, index) in tests {
+            println!("Insert {:?} expected bucket {}", id, index);
+
+            table.create_or_update(&Entry::new(*id, 0u64));
+
             assert_eq!(
                 table.bucket_index(&id),
                 *index,
                 "Expected bucket {index} for id {id:?}"
             );
+        }
+    }
+
+    #[test]
+    fn test_k_bucket_id() {
+        let mut t = KNodeTable::<TestId, u64>::new(TestId::from(0b0100_0001), 2, 8);
+
+        // One bucket, located at our ID
+        assert_eq!(t.bucket_id(0), TestId::from(0b0100_0001));
+
+        println!("2x");
+
+        t.buckets.push(KBucket::new(t.bucket_size));
+
+        assert_eq!(t.bucket_id(0), TestId::from(0b1000_0000));
+        assert_eq!(t.bucket_id(1), TestId::from(0b0100_0001));
+
+        println!("3x");
+
+        t.buckets.push(KBucket::new(t.bucket_size));
+
+        let t3 = &[(0, 0b1000_0000), (1, 0b0000_0000), (2, 0b0100_0001)];
+
+        for (b, i) in t3 {
+            let expected_id = TestId::from(*i);
+
+            let bucket_id = t.bucket_id(*b);
+            assert_eq!(bucket_id, expected_id);
+
+            assert_eq!(t.bucket_index(&bucket_id), *b);
+        }
+
+        println!("4x");
+
+        t.buckets.push(KBucket::new(t.bucket_size));
+
+        let t4 = &[
+            (0, 0b1000_0000),
+            (1, 0b0000_0000),
+            (2, 0b0110_0000),
+            (3, 0b0100_0001),
+        ];
+
+        for (b, i) in t4 {
+            let expected_id = TestId::from(*i);
+
+            let bucket_id = t.bucket_id(*b);
+            assert_eq!(bucket_id, expected_id);
+
+            assert_eq!(t.bucket_index(&bucket_id), *b);
         }
     }
 
@@ -302,24 +603,30 @@ mod test {
 
     #[test]
     fn test_k_node_iter() {
-        let n = Entry::new([0b0100], 1);
+        let n = Entry::new([0b1000], 1);
 
         let mut t = KNodeTable::<[u8; 1], u64>::new(*n.id(), 2, 4);
 
         let nodes = vec![
-            Entry::new([0b0000], 1),
+            Entry::new([0b1001], 1),
             Entry::new([0b0001], 2),
-            Entry::new([0b0110], 3),
-            Entry::new([0b1011], 4),
+            Entry::new([0b0100], 3),
+            Entry::new([0b1010], 4),
+            Entry::new([0b1100], 5),
+            Entry::new([0b1101], 6),
         ];
 
         // Add some nodes
         for (i, n) in nodes.iter().enumerate() {
-            assert!(t.create_or_update(n));
+            t.create_or_update(n);
 
             let mut n1: Vec<_> = t.entries().map(|e| e.clone()).collect();
             n1.sort_by_key(|e| e.id().clone());
-            assert_eq!(&n1, &nodes[..i + 1]);
+
+            let mut n2 = nodes[..i + 1].to_vec();
+            n2.sort_by_key(|e| e.id().clone());
+
+            assert_eq!(&n1, &n2);
         }
     }
 }

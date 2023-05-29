@@ -327,6 +327,7 @@ where
                 }
                 OpReq::UpdatePeers(peers) => {
                     let t = self.nodetable_mut();
+                    // TODO: return updated peer info?
                     for p in &peers {
                         t.create_or_update(p);
                     }

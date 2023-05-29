@@ -26,7 +26,7 @@ tracing = { version = "0.1.10", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.17", features = [ "env-filter", ] }
 clap = { version = "4.2.1", features = [ "derive" ], optional = true }
 log = { features = ["max_level_debug"], version = "0.4.6" }
-num = { features = ["rand"], version = "0.2.0" }
+num = { features = ["rand"], version = "0.4.0" }
 tokio = { version = "1.26.0", features = [ "full" ] }
 
 [dev-dependencies]

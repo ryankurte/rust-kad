@@ -45,15 +45,16 @@ pub trait NodeTable<Id: DatabaseId + Clone + 'static, Info: Clone + 'static> {
     fn remove_entry(&mut self, id: &Id);
 
     /// Fetch information from each bucket
-    fn bucket_info(&self, index: usize) -> Option<BucketInfo>;
+    fn bucket_info(&self, index: usize) -> Option<BucketInfo<Id>>;
 
     /// Iterate through all nodes in the table
     fn entries<'b>(&'b self) -> Self::NodeIter<'b>;
 }
 
 // BucketInfo contains information about a given bucket
-pub struct BucketInfo {
+pub struct BucketInfo<Id: DatabaseId> {
     pub index: usize,
+    pub id: Id,
     pub nodes: usize,
     pub updated: Option<Instant>,
 }

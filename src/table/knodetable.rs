@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::time::Instant;
 
-use tracing::{trace, debug, warn};
+use tracing::{debug, trace, warn};
 
 use crate::common::{DatabaseId, Entry};
 
@@ -172,8 +172,9 @@ where
         }
         let node_id = node.id();
 
-        // Check whether the target bucket needs to be split
+        // If the bucket is full and on our path
         if self.check_split(node_id) {
+            // Split the bucket to expand the table
             self.split();
         }
 
@@ -187,7 +188,7 @@ where
         let updated = bucket.create_or_update(&node);
 
         if !updated {
-            warn!("No space in bucket for node {:?}", node_id);
+            debug!("No space in bucket to add node {:?}", node_id);
         }
 
         updated
@@ -202,6 +203,8 @@ where
             .buckets
             .iter()
             .flat_map(|b| b.nodes())
+            // TODO: we should probably inject ourselves rather than expecting a third party to
+            // have stored us in our own node table
             //.filter(|n| n.id() != &self.id )
             .collect();
         let count = all.len();

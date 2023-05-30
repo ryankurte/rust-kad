@@ -3,10 +3,10 @@
 // https://github.com/ryankurte/rust-kad
 // Copyright 2018-2023 ryan kurte
 
-use std::collections::HashMap;
 use std::fmt::Debug;
+use std::{collections::HashMap, time::Instant};
 
-use tracing::{trace, debug, warn};
+use tracing::{debug, trace, warn};
 
 use super::Base;
 use crate::{common::*, Config};
@@ -40,7 +40,7 @@ impl From<&Config> for SearchOptions {
 impl Default for SearchOptions {
     fn default() -> Self {
         Self {
-            depth: 3,
+            depth: 8,
             concurrency: 4,
         }
     }
@@ -135,7 +135,11 @@ pub(crate) async fn find_nearest<
     let mut resolved: Vec<_> = known
         .iter()
         .filter(|(_id, (e, s))| *s == RequestState::Complete && e.id() != &our_id)
-        .map(|(_id, (e, _s))| e.clone())
+        .map(|(_id, (e, _s))| {
+            let mut e = e.clone();
+            e.set_seen(Instant::now());
+            e
+        })
         .collect();
     resolved.sort_by_key(|p| Id::xor(&id, p.id()));
 

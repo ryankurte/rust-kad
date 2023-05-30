@@ -9,7 +9,7 @@ use futures::{
     SinkExt, StreamExt,
 };
 use log::trace;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 use crate::common::{Entry, Error, Request, Response};
 
@@ -36,6 +36,9 @@ pub trait Base<Id, Info, Data>: Sync + Send {
 
     /// Reduce data at a specific ID
     async fn reduce(&self, id: Id, data: Vec<Data>) -> Result<Vec<Data>, Error>;
+
+    /// Update the DHT
+    async fn update(&self) -> Result<(), Error>;
 }
 
 /// Async DHT handle implementing [Base] for higher-level DHT operations
@@ -49,7 +52,10 @@ pub struct DhtHandle<Id: Debug, Info: Debug, Data: Debug> {
 
 impl<Id: Debug, Info: Debug, Data: Debug> DhtHandle<Id, Info, Data> {
     /// Execute an operation via remote channel
-    async fn exec(&self, req: OpReq<Id, Info, Data>) -> Result<OpResp<Id, Info, Data>, Error> {
+    pub(crate) async fn exec(
+        &self,
+        req: OpReq<Id, Info, Data>,
+    ) -> Result<OpResp<Id, Info, Data>, Error> {
         let (resp_tx, mut resp_rx) = channel(1);
 
         // Send operation request
@@ -126,6 +132,13 @@ impl<
             _ => unimplemented!(),
         }
     }
+
+    async fn update(&self) -> Result<(), Error> {
+        match self.exec(OpReq::Update).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -135,9 +148,10 @@ pub(crate) enum OpReq<Id, Info, Data> {
     Store(Id, Vec<Data>),
     Net(Vec<Entry<Id, Info>>, Request<Id, Data>),
     Reduce(Id, Vec<Data>),
+    Update,
 }
 
-impl <Id: std::fmt::Debug, Info, Data: std::fmt::Debug> std::fmt::Debug for OpReq<Id, Info, Data> {
+impl<Id: std::fmt::Debug, Info, Data: std::fmt::Debug> std::fmt::Debug for OpReq<Id, Info, Data> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OpReq::GetNearest(id) => write!(f, "GetNearest({:?})", id),
@@ -145,6 +159,7 @@ impl <Id: std::fmt::Debug, Info, Data: std::fmt::Debug> std::fmt::Debug for OpRe
             OpReq::Store(id, _) => write!(f, "Store({:?})", id),
             OpReq::Net(_, r) => write!(f, "Net({:?})", r),
             OpReq::Reduce(id, _) => write!(f, "Reduce({:?})", id),
+            OpReq::Update => write!(f, "Update"),
         }
     }
 }
@@ -292,6 +307,10 @@ pub mod tests {
                 }
                 _ => panic!("unexpected reduce for id: {id:?} data: {data:?} (expected: {op:?})"),
             }
+        }
+
+        async fn update(&self) -> Result<(), Error> {
+            Ok(())
         }
     }
 }

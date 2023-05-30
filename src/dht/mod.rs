@@ -5,14 +5,15 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Add;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::channel::mpsc::{self, channel, Receiver, Sender};
 use futures::prelude::*;
 use tokio::time::timeout;
-use tracing::{trace, debug, error, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::common::*;
 use crate::store::{Datastore, HashMapStore};
@@ -122,9 +123,9 @@ pub struct Dht<
 
 impl<Id, Info, Data, Io, Table, Store> Dht<Id, Info, Data, Io, Table, Store>
 where
-    Id: DatabaseId + Clone + Sized + Send + 'static,
-    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
-    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
+    Id: DatabaseId + Clone + Sized + Sync + Send + 'static,
+    Info: PartialEq + Clone + Sized + Debug + Sync + Send + 'static,
+    Data: PartialEq + Clone + Sized + Debug + Sync + Send + 'static,
     Io: Net<Id, Info, Data> + Clone + Debug + Send + 'static,
     Table: NodeTable<Id, Info> + Send + 'static,
     Store: Datastore<Id, Data> + Send + 'static,
@@ -137,9 +138,9 @@ where
         table: Table,
         datastore: Store,
     ) -> Dht<Id, Info, Data, Io, Table, Store> {
-        let (op_tx, op_rx) = mpsc::channel(128);
+        let (op_tx, op_rx) = mpsc::channel(0);
 
-        Dht {
+        let d = Dht {
             id,
             config,
             table,
@@ -149,7 +150,22 @@ where
 
             op_rx,
             op_tx,
+        };
+
+        // Start self-update task
+        if d.config.update_period != Duration::from_secs(0) {
+            let update_period = d.config.update_period.clone();
+            let h = d.get_handle();
+
+            tokio::task::spawn(async move {
+                loop {
+                    tokio::time::sleep(update_period).await;
+                    let _ = h.exec(OpReq::Update).await;
+                }
+            });
         }
+
+        d
     }
 
     pub fn set_reducer(&mut self, r: Box<Reducer<Id, Data>>) {
@@ -302,10 +318,10 @@ impl<Id, Info, Data, Io, Table, Store> Unpin for Dht<Id, Info, Data, Io, Table, 
 /// [Future] impl for polling and updating DHT state
 impl<Id, Info, Data, Io, Table, Store> Future for Dht<Id, Info, Data, Io, Table, Store>
 where
-    Id: DatabaseId + Clone + Sized + Send + 'static,
-    Info: PartialEq + Clone + Sized + Debug + Send + 'static,
-    Data: PartialEq + Clone + Sized + Debug + Send + 'static,
-    Io: Net<Id, Info, Data> + Clone + Sized + Debug + Sync + Send + 'static,
+    Id: DatabaseId + Clone + Sized + Sync + Send + 'static,
+    Info: PartialEq + Clone + Sized + Debug + Sync + Send + 'static,
+    Data: PartialEq + Clone + Sized + Debug + Sync + Send + 'static,
+    Io: Net<Id, Info, Data> + Clone + Debug + Send + 'static,
     Table: NodeTable<Id, Info> + Send + 'static,
     Store: Datastore<Id, Data> + Send + 'static,
 {
@@ -373,34 +389,97 @@ where
                         }
                     });
                 }
+                OpReq::Update => {
+                    // Check for buckets in need of updates
+
+                    // Fetch bucket info
+                    let bucket_info: Vec<_> = (0..self.table.buckets())
+                        .filter_map(|i| self.table.bucket_info(i))
+                        .collect();
+
+                    // TODO: issue pings and expire nodes
+
+                    // Find oldest nodes in each bucket to issue pings or expire
+                    let mut oldest_nodes = vec![];
+                    for i in 0..self.table.buckets() {
+                        // Lookup oldest node
+                        let n = match self.table.oldest(i) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+
+                        // If this is expired, remove it
+                        // TODO: what if seen is none? make sure it's impossible to add a node without
+                        // communicating it so this can never be none?
+                        if let Some(s) = n.seen() {
+                            if s.add(self.config.node_timeout) > Instant::now() {
+                                debug!("Expiring node: {:?}", n.id());
+                                self.table.remove_entry(n.id());
+                            } else if s.add(self.config.update_period) > Instant::now() {
+                                oldest_nodes.push(n);
+                            }
+                        }
+                    }
+
+                    // Execute update queries
+                    let h = self.get_handle();
+                    let c = self.config.search_options();
+                    let update_period = self.config.update_period;
+
+                    tokio::task::spawn(async move {
+                        // Issue ping to expiring nodes
+                        if oldest_nodes.len() > 0 {
+                            debug!("Ping {} nodes", oldest_nodes.len());
+
+                            match h.net_req(oldest_nodes.clone(), Request::Ping).await {
+                                Ok(resps) => {
+                                    // Filter responders to update responding peers
+                                    let responders: Vec<_> = oldest_nodes
+                                        .drain(..)
+                                        .filter(|n| resps.contains_key(n.id()))
+                                        .map(|mut n| {
+                                            n.set_seen(Instant::now());
+                                            n
+                                        })
+                                        .collect();
+                                    // Updated responding peers
+                                    let _ = h.update_peers(responders).await;
+                                }
+                                Err(e) => {
+                                    error!("Failed to issue ping: {:?}", e);
+                                }
+                            }
+                        }
+
+                        // Execute bucket updates
+                        // TODO: should this be independent of per-node updates?
+                        for (i, info) in bucket_info.iter().enumerate() {
+                            // TODO: ping and expire oldest nodes in buckets
+
+                            // Check for bucket update timeouts
+                            match info.updated {
+                                Some(t) if t.add(update_period) > Instant::now() => continue,
+                                _ => (),
+                            }
+
+                            debug!("Update bucket {} ({:?})", i, info.id);
+
+                            // Fire lookup to bucket address to find nearby nodes
+                            // this will fail as the bucket id is likely not a node,
+                            // but achieve the goal of updating the table around the bucket
+                            let _ = h.lookup(info.id.clone(), c.clone()).await;
+                        }
+
+                        // TODO: return update info?
+                        if let Err(e) = tx.send(Ok(OpResp::Peers(vec![]))).await {
+                            warn!("Failed to send op response: {:?}", e);
+                        }
+                    });
+                }
             }
 
+            // Force wake next cycle to make sure we re-poll on available ops
             ctx.waker().clone().wake();
-        }
-
-        // Perform maintenance on the node table
-
-        // Send keepalives to expiring nodes
-
-        // Periodically update buckets
-        #[cfg(nope)]
-        for index in self.table.buckets() {
-            // Fetch bucket info
-            let info = match self.table.bucket_info(index) {
-                Some(v) => v,
-                None => continue,
-            };
-
-            // Check for update timeout
-            if info.updated.add(self.config.update_period) < Instant::now() {
-                continue;
-            }
-
-            // Issue a lookup for nodes occupying this bucket
-            let req_id = ReqId::generate();
-            // Register and start operation
-            self.exec(req_id.clone(), target, OperationKind::FindNode(done_tx))?;
-            let (done_tx, done_rx) = mpsc::channel(1);
         }
 
         Poll::Pending
@@ -415,6 +494,7 @@ macro_rules! mock_dht {
     ($connector: ident, $root: ident, $dht:ident) => {
         let mut config = Config::default();
         config.concurrency = 2;
+        config.update_period = Duration::from_secs(0);
         mock_dht!($connector, $root, $dht, config);
     };
     ($connector: ident, $root: ident, $dht:ident, $config:ident) => {

@@ -19,7 +19,7 @@ pub mod store;
 use store::HashMapStore;
 
 pub mod dht;
-use dht::{Dht, RequestSender};
+use dht::{Dht, RequestSender, SearchOptions};
 
 pub mod prelude;
 
@@ -29,7 +29,7 @@ pub mod mock;
 #[derive(PartialEq, Clone, Debug)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct Config {
-    #[cfg_attr(feature = "clap", clap(long = "dht-bucket-size", default_value = "20"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-bucket-size", default_value = "16"))]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
 
@@ -39,7 +39,7 @@ pub struct Config {
 
     #[cfg_attr(
         feature = "clap",
-        clap(long = "dht-recursion-limit", default_value = "10")
+        clap(long = "dht-recursion-limit", default_value = "16")
     )]
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
@@ -52,7 +52,7 @@ pub struct Config {
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
 
-    #[cfg_attr(feature = "clap", clap(long = "dht-update-period", value_parser = parse_duration, default_value = "15m"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-update-period", value_parser = parse_duration, default_value = "10m"))]
     /// Period for bucket updates
     pub update_period: Duration,
 }
@@ -66,12 +66,21 @@ fn parse_duration(s: &str) -> Result<Duration, humantime::DurationError> {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            k: 20,
+            k: 16,
             concurrency: 4,
-            max_recursion: 10,
-            search_timeout: Duration::from_secs(2),
+            max_recursion: 16,
+            search_timeout: Duration::from_secs(10),
             node_timeout: Duration::from_secs(15 * 60 * 60),
-            update_period: Duration::from_secs(15 * 60 * 60),
+            update_period: Duration::from_secs(10 * 60 * 60),
+        }
+    }
+}
+
+impl Config {
+    pub(crate) fn search_options(&self) -> SearchOptions {
+        SearchOptions {
+            depth: self.max_recursion,
+            concurrency: self.concurrency,
         }
     }
 }
@@ -88,9 +97,9 @@ pub type StandardDht<Id, Info, Data> = Dht<
 
 impl<Id, Info, Data> Dht<Id, Info, Data>
 where
-    Id: DatabaseId + Clone + Send + 'static,
-    Info: PartialEq + Clone + Debug + Send + 'static,
-    Data: PartialEq + Clone + Debug + Send + 'static,
+    Id: DatabaseId + Clone + Sync + Send + 'static,
+    Info: PartialEq + Clone + Debug + Sync + Send + 'static,
+    Data: PartialEq + Clone + Debug + Sync + Send + 'static,
 {
     /// Create a new DHT using the standard node table and data store implementations
     pub fn standard(

@@ -57,9 +57,8 @@ where
             false
         };
 
-        if res {
-            self.updated = Some(Instant::now());
-        }
+        // Set updated time
+        self.updated = Some(Instant::now());
 
         res
     }
@@ -165,6 +164,7 @@ where
         self.nodes.iter()
     }
 
+    // Fetch bucket entry by index
     pub(crate) fn node(&self, index: usize) -> &Entry<Id, Info> {
         &self.nodes[index]
     }

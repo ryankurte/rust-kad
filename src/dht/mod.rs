@@ -411,11 +411,13 @@ where
                         // If this is expired, remove it
                         // TODO: what if seen is none? make sure it's impossible to add a node without
                         // communicating it so this can never be none?
+                        let now = Instant::now();
                         if let Some(s) = n.seen() {
-                            if s.add(self.config.node_timeout) > Instant::now() {
-                                debug!("Expiring node: {:?}", n.id());
+                            if s.add(self.config.node_timeout) < now {
+                                debug!("Expiring node: {:?} at {:?} (last seen {:?})", n.id(), now, s);
                                 self.table.remove_entry(n.id());
-                            } else if s.add(self.config.update_period) > Instant::now() {
+                            } else if s.add(self.config.update_period) < now {
+                                trace!("Ping node: {:?} at {:?}", n.id(), now);
                                 oldest_nodes.push(n);
                             }
                         }

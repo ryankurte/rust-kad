@@ -67,10 +67,6 @@ where
         // Apply reducer to values
         let values = self.reduce(id.clone(), values).await?;
 
-        if values.len() == 0 {
-            return Err(Error::NotFound);
-        }
-
         // Return reduced values
         Ok(values)
     }

@@ -12,7 +12,7 @@ use std::time::Duration;
 use futures::channel::mpsc::{self, channel, Receiver, Sender};
 use futures::prelude::*;
 use tokio::time::timeout;
-use tracing::{debug, error, warn};
+use tracing::{trace, debug, error, warn};
 
 use crate::common::*;
 use crate::store::{Datastore, HashMapStore};
@@ -315,7 +315,7 @@ where
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
         // Poll for new operations
         if let Poll::Ready(Some((op, mut tx))) = self.op_rx.poll_next_unpin(ctx) {
-            debug!("New op: {:?}", op);
+            trace!("New op: {:?}", op);
 
             match op {
                 OpReq::GetNearest(id) => {

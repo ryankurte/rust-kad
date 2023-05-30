@@ -7,7 +7,7 @@
  */
 use super::entry::Entry;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone)]
 pub enum Request<Id, Value> {
     Ping,
     FindNode(Id),
@@ -15,7 +15,7 @@ pub enum Request<Id, Value> {
     Store(Id, Vec<Value>),
 }
 
-impl<Id: std::fmt::Debug, Value> std::fmt::Display for Request<Id, Value> {
+impl<Id: std::fmt::Debug, Value> std::fmt::Debug for Request<Id, Value> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Ping => write!(f, "Ping"),

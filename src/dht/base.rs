@@ -8,6 +8,7 @@ use futures::{
     channel::mpsc::{channel, Sender},
     SinkExt, StreamExt,
 };
+use log::trace;
 use tracing::{debug, error, warn};
 
 use crate::common::{Entry, Error, Request, Response};
@@ -60,7 +61,7 @@ impl<Id: Debug, Info: Debug, Data: Debug> DhtHandle<Id, Info, Data> {
         // Await response
         let r = resp_rx.next().await;
 
-        debug!("response: {:?}", r);
+        trace!("response: {:?}", r);
 
         match r {
             Some(Ok(r)) => Ok(r),
@@ -127,13 +128,25 @@ impl<
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) enum OpReq<Id, Info, Data> {
     GetNearest(Id),
     UpdatePeers(Vec<Entry<Id, Info>>),
     Store(Id, Vec<Data>),
     Net(Vec<Entry<Id, Info>>, Request<Id, Data>),
     Reduce(Id, Vec<Data>),
+}
+
+impl <Id: std::fmt::Debug, Info, Data: std::fmt::Debug> std::fmt::Debug for OpReq<Id, Info, Data> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpReq::GetNearest(id) => write!(f, "GetNearest({:?})", id),
+            OpReq::UpdatePeers(_) => write!(f, "UpdatePeers"),
+            OpReq::Store(id, _) => write!(f, "Store({:?})", id),
+            OpReq::Net(_, r) => write!(f, "Net({:?})", r),
+            OpReq::Reduce(id, _) => write!(f, "Reduce({:?})", id),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

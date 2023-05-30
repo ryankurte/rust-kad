@@ -122,8 +122,6 @@ where
         // (ie. bits = 2 means retain two highest bits)
         let n = self.max_bits() - bits;
 
-        println!("bits {bits} n {n}");
-
         for i in 0..a.len() {
             // Compute mask for a specific byte
             let n1 = n.saturating_sub(i * 8);
@@ -134,8 +132,6 @@ where
             } else {
                 !((1 << (n1 % 8)) - 1)
             };
-
-            println!("i {i} n1 {n1} mask: {mask:08b}");
 
             c[i] = a[i] & mask;
         }

@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use tracing::{debug, warn};
+use tracing::{trace, debug, warn};
 
 use super::Base;
 use crate::{common::*, Config};
@@ -129,7 +129,7 @@ pub(crate) async fn find_nearest<
         }
     }
 
-    debug!("Known: {known:?}");
+    trace!("Known: {known:?}");
 
     // Extract resolved peers
     let mut resolved: Vec<_> = known

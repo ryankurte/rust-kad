@@ -20,8 +20,7 @@ futures = "0.3.1"
 futures-timer = "0.1.1"
 humantime = "1.2.0"
 rand = "0.5.5"
-strum = "0.23.0"
-strum_macros = "0.21.1"
+strum = { version = "0.24.0", features = [ "derive" ] }
 tracing = { version = "0.1.10", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.17", features = [ "env-filter", ] }
 clap = { version = "4.2.1", features = [ "derive" ], optional = true }

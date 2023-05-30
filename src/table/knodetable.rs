@@ -9,6 +9,8 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::time::Instant;
 
+use tracing::{trace, debug, warn};
+
 use crate::common::{DatabaseId, Entry};
 
 use super::kbucket::KBucket;
@@ -80,8 +82,6 @@ where
         // Compute bucket index
         let n = dist_to_idx(self.hash_size, count, dist);
 
-        println!("Bucket id {id:?} diff: {diff:?} dist: {dist} index: {n} (/{count})");
-
         n
     }
 
@@ -92,7 +92,7 @@ where
 
     /// Split the deepest bucket (always last in the list)
     fn split(&mut self) {
-        println!("Split bucket {}", self.buckets.len() - 1);
+        trace!("Split bucket {}", self.buckets.len() - 1);
 
         // Remove old deepest bucket
         let old_bucket = self.buckets.pop().unwrap();
@@ -149,8 +149,6 @@ where
         let n = index + 1;
         let m = inv.mask(n);
 
-        println!("index: {index:} inv: {inv:?} n: {n:} m: {m:?}");
-
         m
     }
 }
@@ -179,7 +177,7 @@ where
             self.split();
         }
 
-        println!("Create/update node {node:?}");
+        debug!("Create/update node {node:?}");
 
         // Create / update the node
         let mut node = node.clone();
@@ -189,7 +187,7 @@ where
         let updated = bucket.create_or_update(&node);
 
         if !updated {
-            println!("No space in bucket for node {:?}", node_id);
+            warn!("No space in bucket for node {:?}", node_id);
         }
 
         updated

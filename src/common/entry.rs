@@ -17,7 +17,7 @@ use super::id::DatabaseId;
 pub struct Entry<Id, Info> {
     id: Id,
     info: Info,
-    seen: Option<Instant>,
+    seen: Instant,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,7 +46,7 @@ where
         Entry {
             id,
             info,
-            seen: None,
+            seen: Instant::now(),
         }
     }
 
@@ -62,12 +62,12 @@ where
         self.info = info.clone();
     }
 
-    pub fn seen(&self) -> Option<Instant> {
+    pub fn seen(&self) -> Instant {
         self.seen
     }
 
     pub fn set_seen(&mut self, seen: Instant) {
-        self.seen = Some(seen);
+        self.seen = seen;
     }
 }
 

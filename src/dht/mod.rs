@@ -160,7 +160,7 @@ where
             tokio::task::spawn(async move {
                 loop {
                     tokio::time::sleep(update_period).await;
-                    let _ = h.exec(OpReq::Update).await;
+                    let _ = h.update(false).await;
                 }
             });
         }
@@ -389,7 +389,7 @@ where
                         }
                     });
                 }
-                OpReq::Update => {
+                OpReq::Update(forced) => {
                     // Check for buckets in need of updates
 
                     // Fetch bucket info
@@ -412,14 +412,18 @@ where
                         // TODO: what if seen is none? make sure it's impossible to add a node without
                         // communicating it so this can never be none?
                         let now = Instant::now();
-                        if let Some(s) = n.seen() {
-                            if s.add(self.config.node_timeout) < now {
-                                debug!("Expiring node: {:?} at {:?} (last seen {:?})", n.id(), now, s);
-                                self.table.remove_entry(n.id());
-                            } else if s.add(self.config.update_period) < now {
-                                trace!("Ping node: {:?} at {:?}", n.id(), now);
-                                oldest_nodes.push(n);
-                            }
+                        let seen = n.seen();
+                        if seen.add(self.config.node_timeout) < now {
+                            debug!(
+                                "Expiring node: {:?} at {:?} (last seen {:?})",
+                                n.id(),
+                                now,
+                                seen
+                            );
+                            self.table.remove_entry(n.id());
+                        } else if seen.add(self.config.update_period) < now {
+                            trace!("Ping node: {:?} at {:?}", n.id(), now);
+                            oldest_nodes.push(n);
                         }
                     }
 
@@ -460,7 +464,9 @@ where
 
                             // Check for bucket update timeouts
                             match info.updated {
-                                Some(t) if t.add(update_period) > Instant::now() => continue,
+                                Some(t) if !forced && t.add(update_period) > Instant::now() => {
+                                    continue
+                                }
                                 _ => (),
                             }
 

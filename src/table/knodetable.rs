@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::time::Instant;
 
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 use crate::common::{DatabaseId, Entry};
 

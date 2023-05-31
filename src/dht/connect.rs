@@ -42,7 +42,7 @@ where
         self.update_peers(nearest.clone()).await?;
 
         // Update the node table
-        let _ = self.update().await;
+        let _ = self.update(true).await;
 
         // return registered peers
         Ok(nearest)

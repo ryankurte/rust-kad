@@ -146,7 +146,7 @@ pub(crate) async fn find_nearest<
     debug!("Resolved {} peers", resolved.len());
 
     // Update nodetable with resolved peers
-    ctx.update_peers(resolved.clone());
+    ctx.update_peers(resolved.clone()).await?;
 
     Ok(resolved)
 }

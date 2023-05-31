@@ -38,7 +38,7 @@ pub trait Base<Id, Info, Data>: Sync + Send {
     async fn reduce(&self, id: Id, data: Vec<Data>) -> Result<Vec<Data>, Error>;
 
     /// Update the DHT
-    async fn update(&self) -> Result<(), Error>;
+    async fn update(&self, forced: bool) -> Result<(), Error>;
 }
 
 /// Async DHT handle implementing [Base] for higher-level DHT operations
@@ -133,8 +133,8 @@ impl<
         }
     }
 
-    async fn update(&self) -> Result<(), Error> {
-        match self.exec(OpReq::Update).await {
+    async fn update(&self, forced: bool) -> Result<(), Error> {
+        match self.exec(OpReq::Update(forced)).await {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
         }
@@ -148,7 +148,7 @@ pub(crate) enum OpReq<Id, Info, Data> {
     Store(Id, Vec<Data>),
     Net(Vec<Entry<Id, Info>>, Request<Id, Data>),
     Reduce(Id, Vec<Data>),
-    Update,
+    Update(bool),
 }
 
 impl<Id: std::fmt::Debug, Info, Data: std::fmt::Debug> std::fmt::Debug for OpReq<Id, Info, Data> {
@@ -159,7 +159,7 @@ impl<Id: std::fmt::Debug, Info, Data: std::fmt::Debug> std::fmt::Debug for OpReq
             OpReq::Store(id, _) => write!(f, "Store({:?})", id),
             OpReq::Net(_, r) => write!(f, "Net({:?})", r),
             OpReq::Reduce(id, _) => write!(f, "Reduce({:?})", id),
-            OpReq::Update => write!(f, "Update"),
+            OpReq::Update(forced) => write!(f, "Update({:?})", forced),
         }
     }
 }
@@ -309,7 +309,7 @@ pub mod tests {
             }
         }
 
-        async fn update(&self) -> Result<(), Error> {
+        async fn update(&self, forced: bool) -> Result<(), Error> {
             Ok(())
         }
     }

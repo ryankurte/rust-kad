@@ -512,7 +512,7 @@ macro_rules! mock_dht {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod dht_tests {
     extern crate futures;
     use futures::channel::mpsc;
 

@@ -12,7 +12,7 @@ pub trait Connect<Id, Info, Data> {
         &self,
         peers: Vec<Entry<Id, Info>>,
         opts: SearchOptions,
-    ) -> Result<SearchInfo<Id>, Error>;
+    ) -> Result<(Vec<Entry<Id, Info>>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Connect<Id, Info, Data> for T
@@ -28,11 +28,11 @@ where
         &self,
         peers: Vec<Entry<Id, Info>>,
         opts: SearchOptions,
-    ) -> Result<SearchInfo<Id>, Error> {
+    ) -> Result<(Vec<Entry<Id, Info>>, SearchInfo<Id>), Error> {
         debug!("Connect {:?} -> {:?}", self.our_id(), peers);
 
         // Lookup peers near our address using the provided new peers
-        let (nearest, depth) = find_nearest(self, self.our_id(), peers, opts.clone()).await?;
+        let (discovered, depth) = find_nearest(self, self.our_id(), peers, opts.clone()).await?;
 
         // TODO: Register ourselves with these peers
         // If this is required? the act of polling for nodes should
@@ -41,10 +41,11 @@ where
         // Update the node table
         let _ = self.update(true).await;
 
-        let nearest = nearest.iter().map(|p| p.id().clone() ).collect();
+        // Fetch IDs for SearchInfo
+        let nearest = discovered.iter().map(|p| p.id().clone() ).collect();
 
         // return registered peers
-        Ok(SearchInfo{ depth, nearest })
+        Ok((discovered, SearchInfo{ depth, nearest }))
     }
 }
 
@@ -103,7 +104,7 @@ mod tests {
         );
 
         // Execute search
-        let r = c
+        let (r, _i) = c
             .connect(
                 vec![n2.clone(), n3.clone()],
                 SearchOptions {
@@ -115,10 +116,10 @@ mod tests {
             .unwrap();
 
         // Check response is as expected
-        let mut e = vec![*n2.id(), *n3.id(), *n4.id(), *n5.id()];
-        e.sort_by_key(|p| DatabaseId::xor(n1.id(), p));
+        let mut e = vec![n2, n3, n4, n5];
+        e.sort_by_key(|p| DatabaseId::xor(n1.id(), p.id()));
 
-        assert_eq!(&r.nearest, &e);
+        assert_eq!(&r, &e);
 
         // Finalise test
         c.finalise();

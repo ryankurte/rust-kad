@@ -17,7 +17,7 @@ pub trait Store<Id, Info, Data> {
         id: Id,
         data: Vec<Data>,
         opts: SearchOptions,
-    ) -> Result<(Vec<Data>, SearchInfo<Id>), Error>;
+    ) -> Result<(Vec<Entry<Id, Info>>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Store<Id, Info, Data> for T
@@ -34,7 +34,7 @@ where
         id: Id,
         data: Vec<Data>,
         opts: SearchOptions,
-    ) -> Result<(Vec<Data>, SearchInfo<Id>), Error> {
+    ) -> Result<(Vec<Entry<Id, Info>>, SearchInfo<Id>), Error> {
         // Write to our own store
         self.store_data(id.clone(), data.clone()).await?;
 
@@ -88,10 +88,10 @@ where
         let nearest: Vec<_> = peers.iter().map(|p| p.id().clone() ).collect();
 
         // Apply reducer to values
-        let values = self.reduce(id.clone(), values).await?;
+        let _values = self.reduce(id.clone(), values).await?;
 
-        // Return reduced stored values and search info
-        Ok((values, SearchInfo{ depth, nearest }))
+        // Return used peers and search info
+        Ok((peers, SearchInfo{ depth, nearest }))
     }
 }
 
@@ -170,7 +170,7 @@ mod tests {
         );
 
         // Execute search
-        let (d, i) = c
+        let (_p, i) = c
             .store(
                 value_id,
                 vec![value_data],

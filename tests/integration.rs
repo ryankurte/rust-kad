@@ -195,12 +195,12 @@ async fn integration<const N: usize>(log_level: LevelFilter) {
 
     info!("Bootstrapping Network");
     for i in 1..N {
-        let info = handles[i]
+        let (r, _info) = handles[i]
             .connect(vec![n0.clone()], opts.clone())
             .await
             .expect("bootstrap error");
 
-        info!("Bootstrap {i:} found {} peers", info.nearest.len());
+        info!("Bootstrap {i:} found {} peers", r.len());
     }
 
     info!("Storing entries");

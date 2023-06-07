@@ -7,12 +7,12 @@ use std::fmt::Debug;
 
 use tracing::instrument;
 
-use super::{find_nearest, SearchOptions};
+use super::{find_nearest, SearchOptions, SearchInfo};
 use crate::common::*;
 
 pub trait Lookup<Id, Info, Data> {
     /// Lookup a specific peer via the DHT
-    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<Entry<Id, Info>, Error>;
+    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<(Entry<Id, Info>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Lookup<Id, Info, Data> for T
@@ -24,7 +24,7 @@ where
 {
     /// Lookup a specific peer via the DHT
     #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
-    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<Entry<Id, Info>, Error> {
+    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<(Entry<Id, Info>, SearchInfo<Id>), Error> {
         // Fetch nearest nodes from the table
         let nearest = self.get_nearest(id.clone()).await?;
         if nearest.len() == 0 {
@@ -32,12 +32,18 @@ where
         }
 
         // Perform DHT lookup for nearest nodes to the search ID
-        let resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
+        let (resolved, depth) = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
-        match resolved.iter().find(|p| p.id() == &id) {
-            Some(v) => Ok(v.clone()),
-            None => Err(Error::NotFound),
-        }
+        let e = match resolved.iter().find(|p| p.id() == &id) {
+            Some(v) => v.clone(),
+            None => return Err(Error::NotFound),
+        };
+
+        // Map nearest to IDs
+        // TODO: this should probably only be k nearest nodes?
+        let nearest: Vec<_> = resolved.iter().map(|p| p.id().clone() ).collect();
+
+        Ok((e, SearchInfo{ depth, nearest }))
     }
 }
 
@@ -92,11 +98,13 @@ mod tests {
                         (n5.id().clone(), Response::NodesFound(target_id, vec![])),
                     ],
                 ),
+                // UpdatePeers for discovered peers
+                TestOp::update_peers(vec![n2.clone(), n3.clone(), n4.clone(), n5.clone()]),
             ],
         );
 
         // Execute search
-        let r = c
+        let (r, _i) = c
             .lookup(
                 n5.id().clone(),
                 SearchOptions {

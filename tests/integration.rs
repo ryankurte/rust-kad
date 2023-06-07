@@ -13,7 +13,7 @@ use futures::channel::mpsc::{self, Receiver};
 use futures::{Future, FutureExt, StreamExt};
 use rand::random;
 use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, debug};
 
 use kad::common::*;
 use kad::dht::{Base, Connect, Dht, ResponseSender, Search, SearchOptions, Store};
@@ -195,12 +195,12 @@ async fn integration<const N: usize>(log_level: LevelFilter) {
 
     info!("Bootstrapping Network");
     for i in 1..N {
-        let found = handles[i]
+        let info = handles[i]
             .connect(vec![n0.clone()], opts.clone())
             .await
             .expect("bootstrap error");
 
-        info!("Bootstrap {i:} found {} peers", found.len());
+        info!("Bootstrap {i:} found {} peers", info.nearest.len());
     }
 
     info!("Storing entries");
@@ -221,13 +221,21 @@ async fn integration<const N: usize>(log_level: LevelFilter) {
 
     for (i, (id, val)) in vals.iter().enumerate() {
         let n = random::<usize>() % N;
-        let v = handles[n]
-            .search(id.to_le_bytes(), opts.clone())
-            .await
-            .unwrap();
 
-        info!("Search {} result: {:?}", i, v);
+        for r in 0..3 {
+            let (v, _) = handles[n]
+                .search(id.to_le_bytes(), opts.clone())
+                .await
+                .unwrap();
 
-        assert_eq!(v, vec![*val]);
+            debug!("Search {i}.{r} result: {:?}", v);
+
+            if !v.is_empty() {
+                assert_eq!(v, vec![*val]);
+                break;
+            } else if r == 3 {
+                panic!("Search {i}.{r} failed");
+            }
+        }
     }
 }

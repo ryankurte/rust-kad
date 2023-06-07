@@ -4,7 +4,7 @@ use tracing::{debug, instrument};
 
 use super::SearchOptions;
 use crate::common::*;
-use crate::dht::find_nearest;
+use crate::dht::{find_nearest, SearchInfo};
 
 pub trait Connect<Id, Info, Data> {
     /// Connect to the DHT using the provided peers
@@ -12,7 +12,7 @@ pub trait Connect<Id, Info, Data> {
         &self,
         peers: Vec<Entry<Id, Info>>,
         opts: SearchOptions,
-    ) -> Result<Vec<Entry<Id, Info>>, Error>;
+    ) -> Result<SearchInfo<Id>, Error>;
 }
 
 impl<T, Id, Info, Data> Connect<Id, Info, Data> for T
@@ -28,24 +28,23 @@ where
         &self,
         peers: Vec<Entry<Id, Info>>,
         opts: SearchOptions,
-    ) -> Result<Vec<Entry<Id, Info>>, Error> {
+    ) -> Result<SearchInfo<Id>, Error> {
         debug!("Connect {:?} -> {:?}", self.our_id(), peers);
 
         // Lookup peers near our address using the provided new peers
-        let nearest = find_nearest(self, self.our_id(), peers, opts.clone()).await?;
+        let (nearest, depth) = find_nearest(self, self.our_id(), peers, opts.clone()).await?;
 
         // TODO: Register ourselves with these peers
         // If this is required? the act of polling for nodes should
         // do everything we need...
 
-        // Update our peer database
-        self.update_peers(nearest.clone()).await?;
-
         // Update the node table
         let _ = self.update(true).await;
 
+        let nearest = nearest.iter().map(|p| p.id().clone() ).collect();
+
         // return registered peers
-        Ok(nearest)
+        Ok(SearchInfo{ depth, nearest })
     }
 }
 
@@ -116,10 +115,10 @@ mod tests {
             .unwrap();
 
         // Check response is as expected
-        let mut e = vec![n2, n3, n4, n5];
-        e.sort_by_key(|p| DatabaseId::xor(n1.id(), p.id()));
+        let mut e = vec![*n2.id(), *n3.id(), *n4.id(), *n5.id()];
+        e.sort_by_key(|p| DatabaseId::xor(n1.id(), p));
 
-        assert_eq!(&r, &e);
+        assert_eq!(&r.nearest, &e);
 
         // Finalise test
         c.finalise();

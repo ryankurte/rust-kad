@@ -29,30 +29,30 @@ pub mod mock;
 #[derive(PartialEq, Clone, Debug)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct Config {
-    #[cfg_attr(feature = "clap", clap(long = "dht-bucket-size", default_value = "16"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-bucket-size", default_value = "16", env = "DHT_K"))]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
 
-    #[cfg_attr(feature = "clap", clap(long = "dht-concurrency", default_value = "4"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-concurrency", default_value = "4", env = "DHT_ALPHA"))]
     /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
 
     #[cfg_attr(
         feature = "clap",
-        clap(long = "dht-recursion-limit", default_value = "16")
+        clap(long = "dht-recursion-limit", default_value = "16", env = "DHT_DEPTH")
     )]
     /// Maximum recursion depth for searches
     pub max_recursion: usize,
 
-    #[cfg_attr(feature = "clap", clap(long = "dht-search-timeout", value_parser = parse_duration, default_value = "2s"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-search-timeout", value_parser = parse_duration, default_value = "2s", env = "DHT_SEARCH_PERIOD"))]
     /// Timeout for search iterations with missing responses
     pub search_timeout: Duration,
 
-    #[cfg_attr(feature = "clap", clap(long = "dht-node-timeout", value_parser = parse_duration, default_value = "15m"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-node-timeout", value_parser = parse_duration, default_value = "15m", env = "DHT_NODE_TIMEOUT"))]
     /// Timeout for no-contact from oldest node (before ping and expiry occurs)
     pub node_timeout: Duration,
 
-    #[cfg_attr(feature = "clap", clap(long = "dht-update-period", value_parser = parse_duration, default_value = "10m"))]
+    #[cfg_attr(feature = "clap", clap(long = "dht-update-period", value_parser = parse_duration, default_value = "10m", env = "DHT_UPDATE_PERIOD"))]
     /// Period for bucket updates
     pub update_period: Duration,
 }

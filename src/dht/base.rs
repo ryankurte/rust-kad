@@ -8,8 +8,7 @@ use futures::{
     channel::mpsc::{channel, Sender},
     SinkExt, StreamExt,
 };
-use log::trace;
-use tracing::{error, warn};
+use tracing::{trace, error, warn};
 
 use crate::common::{Entry, Error, Request, Response};
 
@@ -309,7 +308,7 @@ pub mod tests {
             }
         }
 
-        async fn update(&self, forced: bool) -> Result<(), Error> {
+        async fn update(&self, _forced: bool) -> Result<(), Error> {
             Ok(())
         }
     }

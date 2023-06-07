@@ -22,9 +22,12 @@ pub enum RequestState {
     Failed,
 }
 
+/// Search operation options
 #[derive(Clone, PartialEq, Debug)]
 pub struct SearchOptions {
+    /// Maximum search depth
     pub depth: usize,
+    /// Concurrency for search operation
     pub concurrency: usize,
 }
 
@@ -46,6 +49,15 @@ impl Default for SearchOptions {
     }
 }
 
+/// Search operation information
+#[derive(Clone, PartialEq, Debug)]
+pub struct SearchInfo<Id> {
+    /// Search operation depth
+    pub depth: usize,
+    /// Nearest nodes used in store / fetch operation
+    pub nearest: Vec<Id>,
+}
+
 /// Helper to find the nearest reachable node subset for search and store operations
 pub(crate) async fn find_nearest<
     C: Base<Id, Info, Data>,
@@ -57,7 +69,7 @@ pub(crate) async fn find_nearest<
     id: Id,
     mut nearest: Vec<Entry<Id, Info>>,
     opts: SearchOptions,
-) -> Result<Vec<Entry<Id, Info>>, Error> {
+) -> Result<(Vec<Entry<Id, Info>>, usize), Error> {
     debug!("Using {} nearest nodes", nearest.len());
 
     let our_id = ctx.our_id();
@@ -70,7 +82,10 @@ pub(crate) async fn find_nearest<
     }
 
     // Issue FindNode requests to nearest nodes up to maximum search depth
+    let mut depth = 0;
     for i in 0..opts.depth {
+        depth += 1;
+
         // Fetch pending nodes from known list
         let pending: Vec<_> = known
             .iter_mut()
@@ -148,5 +163,5 @@ pub(crate) async fn find_nearest<
     // Update nodetable with resolved peers
     ctx.update_peers(resolved.clone()).await?;
 
-    Ok(resolved)
+    Ok((resolved, depth))
 }

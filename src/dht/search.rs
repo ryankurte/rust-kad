@@ -7,12 +7,12 @@ use std::fmt::Debug;
 
 use tracing::{debug, instrument, warn};
 
-use super::{find_nearest, Base, SearchOptions};
+use super::{find_nearest, Base, SearchOptions, SearchInfo};
 use crate::common::*;
 
 pub trait Search<Id, Info, Data> {
     /// Search for DHT stored values at a specific ID
-    async fn search(&self, id: Id, opts: SearchOptions) -> Result<Vec<Data>, Error>;
+    async fn search(&self, id: Id, opts: SearchOptions) -> Result<(Vec<Data>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Search<Id, Info, Data> for T
@@ -23,7 +23,7 @@ where
 {
     /// Search for DHT stored values at a specific ID
     #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
-    async fn search(&self, id: Id, opts: SearchOptions) -> Result<Vec<Data>, Error> {
+    async fn search(&self, id: Id, opts: SearchOptions) -> Result<(Vec<Data>, SearchInfo<Id>), Error> {
         // Fetch nearest nodes from the table
         let nearest = self.get_nearest(id.clone()).await?;
         if nearest.len() == 0 {
@@ -31,7 +31,7 @@ where
         }
 
         // Perform DHT lookup for nearest nodes to the search ID
-        let resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
+        let (mut resolved, depth) = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
         // Search for values using these nearest nodes
 
@@ -41,8 +41,9 @@ where
         debug!("Issuing FindValues request to {} peers", count);
 
         // Issue FindValues request
-        let peers = resolved[..count].iter().map(|p| p.clone()).collect();
-        let mut resps = match self.net_req(peers, Request::FindValue(id.clone())).await {
+        let peers: Vec<_> = resolved[..count].iter().map(|p| p.clone()).collect();
+
+        let mut resps = match self.net_req(peers.clone(), Request::FindValue(id.clone())).await {
             Ok(v) => v,
             Err(e) => {
                 warn!("FindValue request failed: {:?}", e);
@@ -52,23 +53,31 @@ where
 
         // Handle responses
         let mut values = vec![];
-        for p in resolved {
-            match resps.remove(p.id()) {
-                Some(resp) => {
-                    // Add located values to list
-                    if let Response::ValuesFound(_id, mut v) = resp {
-                        values.append(&mut v);
+
+        let peers: Vec<_> = resolved
+            .drain(..)
+            .filter_map(|p| {
+                match resps.remove(p.id()) {
+                    Some(resp) => {
+                        // Add located values to list
+                        if let Response::ValuesFound(_id, mut v) = resp {
+                            values.append(&mut v);
+                        }
+                        Some(p)
                     }
+                    None => None,
                 }
-                None => (),
-            }
-        }
+            })
+            .collect();
+
+        // Filter used nearest nodes
+        let nearest: Vec<_> = peers.iter().map(|p| p.id().clone() ).collect();
 
         // Apply reducer to values
         let values = self.reduce(id.clone(), values).await?;
 
-        // Return reduced values
-        Ok(values)
+        // Return reduced found values and search info
+        Ok((values, SearchInfo{ depth, nearest }))
     }
 }
 
@@ -123,6 +132,8 @@ mod tests {
                         (n5.id().clone(), Response::NodesFound(value_id, vec![])),
                     ],
                 ),
+                // UpdatePeers for discovered peers
+                TestOp::update_peers(vec![n2.clone(), n3.clone(), n4.clone(), n5.clone()]),
                 // And finally a FindValues to the nearest set of nodes
                 TestOp::net_req(
                     vec![n4.clone(), n5.clone()],
@@ -143,7 +154,7 @@ mod tests {
         );
 
         // Execute search
-        let r = c
+        let (r, _) = c
             .search(
                 value_id,
                 SearchOptions {

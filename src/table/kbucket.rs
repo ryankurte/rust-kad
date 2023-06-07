@@ -11,7 +11,7 @@ use std::collections::{vec_deque::Iter, VecDeque};
 use std::fmt::Debug;
 use std::time::Instant;
 
-use log::trace;
+use tracing::trace;
 
 /// KBucket implementation
 /// This implements a single bucket for use in the KNodeTable implementation

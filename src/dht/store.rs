@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use tracing::{debug, instrument, warn};
 
 use super::{find_nearest, SearchOptions};
-use crate::common::*;
+use crate::{common::*, dht::SearchInfo};
 
 pub trait Store<Id, Info, Data> {
     /// Store DHT data at the provided ID
@@ -17,7 +17,7 @@ pub trait Store<Id, Info, Data> {
         id: Id,
         data: Vec<Data>,
         opts: SearchOptions,
-    ) -> Result<Vec<Entry<Id, Info>>, Error>;
+    ) -> Result<(Vec<Data>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Store<Id, Info, Data> for T
@@ -34,7 +34,7 @@ where
         id: Id,
         data: Vec<Data>,
         opts: SearchOptions,
-    ) -> Result<Vec<Entry<Id, Info>>, Error> {
+    ) -> Result<(Vec<Data>, SearchInfo<Id>), Error> {
         // Write to our own store
         self.store_data(id.clone(), data.clone()).await?;
 
@@ -45,7 +45,7 @@ where
         }
 
         // Perform DHT lookup for nearest nodes to the search ID
-        let mut resolved = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
+        let (mut resolved, depth) = find_nearest(self, id.clone(), nearest, opts.clone()).await?;
 
         // limit to closest subset based on concurrency
         let count = resolved.len().min(opts.concurrency);
@@ -53,7 +53,7 @@ where
         debug!("Issuing Store request to {} peers", count);
 
         // Issue StoreValues requests
-        let peers = resolved[..count].iter().map(|p| p.clone()).collect();
+        let peers: Vec<_> = resolved[..count].iter().map(|p| p.clone()).collect();
         let mut resps = match self
             .net_req(peers, Request::Store(id.clone(), data.clone()))
             .await
@@ -68,7 +68,7 @@ where
         // Handle responses
         let mut values = vec![];
 
-        let peers = resolved
+        let peers: Vec<_> = resolved
             .drain(..)
             .filter_map(|p| {
                 match resps.remove(p.id()) {
@@ -84,12 +84,14 @@ where
             })
             .collect();
 
-        // Apply reducer to values
-        let _values = self.reduce(id.clone(), values).await?;
+        // Filter used nearest nodes
+        let nearest: Vec<_> = peers.iter().map(|p| p.id().clone() ).collect();
 
-        // Return reduced stored values
-        // TODO: would it be more useful to return store information (number of peers, actual peers?)
-        Ok(peers)
+        // Apply reducer to values
+        let values = self.reduce(id.clone(), values).await?;
+
+        // Return reduced stored values and search info
+        Ok((values, SearchInfo{ depth, nearest }))
     }
 }
 
@@ -146,6 +148,8 @@ mod tests {
                         (n5.id().clone(), Response::NodesFound(value_id, vec![])),
                     ],
                 ),
+                // UpdatePeers for discovered peers
+                TestOp::update_peers(vec![n2.clone(), n3.clone(), n4.clone(), n5.clone()]),
                 // And finally a FindValues to the nearest set of nodes
                 TestOp::net_req(
                     vec![n4.clone(), n5.clone()],
@@ -166,7 +170,7 @@ mod tests {
         );
 
         // Execute search
-        let r = c
+        let (d, i) = c
             .store(
                 value_id,
                 vec![value_data],
@@ -179,7 +183,7 @@ mod tests {
             .unwrap();
 
         // Check response is as expected
-        assert_eq!(&r, &[n4.clone(), n5.clone()]);
+        assert_eq!(&i.nearest, &[*n4.id(), *n5.id()]);
 
         // Finalise test
         c.finalise();

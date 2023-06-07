@@ -23,8 +23,7 @@ rand = "0.5.5"
 strum = { version = "0.24.0", features = [ "derive" ] }
 tracing = { version = "0.1.10", features = [ "log" ] }
 tracing-subscriber = { version = "0.3.17", features = [ "env-filter", ] }
-clap = { version = "4.2.1", features = [ "derive" ], optional = true }
-log = { features = ["max_level_debug"], version = "0.4.6" }
+clap = { version = "4.2.1", features = [ "derive", "env" ], optional = true }
 num = { features = ["rand"], version = "0.4.0" }
 tokio = { version = "1.26.0", features = [ "full" ] }
 

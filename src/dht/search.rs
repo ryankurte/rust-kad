@@ -7,12 +7,16 @@ use std::fmt::Debug;
 
 use tracing::{debug, instrument, warn};
 
-use super::{find_nearest, Base, SearchOptions, SearchInfo};
+use super::{find_nearest, Base, SearchInfo, SearchOptions};
 use crate::common::*;
 
 pub trait Search<Id, Info, Data> {
     /// Search for DHT stored values at a specific ID
-    async fn search(&self, id: Id, opts: SearchOptions) -> Result<(Vec<Data>, SearchInfo<Id>), Error>;
+    async fn search(
+        &self,
+        id: Id,
+        opts: SearchOptions,
+    ) -> Result<(Vec<Data>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Search<Id, Info, Data> for T
@@ -23,7 +27,11 @@ where
 {
     /// Search for DHT stored values at a specific ID
     #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
-    async fn search(&self, id: Id, opts: SearchOptions) -> Result<(Vec<Data>, SearchInfo<Id>), Error> {
+    async fn search(
+        &self,
+        id: Id,
+        opts: SearchOptions,
+    ) -> Result<(Vec<Data>, SearchInfo<Id>), Error> {
         // Fetch nearest nodes from the table
         let nearest = self.get_nearest(id.clone()).await?;
         if nearest.len() == 0 {
@@ -43,7 +51,10 @@ where
         // Issue FindValues request
         let peers: Vec<_> = resolved[..count].iter().map(|p| p.clone()).collect();
 
-        let mut resps = match self.net_req(peers.clone(), Request::FindValue(id.clone())).await {
+        let mut resps = match self
+            .net_req(peers.clone(), Request::FindValue(id.clone()))
+            .await
+        {
             Ok(v) => v,
             Err(e) => {
                 warn!("FindValue request failed: {:?}", e);
@@ -71,13 +82,13 @@ where
             .collect();
 
         // Filter used nearest nodes
-        let nearest: Vec<_> = peers.iter().map(|p| p.id().clone() ).collect();
+        let nearest: Vec<_> = peers.iter().map(|p| p.id().clone()).collect();
 
         // Apply reducer to values
         let values = self.reduce(id.clone(), values).await?;
 
         // Return reduced found values and search info
-        Ok((values, SearchInfo{ depth, nearest }))
+        Ok((values, SearchInfo { depth, nearest }))
     }
 }
 

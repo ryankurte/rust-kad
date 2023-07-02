@@ -42,10 +42,10 @@ where
         let _ = self.update(true).await;
 
         // Fetch IDs for SearchInfo
-        let nearest = discovered.iter().map(|p| p.id().clone() ).collect();
+        let nearest = discovered.iter().map(|p| p.id().clone()).collect();
 
         // return registered peers
-        Ok((discovered, SearchInfo{ depth, nearest }))
+        Ok((discovered, SearchInfo { depth, nearest }))
     }
 }
 

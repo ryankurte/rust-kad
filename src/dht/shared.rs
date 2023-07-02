@@ -50,7 +50,7 @@ impl Default for SearchOptions {
 }
 
 /// Search operation information
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct SearchInfo<Id> {
     /// Search operation depth
     pub depth: usize,

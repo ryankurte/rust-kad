@@ -7,12 +7,16 @@ use std::fmt::Debug;
 
 use tracing::instrument;
 
-use super::{find_nearest, SearchOptions, SearchInfo};
+use super::{find_nearest, SearchInfo, SearchOptions};
 use crate::common::*;
 
 pub trait Lookup<Id, Info, Data> {
     /// Lookup a specific peer via the DHT
-    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<(Entry<Id, Info>, SearchInfo<Id>), Error>;
+    async fn lookup(
+        &self,
+        id: Id,
+        opts: SearchOptions,
+    ) -> Result<(Entry<Id, Info>, SearchInfo<Id>), Error>;
 }
 
 impl<T, Id, Info, Data> Lookup<Id, Info, Data> for T
@@ -24,7 +28,11 @@ where
 {
     /// Lookup a specific peer via the DHT
     #[instrument(skip_all, fields(our_id=?self.our_id(), target_id=?id))]
-    async fn lookup(&self, id: Id, opts: SearchOptions) -> Result<(Entry<Id, Info>, SearchInfo<Id>), Error> {
+    async fn lookup(
+        &self,
+        id: Id,
+        opts: SearchOptions,
+    ) -> Result<(Entry<Id, Info>, SearchInfo<Id>), Error> {
         // Fetch nearest nodes from the table
         let nearest = self.get_nearest(id.clone()).await?;
         if nearest.len() == 0 {
@@ -41,9 +49,9 @@ where
 
         // Map nearest to IDs
         // TODO: this should probably only be k nearest nodes?
-        let nearest: Vec<_> = resolved.iter().map(|p| p.id().clone() ).collect();
+        let nearest: Vec<_> = resolved.iter().map(|p| p.id().clone()).collect();
 
-        Ok((e, SearchInfo{ depth, nearest }))
+        Ok((e, SearchInfo { depth, nearest }))
     }
 }
 

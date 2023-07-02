@@ -13,7 +13,7 @@ use futures::channel::mpsc::{self, Receiver};
 use futures::{Future, FutureExt, StreamExt};
 use rand::random;
 use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
-use tracing::{error, info, trace, debug};
+use tracing::{debug, error, info, trace};
 
 use kad::common::*;
 use kad::dht::{Base, Connect, Dht, ResponseSender, Search, SearchOptions, Store};

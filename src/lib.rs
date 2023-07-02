@@ -29,11 +29,17 @@ pub mod mock;
 #[derive(PartialEq, Clone, Debug)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct Config {
-    #[cfg_attr(feature = "clap", clap(long = "dht-bucket-size", default_value = "16", env = "DHT_K"))]
+    #[cfg_attr(
+        feature = "clap",
+        clap(long = "dht-bucket-size", default_value = "16", env = "DHT_K")
+    )]
     /// Size of buckets and number of nearby nodes to consider when searching
     pub k: usize,
 
-    #[cfg_attr(feature = "clap", clap(long = "dht-concurrency", default_value = "4", env = "DHT_ALPHA"))]
+    #[cfg_attr(
+        feature = "clap",
+        clap(long = "dht-concurrency", default_value = "4", env = "DHT_ALPHA")
+    )]
     /// Number of concurrent operations to be performed at once (also known as α or alpha)
     pub concurrency: usize,
 

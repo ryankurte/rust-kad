@@ -8,7 +8,7 @@ use futures::{
     channel::mpsc::{channel, Sender},
     SinkExt, StreamExt,
 };
-use tracing::{trace, error, warn};
+use tracing::{error, trace, warn};
 
 use crate::common::{Entry, Error, Request, Response};
 

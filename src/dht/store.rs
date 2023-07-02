@@ -85,13 +85,13 @@ where
             .collect();
 
         // Filter used nearest nodes
-        let nearest: Vec<_> = peers.iter().map(|p| p.id().clone() ).collect();
+        let nearest: Vec<_> = peers.iter().map(|p| p.id().clone()).collect();
 
         // Apply reducer to values
         let _values = self.reduce(id.clone(), values).await?;
 
         // Return used peers and search info
-        Ok((peers, SearchInfo{ depth, nearest }))
+        Ok((peers, SearchInfo { depth, nearest }))
     }
 }
 
